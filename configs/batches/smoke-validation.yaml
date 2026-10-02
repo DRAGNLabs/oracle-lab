@@ -1,0 +1,12 @@
+name: smoke-validation-requests
+
+jobs:
+  - config: ../smoke-validation/claude-requests.yaml
+  - config: ../smoke-validation/codex-requests.yaml
+  - config: ../smoke-validation/opencode-requests.yaml
+
+execution:
+  concurrency: 1
+  continue_on_error: true
+
+output: ../../batches

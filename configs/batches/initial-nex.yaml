@@ -1,0 +1,19 @@
+name: initial-nex-10-repositories
+
+jobs:
+  - config: ../initial-nex/astropy.yaml
+  - config: ../initial-nex/matplotlib.yaml
+  - config: ../initial-nex/seaborn.yaml
+  - config: ../initial-nex/flask.yaml
+  - config: ../initial-nex/requests.yaml
+  - config: ../initial-nex/xarray.yaml
+  - config: ../initial-nex/pylint.yaml
+  - config: ../initial-nex/pytest.yaml
+  - config: ../initial-nex/scikit-learn.yaml
+  - config: ../initial-nex/sphinx.yaml
+
+execution:
+  concurrency: 1
+  continue_on_error: true
+
+output: ../../batches

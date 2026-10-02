@@ -7,10 +7,8 @@ __pycache__/
 .coverage*
 build/
 dist/
-runs/
 .cache/
 .env
 .env.*
 !.env.example
-batches/
 classifications/

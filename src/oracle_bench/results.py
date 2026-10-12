@@ -217,7 +217,7 @@ class EvaluationResult(PairedResult):
     submission_compliant: bool
     forbidden_changes: list[str]
     task_scope: str
-    test_target: str | None = None
+    test_target: LocalizedTarget | None = None  # what a localized run's agent was shown
     existing_tests: str
     agent: HarnessResult
     coverage: dict[str, CoverageResult]

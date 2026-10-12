@@ -5,7 +5,7 @@ from unittest.mock import Mock
 
 import pytest
 import yaml
-from fixtures import completed_judgment, evaluation_result, instance_record
+from fixtures import completed_judgment, evaluation_result, instance_record, localized_target
 
 import oracle_bench.judge.run as judge_module
 import oracle_bench.run as run_module
@@ -15,7 +15,7 @@ from oracle_bench.harnesses import require_credentials
 from oracle_bench.harnesses.codex import parse_trace
 from oracle_bench.io import read_json, write_json
 from oracle_bench.paths import RunPaths
-from oracle_bench.results import EvaluationResult, write_result
+from oracle_bench.results import EvaluationResult, LocalizedTarget, write_result
 from oracle_bench.run import completion_state
 
 SAMPLE = Path(__file__).parents[1] / "configs/smoke.yaml"
@@ -118,6 +118,8 @@ def install_pipeline_fakes(monkeypatch, runtime, instance, judge_effect=None):
     monkeypatch.setattr(run_module, "resolve_source", lambda source: (instance, runtime))
     monkeypatch.setattr(run_module, "docker_client", client_context)
     monkeypatch.setattr(run_module, "prepare_image", lambda *args: "example/runtime")
+    target = LocalizedTarget.model_validate(localized_target())
+    monkeypatch.setattr(run_module, "localize", Mock(return_value=target))
     monkeypatch.setattr(run_module, "check_reference", Mock())
     monkeypatch.setattr(run_module, "generate_submission", Mock(return_value={"empty": False}))
     result = EvaluationResult.model_validate(evaluation_result())
@@ -204,8 +206,62 @@ def test_run_fills_the_agent_prompt_environment(tmp_path, monkeypatch):
 
     assert RunPaths.open(run_dir).prompt.read_text() == (
         f"Write to oracle_tests from {runtime.workdir} using {runtime.python}; "
-        f"target {instance.test_target}; $HOME remains literal."
+        f"target {localized_target()['text']}; $HOME remains literal."
     )
+
+
+def test_a_localized_run_localizes_after_the_build_and_before_the_reference_check(
+    tmp_path, monkeypatch
+):
+    config, runtime, instance = configured_pipeline(tmp_path, False)
+    config.task.scope = "localized"
+    Path(config.task.prompt).write_text("Test ${test_target}")
+    install_pipeline_fakes(monkeypatch, runtime, instance)
+    order = []
+    monkeypatch.setattr(run_module, "prepare_image", lambda *args: order.append("build") or "img")
+    located = run_module.localize
+    monkeypatch.setattr(
+        run_module, "localize", lambda *args: order.append("localize") or located(*args)
+    )
+
+    def check_reference(client, config, image, instance, paths):
+        order.append("reference")
+        # The prompt exists before anything that can spend money.
+        assert paths.prompt.read_text() == "Test " + localized_target()["text"]
+
+    monkeypatch.setattr(run_module, "check_reference", check_reference)
+
+    run_module.run(config)
+
+    assert order == ["build", "localize", "reference"]
+
+
+def test_a_repository_run_never_localizes(tmp_path, monkeypatch):
+    config, runtime, instance = configured_pipeline(tmp_path, False)
+    install_pipeline_fakes(monkeypatch, runtime, instance)
+
+    run_dir = run_module.run(config)
+
+    run_module.localize.assert_not_called()
+    assert RunPaths.open(run_dir).prompt.read_text() == "Generate tests"
+
+
+def test_a_localize_failure_stops_the_run_at_that_stage(tmp_path, monkeypatch):
+    config, runtime, instance = configured_pipeline(tmp_path, False)
+    config.task.scope = "localized"
+    Path(config.task.prompt).write_text("Test ${test_target}")
+    install_pipeline_fakes(monkeypatch, runtime, instance)
+    failure = ValueError("hunk at line 3 matches nowhere in the buggy file")
+    monkeypatch.setattr(run_module, "localize", Mock(side_effect=failure))
+
+    with pytest.raises(ValueError, match="matches nowhere"):
+        run_module.run(config)
+
+    (run_dir,) = Path(config.output).iterdir()
+    final = read_json(run_dir / "status.json")
+    assert (final["stage"], final["state"]) == ("localize", "failed")
+    assert not RunPaths.open(run_dir).prompt.exists()
+    run_module.check_reference.assert_not_called()
 
 
 @pytest.mark.parametrize(

@@ -265,7 +265,7 @@ partially interpreted.
 | `submission_compliant` | Whether the agent made only permitted changes |
 | `forbidden_changes` | Paths changed outside the allowed submission policy |
 | `task_scope` | `localized` or `repository`, matching the generation assignment |
-| `test_target` | Sanitized localized code area delivered to the agent, or null |
+| `test_target` | The localized target the agent was shown, copied from `inputs/target.json`, or null for a repository run |
 | `existing_tests` | Test-visibility policy; `keep` means existing tests were visible |
 | `buggy_status`, `golden_status` | Overall execution status for each version |
 | `matrix` | Counts and test IDs in each binary paired cell |

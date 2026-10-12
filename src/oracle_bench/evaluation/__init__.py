@@ -30,6 +30,7 @@ from oracle_bench.results import (
     HarnessResult,
     InstanceRecord,
     VersionResult,
+    read_localized_target,
     read_version_result,
     write_result,
 )
@@ -167,7 +168,9 @@ def evaluate(
         submission_compliant=manifest["compliant"],
         forbidden_changes=manifest["forbidden_changes"],
         task_scope=config.task.scope,
-        test_target=instance.test_target if config.task.scope == "localized" else None,
+        test_target=read_localized_target(paths.target)
+        if config.task.scope == "localized"
+        else None,
         existing_tests=config.task.existing_tests,
         agent=HarnessResult.model_validate(read_json(paths.generation / "result.json")),
         coverage={

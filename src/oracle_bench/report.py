@@ -21,6 +21,7 @@ from oracle_bench.results import (
     VERSIONS,
     EvaluationResult,
     HarnessResult,
+    LocalizedTarget,
     MatrixCellName,
     Usage,
     read_evaluation_result,
@@ -124,7 +125,7 @@ def _pipeline_lines(
         )
 
     agent = results.agent
-    target = results.test_target if results.task_scope == "localized" else "whole repository"
+    target = _target_summary(results.test_target) if results.test_target else "whole repository"
     visible = "visible" if results.existing_tests == "keep" else "hidden"
     rows.append(
         (
@@ -168,6 +169,11 @@ def _pipeline_lines(
         *[f"| {stage} | {params} | {result} |" for stage, params, result in rows],
         "",
     ]
+
+
+def _target_summary(target: LocalizedTarget) -> str:
+    """The prompt's one-line-per-file target, on a single line for a table cell."""
+    return "; ".join(line.removeprefix("- ") for line in target.text.splitlines())
 
 
 def _harness_text(result: HarnessResult) -> str:
@@ -335,6 +341,7 @@ def _file_lines(paths: RunPaths) -> list[str]:
         (
             "Generate",
             [
+                ("target", paths.target),
                 ("prompt", paths.prompt),
                 ("session", paths.generation / "session.log"),
                 ("trace", paths.generation / "trace.jsonl"),

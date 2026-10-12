@@ -1,8 +1,9 @@
 Generate unit tests for the following area of this repository:
 
-`${test_target}`
+${test_target}
 
-Do not modify the application code.
+Test this code directly, or through the public code that uses it. Do not modify
+the application code.
 
 You are working in a disposable container. The current working directory is the
 repository root. Keep repository exploration within this directory; do not inspect

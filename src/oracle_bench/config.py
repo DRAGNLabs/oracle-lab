@@ -289,6 +289,17 @@ def validate_prompt_scope(template: str, scope: str) -> None:
         )
 
 
+def render_prompt(template: str, config: RunConfig, test_target: str | None) -> str:
+    """Fill in the prompt variables. A run without a target says "this repository"."""
+    runtime = config.require_runtime()
+    return Template(template).substitute(
+        generated_dir=config.task.generated_dir,
+        project_python=runtime.python,
+        workdir=runtime.workdir,
+        test_target=test_target or "this repository",
+    )
+
+
 def _read_settings(path: Path, resolved: bool) -> dict:
     """Keep the public YAML interface separate from saved runtime metadata."""
     raw = yaml.safe_load(path.read_text())

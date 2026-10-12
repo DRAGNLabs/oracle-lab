@@ -2,7 +2,7 @@ import json
 import re
 
 import pytest
-from fixtures import judge_attempt, usage
+from fixtures import judge_attempt, localized_target, usage
 
 from oracle_bench.io import write_json
 from oracle_bench.paths import RunPaths
@@ -14,10 +14,18 @@ from oracle_bench.results import MATRIX_CELLS
     ("scope", "target", "expected_scope"),
     [
         ("repository", None, "target: whole repository"),
+        ("localized", localized_target(), "target: `package/core.py`: `Client.send`;"),
         (
             "localized",
-            "package/module.py (function_name)",
-            "target: package/module.py (function_name)",
+            localized_target(
+                level="class",
+                files=[
+                    {"path": "a.py", "names": ["A"], "lines": 3},
+                    {"path": "b.py", "names": ["B", "C"], "lines": 9},
+                ],
+                text="- `a.py`: class `A`\n- `b.py`: classes `B`, `C`",
+            ),
+            "target: `a.py`: class `A`; `b.py`: classes `B`, `C`;",
         ),
     ],
 )
@@ -296,6 +304,14 @@ def test_report_does_not_regenerate_the_generation_transcript(tmp_path):
     report(paths)
 
     assert session.read_text() == "frozen generation transcript\n"
+
+
+def test_report_links_the_saved_target(tmp_path):
+    paths = RunPaths.create(tmp_path)
+    paths.results.write_text(json.dumps(report_results()))
+    write_json(paths.target, localized_target())
+
+    assert "[target](inputs/target.json)" in report(paths).read_text()
 
 
 def test_report_renders_central_task_classification_and_provenance(tmp_path, monkeypatch):

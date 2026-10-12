@@ -1,4 +1,4 @@
-"""The single-instance pipeline: resolve, build, check reference, generate, evaluate, judge.
+"""The single-instance pipeline: resolve, build, localize, check reference, generate, evaluate, judge.
 
 Every stage records itself in `status.json` before it starts, so an interrupted or
 failed run names the stage it stopped in rather than leaving a silent directory.
@@ -9,12 +9,16 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from string import Template
 from typing import Any
 
 import yaml
 
-from oracle_bench.config import RunConfig, validate_prompt_scope, validate_resolved_config
+from oracle_bench.config import (
+    RunConfig,
+    render_prompt,
+    validate_prompt_scope,
+    validate_resolved_config,
+)
 from oracle_bench.container.images import prepare_image, require_saved_image
 from oracle_bench.container.sandbox import docker_client
 from oracle_bench.evaluation import check_reference, evaluate
@@ -28,6 +32,7 @@ from oracle_bench.judge.contracts import (
     skipped_judgment,
 )
 from oracle_bench.judge.run import judge_stage
+from oracle_bench.localization import localize
 from oracle_bench.paths import RunPaths
 from oracle_bench.report import report
 from oracle_bench.results import EvaluationResult, read_instance_record, write_result
@@ -91,22 +96,6 @@ def run(config: RunConfig) -> Path:
         # the user's original.
         paths.config.write_text(yaml.safe_dump(config.to_dict(), sort_keys=False))
 
-        # A localized run tells the agent which file to test. A repository run does
-        # not, and the prompt says "this repository" instead.
-        test_target = instance.test_target if config.task.scope == "localized" else None
-
-        # Fill in the small environment contract available to prompt authors and
-        # save exactly what the agent receives.
-        runtime = config.require_runtime()
-        paths.prompt.write_text(
-            Template(prompt_template).substitute(
-                generated_dir=config.task.generated_dir,
-                project_python=runtime.python,
-                workdir=runtime.workdir,
-                test_target=test_target or "this repository",
-            )
-        )
-
         # Save the answer key: the bug fix and the real tests. The agent must never
         # see either. instance.json is the raw data, ground truth is the readable
         # issue.md and fix.patch.
@@ -117,6 +106,17 @@ def run(config: RunConfig) -> Path:
             status(run_dir, stage)
             image = prepare_image(client, config, paths.build)
             write_json(paths.runtime, {"image": image})
+
+            # A localized run tells the agent which code to test: the code the
+            # golden repair changes, read from the image. A repository run does not.
+            target = None
+            if config.task.scope == "localized":
+                stage = "localize"
+                status(run_dir, stage)
+                target = localize(client, config, image, instance, paths)
+            paths.prompt.write_text(
+                render_prompt(prompt_template, config, target.text if target else None)
+            )
 
             # A pair that cannot distinguish its own revisions cannot score an
             # agent, so prove it before spending a generation call.

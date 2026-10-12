@@ -58,16 +58,10 @@ REPOSITORY_LAYOUTS = {
 }
 
 
-@dataclass(frozen=True)
-class TestTools:
-    pytest_version: str
-    coverage_version: str
-
-
-# Instances whose image cannot run the default pytest and coverage.
-OLDER_TEST_TOOLS = {
+# Instances whose image cannot run the default pytest.
+OLDER_PYTEST_VERSIONS = {
     # This image uses Python 3.6.
-    "scikit-learn__scikit-learn-14710": TestTools(pytest_version="6.2.5", coverage_version="6.2"),
+    "scikit-learn__scikit-learn-14710": "6.2.5",
 }
 
 
@@ -84,7 +78,6 @@ def runtime_for(record: dict) -> RuntimeConfig:
     if repo not in REPOSITORY_LAYOUTS:
         raise ValueError(f"No tested SWE-bench runtime profile for repository {repo!r}")
     layout = REPOSITORY_LAYOUTS[repo]
-    tools = OLDER_TEST_TOOLS.get(record["instance_id"])
     return RuntimeConfig(
         image=image_for(record["instance_id"]),
         source_roots=[layout.source_root],
@@ -92,8 +85,7 @@ def runtime_for(record: dict) -> RuntimeConfig:
         existing_test_globs=list(layout.existing_tests),
         pythonpath=layout.pythonpath,
         pytest_plugins=list(layout.pytest_plugins),
-        pytest_version=tools.pytest_version if tools else None,
-        coverage_version=tools.coverage_version if tools else None,
+        pytest_version=OLDER_PYTEST_VERSIONS.get(record["instance_id"]),
         # Official instance images already contain an installed checkout. Patches to
         # Python sources are visible through that editable install; rerunning a generic
         # pip build can require build-only dependencies absent from the final image.

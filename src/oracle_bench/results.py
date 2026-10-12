@@ -145,16 +145,6 @@ class VersionResult(ArtifactModel):
     error: str | None = None
 
 
-class CoverageResult(ArtifactModel):
-    status: Literal["available", "unavailable"]
-    kind: str | None = None
-    covered_lines: int | None = None
-    executable_lines: int | None = None
-    percent: float | None = None
-    files: dict | None = None
-    reason: str | None = None
-
-
 class MatrixCell(ArtifactModel):
     count: int
     test_ids: list[str]
@@ -241,7 +231,6 @@ class EvaluationResult(PairedResult):
     test_target: LocalizedTarget | None = None  # what a localized run's agent was shown
     existing_tests: str
     agent: HarnessResult
-    coverage: dict[str, CoverageResult]
 
     @property
     def diagnostic_only(self) -> bool:

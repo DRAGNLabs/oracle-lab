@@ -62,10 +62,6 @@ def fake_result(
             submission_compliant=compliant,
             forbidden_changes=[] if compliant else ["package/core.py"],
             matrix=matrix,
-            coverage={
-                "buggy": {"status": "available", "percent": 12.5},
-                "golden": {"status": "unavailable"},
-            },
         ),
     )
     write_json(run_dir / "status.json", {"state": "completed"})

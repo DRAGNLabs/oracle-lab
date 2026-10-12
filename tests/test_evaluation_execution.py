@@ -24,7 +24,7 @@ def config():
     return value
 
 
-def test_missing_coverage_does_not_erase_completed_tests(config, tmp_path):
+def test_completed_runner_output_becomes_the_version_result(config, tmp_path):
     sandbox = Mock(helpers="/helpers")
     sandbox.run.return_value = CommandResult(0, 1)
     evidence = {"status": "completed", "tests": {"test_example": {"outcome": "fail"}}}
@@ -33,7 +33,6 @@ def test_missing_coverage_does_not_erase_completed_tests(config, tmp_path):
     )
     result = run_tests(sandbox, config, ["oracle_tests"], tmp_path)
     assert result == VersionResult.model_validate(evidence)
-    assert read_json(tmp_path / "coverage.json")["status"] == "unavailable"
 
 
 def test_runner_receives_repository_pytest_plugins(config, tmp_path):
@@ -93,8 +92,6 @@ def test_evaluation_records_the_target_the_agent_was_shown(config, tmp_path, mon
     paths = RunPaths.create(tmp_path)
     write_json(paths.target, localized_target())
     write_json(paths.generation / "result.json", {"status": "completed"})
-    for version in ("buggy", "golden"):
-        write_json(paths.evaluation / version / "coverage.json", {"status": "unavailable"})
     manifest = SubmissionManifest.model_validate(submission_manifest())
     monkeypatch.setattr(evaluation, "verify_bundle", lambda paths: manifest)
     monkeypatch.setattr(evaluation, "archive_previous_evaluation", lambda paths: None)

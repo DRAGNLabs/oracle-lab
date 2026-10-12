@@ -183,7 +183,7 @@ completion state.
 
 `fail_on_buggy_pass_on_golden` is the expected distinguishing direction.
 `pass_on_both` only says the test did not distinguish the pair; it does not prove
-that the oracle is incorrect. Coverage failures must not erase valid test results.
+that the oracle is incorrect.
 
 ## Current limitations
 

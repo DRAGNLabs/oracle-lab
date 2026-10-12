@@ -55,7 +55,6 @@ HARNESS_PROVIDERS = {
 }
 NODE_IMAGE = "node:22.14.0-bookworm-slim"
 PYTEST_VERSION = "7.4.4"
-COVERAGE_VERSION = "7.6.1"
 
 
 def repo_path(value: str) -> str:
@@ -198,7 +197,6 @@ class RuntimeConfig(ConfigModel):
     pythonpath: ContainerPath | None = None
     pytest_plugins: list[str] = Field(default_factory=list)
     pytest_version: Version | None = None
-    coverage_version: Version | None = None
     rebuild: str = "python -m pip install --no-deps --no-build-isolation -e ."
 
 
@@ -209,7 +207,6 @@ class ToolchainConfig(ConfigModel):
     # Every CLI the image installs, whichever one the run selects.
     harnesses: dict[str, Version] = Field(default_factory=lambda: dict(HARNESS_VERSIONS))
     pytest_version: Version = PYTEST_VERSION
-    coverage_version: Version = COVERAGE_VERSION
 
 
 class ResolvedConfig(ConfigModel):

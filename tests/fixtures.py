@@ -77,7 +77,6 @@ def evaluation_result(**changes) -> dict:
         },
         "buggy_status": "completed",
         "golden_status": "completed",
-        "coverage": {},
         "agent": {"status": "completed", "duration_seconds": 3},
     }
     result.update(changes)

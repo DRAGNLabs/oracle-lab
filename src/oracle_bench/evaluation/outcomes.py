@@ -7,7 +7,6 @@ from oracle_bench.results import (
     FAILURE_KINDS,
     MATRIX_CELLS,
     VERSIONS,
-    CoverageResult,
     MatrixCell,
     MatrixCellName,
     PairedOutcome,
@@ -29,15 +28,7 @@ def incomplete_result(directory: Path, status: str, reason: str) -> VersionResul
     result = _partial_result(path)
     result = result.model_copy(update={"status": status, "error": reason})
     write_result(path, result)
-    record_unavailable_coverage(directory, reason)
     return result
-
-
-def record_unavailable_coverage(directory: Path, reason: str) -> None:
-    """Persist an unavailable result unless the runner already supplied coverage evidence."""
-    path = directory / "coverage.json"
-    if not path.exists():
-        write_result(path, CoverageResult(status="unavailable", reason=reason))
 
 
 def pair_results(buggy: VersionResult, golden: VersionResult) -> PairedResult:

@@ -48,7 +48,7 @@ def test_report_renders_run_metadata(tmp_path, scope, target, expected_scope):
     assert "existing tests visible" in text
     assert expected_scope in text
     assert "- Ground truth: [issue](ground-truth/issue.md), [fix](ground-truth/fix.patch)" in text
-    assert "| buggy | — | 2 | 1 | 0 |" in text
+    assert "| buggy | 2 | 1 | 0 |" in text
     assert "| Judge | — | disabled |" in text
     assert "| Cost | OpenRouter key spend, generation and judge | — |" in text
 
@@ -109,7 +109,6 @@ def report_results(**changes):
             "buggy": {"assertion": 0, "exception": 0, "unknown": 0},
             "golden": {"assertion": 0, "exception": 0, "unknown": 0},
         },
-        "coverage": {},
     }
     results.update(changes)
     return results

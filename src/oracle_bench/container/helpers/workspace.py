@@ -20,7 +20,7 @@ def snapshot(root: Path) -> dict:
         for filename in files + links:
             path = Path(directory) / filename
             relative = path.relative_to(root).as_posix()
-            if filename.endswith((".pyc", ".pyo")) or filename.startswith(".coverage"):
+            if filename.endswith((".pyc", ".pyo")):
                 continue
             mode = path.lstat().st_mode
             if path.is_symlink():

@@ -187,20 +187,13 @@ def _outcome_lines(results: EvaluationResult) -> list[str]:
         *[f"| {cell.label} | {results.matrix[cell].count} |" for cell in MATRIX_CELLS],
         f"| Other (skip, error, incomplete) | {len(results.other_outcomes)} |",
         "",
-        "| Version | Coverage | Assertion failures | Other exceptions | Unknown failures |",
-        "|---|---:|---:|---:|---:|",
+        "| Version | Assertion failures | Other exceptions | Unknown failures |",
+        "|---|---:|---:|---:|",
     ]
     for version in VERSIONS:
-        coverage = results.coverage.get(version)
-        percent = (
-            f"{coverage.percent:.2f}%"
-            if coverage is not None and coverage.status == "available"
-            else "—"
-        )
         kinds = results.failure_kinds[version]
         lines.append(
-            f"| {version} | {percent} | {kinds['assertion']} | "
-            f"{kinds['exception']} | {kinds['unknown']} |"
+            f"| {version} | {kinds['assertion']} | {kinds['exception']} | {kinds['unknown']} |"
         )
     return [*lines, ""]
 

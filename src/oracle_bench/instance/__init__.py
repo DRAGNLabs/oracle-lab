@@ -1,4 +1,4 @@
-"""Resolve one benchmark instance: its source record, prompt, and ground truth.
+"""Resolve one benchmark instance: its source record, runtime, and ground truth.
 
 This is the run's first stage. Everything here is derived from the dataset
 record; the private evidence it writes never reaches the generation agent.

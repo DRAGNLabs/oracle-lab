@@ -39,7 +39,8 @@ The host orchestrates Docker containers, captures generated tests, and scores re
 ```mermaid
 flowchart TD
     Config["YAML config + prompt"] --> Prepare["Resolve dataset task and prepare cached runtime image"]
-    Prepare --> Reference["Verify developer regression test on buggy and golden code"]
+    Prepare --> Localize["Localized runs: name the code the golden repair changes"]
+    Localize --> Reference["Verify developer regression test on buggy and golden code"]
     Reference --> Agent["Generation container: agent writes tests in buggy repo"]
     Agent --> Capture["Capture new tests, hashes, and workspace changes"]
     Capture --> Buggy["Fresh container: tests against buggy code"]
@@ -153,7 +154,7 @@ which saved batch to inspect.
 
 The package lives in `src/oracle_bench/` and is organized by pipeline stage:
 `instance/` resolves a task, `container/images.py` prepares the runtime image,
-`generation.py` runs the agent and freezes its submission, `evaluation/` executes
+`localization/` names the code a localized run targets, `generation.py` runs the agent and freezes its submission, `evaluation/` executes
 that submission on both revisions, `judge/` annotates it, and `report.py` renders
 the result. `run.py` calls each stage once; `cli.py` and `config.py` define the
 interface, `container/` integrates the Docker Python SDK, `harnesses/` launches

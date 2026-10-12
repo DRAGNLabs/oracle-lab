@@ -288,8 +288,8 @@ instructions and may use these resolved environment variables:
 - `${generated_dir}`: repository-relative directory where new tests are allowed.
 - `${project_python}`: absolute path to the resolved project Python.
 - `${workdir}`: repository root inside the container.
-- `${test_target}`: sanitized production file or enclosing symbol derived from
-  the private repair for a localized task.
+- `${test_target}`: a localized run's target, one line per file, as saved in
+  `inputs/target.json`. See [`task.scope`](#taskscope).
 
 Oracle Bench substitutes those variables and freezes the exact delivered text as
 `prompt.txt`. Use `$$` when the prompt needs a literal dollar sign.
@@ -299,15 +299,32 @@ Oracle Bench substitutes those variables and freezes the exact delivered text as
 - **Type:** `localized` or `repository`
 - **Default:** `repository`
 
-`localized` bounds a SWE-bench assignment to production files and the existing
-classes or functions that enclose each changed line. Enclosing definitions come
-from the patch's context and removed lines; the hunk header, which names the
-definition above the hunk, is used only when the hunk shows none. Names that
-only appear in added lines are never used. The prompt
-receives this location through `${test_target}`; repair contents, changed lines,
-reference tests, and expected behavior remain private. `repository` supplies no
-issue-derived location and is intended for small projects where repository-wide
-test generation is meaningful.
+`localized` points the agent at the existing code the golden repair changes.
+After the image build, a `localize` stage reads each changed production Python
+file from the image, applies the golden patch, and compares the buggy and
+repaired syntax trees. The target is the most specific level any changed file
+reaches:
+
+1. Existing functions and methods whose syntax tree changed, qualified by class
+   (`Outer.method`). A change inside a nested function counts for the function
+   that encloses it.
+2. If no function changed: classes whose own body changed, such as a new method
+   or a changed attribute.
+3. If no class changed either: the changed files.
+
+Comment and formatting edits, and definitions the repair adds, never enter the
+target. A function the repair adds counts only through the existing code that
+calls it. The prompt receives the target through `${test_target}`, for example:
+
+```text
+- `src/_pytest/logging.py`: `LogCaptureFixture.clear`
+- `sklearn/pipeline.py`: class `Pipeline`
+```
+
+Patch contents, changed lines, reference tests, and expected behavior remain
+private. `repository` supplies no issue-derived location, skips the `localize`
+stage, and is intended for small projects where repository-wide test generation
+is meaningful.
 
 The scope and the prompt must agree. A `localized` run's prompt must contain
 `${test_target}`, and any other run's prompt must not. A run with a mismatch stops

@@ -297,8 +297,9 @@ test IDs, and incomplete runs remain in `other_outcomes`.
 ### `status.json`
 
 The latest lifecycle checkpoint, containing `stage`, `state`, `updated_at`, and an
-error when applicable. Stages progress through `resolve`, `build`, `reference`,
-`generate`, `evaluate`, optional `judge`, `cost`, and `finished`. Capturing the
+error when applicable. Stages progress through `resolve`, `build`, `localize`
+(localized runs only), `reference`, `generate`, `evaluate`, optional `judge`,
+`cost`, and `finished`. Capturing the
 submission is part of the `generate` stage. `cost` is the wait for the spend
 reading described in [`cost.json`](#costjson).
 

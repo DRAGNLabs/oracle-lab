@@ -18,10 +18,10 @@ Read these references before changing related behavior:
 
 ## Architecture and trust boundaries
 
-The host orchestrator resolves an instance, prepares a runtime image, performs a
-private reference-pair check, launches the agent in a buggy generation container,
-captures new tests, and evaluates the same frozen artifact in fresh buggy and
-golden containers. A configured run then judges that submission in a separate
+The host orchestrator resolves an instance, prepares a runtime image, names the
+code a localized run targets, performs a private reference-pair check, launches
+the agent in a buggy generation container, captures new tests, and evaluates the
+same frozen artifact in fresh buggy and golden containers. A configured run then judges that submission in a separate
 privileged container that may see the private evidence.
 
 Preserve these boundaries:
@@ -30,6 +30,9 @@ Preserve these boundaries:
   private evaluation results to the generation agent. The judge deliberately
   receives all of it; keep that bundle in the judge modules rather than relaxing
   `RepositoryWorkspace.prepare()` or the generation upload policy.
+- The localized target (`inputs/target.json`) is the one thing derived from the
+  golden repair that the agent sees. It names existing files, functions, and
+  classes only; never add patch text, changed lines, or expected behavior to it.
 - Keep human raters blinded: their workspace exposes the common input bundle
   only, never an LLM judgment or another rater's result.
 - Never mount the host Docker socket or complete host run directory into the
@@ -52,9 +55,12 @@ Preserve these boundaries:
 The pipeline stages run in this order, and each is one module or package that
 `run.py` calls once:
 
-- `src/oracle_bench/instance/`: resolve — dataset record, rendered prompt, and
-  private ground truth.
+- `src/oracle_bench/instance/`: resolve — dataset record, runtime, and private
+  ground truth.
 - `src/oracle_bench/container/images.py`: build — the prepared runtime image.
+- `src/oracle_bench/localization/`: localize — for localized runs, the target
+  named in the prompt. `patches.py` applies the golden patch on the host and
+  `target.py` compares the buggy and repaired syntax trees.
 - `src/oracle_bench/evaluation/`: reference and evaluate — paired execution in
   `__init__.py` and outcome pairing in `outcomes.py`.
 - `src/oracle_bench/generation.py`: generate — one agent turn in a buggy

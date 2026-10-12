@@ -24,7 +24,6 @@ def instance_record(**changes) -> InstanceRecord:
         "golden_patch": "diff --git a/package/core.py b/package/core.py\n",
         "reference_test_patch": "diff --git a/tests/test_core.py b/tests/test_core.py\n",
         "reference_test_ids": ["tests/test_core.py::test_fixed"],
-        "test_target": "package/core.py (send)",
         "source": {
             "kind": "swebench",
             "dataset": "lite",

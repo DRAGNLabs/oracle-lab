@@ -5,7 +5,7 @@ import pytest
 import yaml
 
 from oracle_bench.config import load_config
-from oracle_bench.instance.swebench import image_for, localized_test_target, resolve, runtime_for
+from oracle_bench.instance.swebench import image_for, resolve, runtime_for
 
 
 def test_image_is_derived_from_instance_id():
@@ -47,7 +47,6 @@ def test_local_record_resolves_instance_and_runtime(tmp_path):
 
     assert instance.instance_id == record["instance_id"]
     assert instance.source.dataset == "verified"
-    assert instance.test_target == "requests/a.py (send)"
     assert runtime.image == image_for(record["instance_id"])
     assert runtime.source_roots == ["requests"]
     assert runtime.import_modules == ["requests"]
@@ -75,67 +74,3 @@ def test_python_36_instance_uses_compatible_evaluation_tools():
     )
     assert runtime.pytest_version == "6.2.5"
     assert runtime.coverage_version == "6.2"
-
-
-def test_localized_target_ignores_test_files_and_new_symbol_names():
-    patch = """diff --git a/pkg/worker.py b/pkg/worker.py
---- a/pkg/worker.py
-+++ b/pkg/worker.py
-@@ -4,2 +4,3 @@ class Worker:
-     def run(self):
-+        return new_repair_helper()
-diff --git a/pkg/tests/test_worker.py b/pkg/tests/test_worker.py
---- a/pkg/tests/test_worker.py
-+++ b/pkg/tests/test_worker.py
-@@ -1 +1,2 @@
-+def test_repair(): pass
-"""
-
-    assert localized_test_target(patch, ["pkg"]) == "pkg/worker.py (Worker.run)"
-
-
-def test_localized_target_names_the_edited_definition_not_the_hunk_header():
-    """Git names the definition above the hunk; the edit here is inside `clear`."""
-    patch = """diff --git a/pkg/fixture.py b/pkg/fixture.py
---- a/pkg/fixture.py
-+++ b/pkg/fixture.py
-@@ -10,5 +10,9 @@ def messages(self):
- 
-     def clear(self):
--        self.handler.reset()
-+        self.handler.clear()
-+
-+    def repair_only_helper(self):
-+        pass
-"""
-
-    assert localized_test_target(patch, ["pkg"]) == "pkg/fixture.py (clear)"
-
-
-def test_localized_target_keeps_a_changed_signature_in_its_own_scope():
-    patch = """diff --git a/pkg/rolling.py b/pkg/rolling.py
---- a/pkg/rolling.py
-+++ b/pkg/rolling.py
-@@ -20,4 +20,4 @@ def __init__(self):
-         self.labels = labels
- 
--    def __iter__(self) -> Iterator[int]:
-+    def __iter__(self) -> Iterator[str]:
-         if self.ndim > 1:
--            raise ValueError()
-+            raise TypeError()
-"""
-
-    assert localized_test_target(patch, ["pkg"]) == "pkg/rolling.py (__iter__)"
-
-
-def test_localized_target_falls_back_to_production_file():
-    patch = """diff --git a/src/settings.py b/src/settings.py
---- a/src/settings.py
-+++ b/src/settings.py
-@@ -1 +1 @@
--VALUE = 1
-+VALUE = 2
-"""
-
-    assert localized_test_target(patch, ["src"]) == "src/settings.py"

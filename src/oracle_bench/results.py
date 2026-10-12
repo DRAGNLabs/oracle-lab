@@ -79,7 +79,6 @@ class InstanceRecord(ArtifactModel):
     golden_patch: str
     reference_test_patch: str
     reference_test_ids: list[str]
-    test_target: str
     source: SourceProvenance
     original_record: dict
 

@@ -2,34 +2,22 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import asdict
 from pathlib import Path
 
 from oracle_bench.container.sandbox import Sandbox
 from oracle_bench.harnesses.launch import (
     AgentTurnRequest,
+    read_trace,
     run_agent_turn,
+    turn_status,
 )
 from oracle_bench.results import Usage
 
 
 def parse_trace(path: Path) -> dict:
-    result = None
-    malformed = 0
-    if path.exists():
-        for line in path.read_text(errors="replace").splitlines():
-            if not line.strip():
-                continue
-            try:
-                event = json.loads(line)
-            except json.JSONDecodeError:
-                malformed += 1
-                continue
-            if not isinstance(event, dict):
-                malformed += 1
-            elif event.get("type") == "result":
-                result = event
+    events, malformed = read_trace(path)
+    result = next((event for event in reversed(events) if event.get("type") == "result"), None)
 
     completed = bool(result and result.get("subtype") == "success" and not result.get("is_error"))
     errors = []
@@ -107,11 +95,5 @@ def run_turn(sandbox: Sandbox, request: AgentTurnRequest) -> dict:
 
     summary = {**asdict(outcome), **parse_trace(directory / "trace.jsonl")}
     (directory / "final.txt").write_text(summary.pop("final_text"))
-    summary["status"] = (
-        "timeout"
-        if outcome.timed_out
-        else "failed"
-        if outcome.exit_code or not summary["turn_completed"]
-        else "completed"
-    )
+    summary["status"] = turn_status(outcome, summary)
     return summary

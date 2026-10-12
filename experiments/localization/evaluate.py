@@ -38,7 +38,9 @@ OLD_TARGET = re.compile(r"(\S+?\.py)(?: \(([^)]*)\))?(?:, |$)")
 
 
 def source_root(repo: str) -> str:
-    return REPOSITORY_LAYOUTS[repo][0] if repo in REPOSITORY_LAYOUTS else EXCLUDED_ROOTS[repo]
+    return (
+        REPOSITORY_LAYOUTS[repo].source_root if repo in REPOSITORY_LAYOUTS else EXCLUDED_ROOTS[repo]
+    )
 
 
 def is_production(path: str | None, root: str) -> bool:

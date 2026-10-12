@@ -5,20 +5,32 @@ from unittest.mock import Mock
 
 import pytest
 import yaml
-from fixtures import completed_judgment, evaluation_result, instance_record, localized_target
+from fixtures import (
+    RUN_CONFIG,
+    completed_judgment,
+    context_of,
+    evaluation_result,
+    instance_record,
+    localized_target,
+    submission_manifest,
+)
 
 import oracle_bench.judge.run as judge_module
 import oracle_bench.run as run_module
 from oracle_bench.config import JudgeConfig, RuntimeConfig, load_config
 from oracle_bench.evaluation import archive_previous_evaluation
 from oracle_bench.harnesses import require_credentials
-from oracle_bench.harnesses.codex import parse_trace
 from oracle_bench.io import read_json, write_json
 from oracle_bench.paths import RunPaths
-from oracle_bench.results import EvaluationResult, LocalizedTarget, write_result
+from oracle_bench.results import (
+    EvaluationResult,
+    LocalizedTarget,
+    SubmissionManifest,
+    write_result,
+)
 from oracle_bench.run import completion_state
 
-SAMPLE = Path(__file__).parents[1] / "configs/smoke.yaml"
+SAMPLE = RUN_CONFIG
 
 
 def test_reevaluation_archives_results_but_preserves_generated_tests(tmp_path):
@@ -32,36 +44,24 @@ def test_reevaluation_archives_results_but_preserves_generated_tests(tmp_path):
     assert (paths.submission / "manifest.json").read_text() == "keep"
 
 
-def test_codex_usage_already_counts_cached_prompt_tokens(tmp_path):
-    raw = {
-        "input_tokens": 103067,
-        "cached_input_tokens": 82068,
-        "cache_write_input_tokens": 20523,
-        "output_tokens": 3728,
-        "reasoning_output_tokens": 852,
-    }
-    path = tmp_path / "trace.jsonl"
-    path.write_text("not-json\n" + json.dumps({"type": "turn.completed", "usage": raw}) + "\n")
-    result = parse_trace(path)
-    assert result["usage"] == {
-        "input_tokens": 103067,
-        "cached_input_tokens": 82068,
-        "output_tokens": 3728,
-        "reasoning_tokens": 852,
-        "raw_usage": raw,
-    }
-    assert result["unparsed_trace_lines"] == 1
+@pytest.mark.parametrize(
+    "changes,problems",
+    [
+        ({}, []),
+        ({"agent": {"status": "timeout"}}, ["generation timeout"]),
+        ({"buggy_status": "no_tests", "golden_status": "no_tests"}, ["no tests collected"]),
+        ({"golden_status": "infrastructure_error"}, ["golden evaluation infrastructure_error"]),
+        (
+            {"submission_compliant": False, "forbidden_changes": ["app.py"]},
+            ["diagnostic only: edits outside the generated directory"],
+        ),
+    ],
+)
+def test_the_run_state_and_the_report_share_one_list_of_problems(changes, problems):
+    result = EvaluationResult.model_validate(evaluation_result(**changes))
 
-
-def test_recovered_stream_error_does_not_mean_the_turn_failed(tmp_path):
-    path = tmp_path / "trace.jsonl"
-    path.write_text(
-        '{"type":"error","message":"reconnecting"}\n'
-        '{"type":"turn.completed","usage":{"output_tokens":2}}\n'
-    )
-    result = parse_trace(path)
-    assert result["turn_completed"] and not result["turn_failed"]
-    assert result["errors"]
+    assert result.completion_problems == problems
+    assert completion_state(result) == ("completed_with_errors" if problems else "completed")
 
 
 def test_failed_agent_is_not_reported_as_a_successful_pipeline():
@@ -110,9 +110,7 @@ def configured_pipeline(tmp_path, with_judge):
 def install_pipeline_fakes(monkeypatch, runtime, instance, judge_effect=None):
     client = Mock()
 
-    @contextmanager
-    def client_context():
-        yield client
+    client_context = context_of(client)
 
     monkeypatch.setattr(run_module, "require_credentials", Mock())
     monkeypatch.setattr(run_module, "resolve_source", lambda source: (instance, runtime))
@@ -121,15 +119,15 @@ def install_pipeline_fakes(monkeypatch, runtime, instance, judge_effect=None):
     target = LocalizedTarget.model_validate(localized_target())
     monkeypatch.setattr(run_module, "localize", Mock(return_value=target))
     monkeypatch.setattr(run_module, "check_reference", Mock())
-    monkeypatch.setattr(run_module, "generate_submission", Mock(return_value={"empty": False}))
+    manifest = SubmissionManifest.model_validate(submission_manifest())
+    monkeypatch.setattr(run_module, "generate_submission", Mock(return_value=manifest))
+    monkeypatch.setattr(run_module, "verify_bundle", Mock(return_value=manifest))
     result = EvaluationResult.model_validate(evaluation_result())
     monkeypatch.setattr(run_module, "evaluate", lambda *args: result)
 
     # Fake the turn itself, not the stage. judge_stage's own failure handling then
     # runs for real, which is what these tests are checking.
-    @contextmanager
-    def judge_sandbox(*args, **kwargs):
-        yield Mock(helpers="/opt/oracle-bench/container-helpers")
+    judge_sandbox = context_of(Mock(helpers="/opt/oracle-bench/container-helpers"))
 
     def judge_effectively(sandbox, request):
         if judge_effect is not None:
@@ -150,18 +148,20 @@ def install_pipeline_fakes(monkeypatch, runtime, instance, judge_effect=None):
     monkeypatch.setattr(judge_module, "build_judge_workspace", Mock())
     monkeypatch.setattr(judge_module, "run_turn", judge_call)
     monkeypatch.setattr(run_module, "report", lambda paths: paths.report)
-    monkeypatch.setattr(run_module, "measure_spend", fake_spend)
+    monkeypatch.setattr(run_module, "measure_spend", recording_spend([]))
     return judge_call
 
 
-spent = []
+def recording_spend(log: list):
+    """A stand-in for `measure_spend` that records which harnesses it measured."""
 
+    @contextmanager
+    def measure(harnesses, path, on_wait):
+        log.append(([harness.harness for harness in harnesses], path.name))
+        yield
+        on_wait()
 
-@contextmanager
-def fake_spend(harnesses, path, on_wait):
-    spent.append(([harness.harness for harness in harnesses], path.name))
-    yield
-    on_wait()
+    return measure
 
 
 @pytest.mark.parametrize(
@@ -186,7 +186,8 @@ def test_normal_lifecycle_runs_only_a_configured_judge(
 def test_run_measures_spend_across_every_model_stage(tmp_path, monkeypatch, with_judge, measured):
     config, runtime, instance = configured_pipeline(tmp_path, with_judge)
     install_pipeline_fakes(monkeypatch, runtime, instance)
-    spent.clear()
+    spent = []
+    monkeypatch.setattr(run_module, "measure_spend", recording_spend(spent))
 
     run_module.run(config)
 
@@ -330,7 +331,8 @@ def test_judge_failure_preserves_completed_evaluation(tmp_path, monkeypatch):
 def test_empty_generation_skips_configured_judge(tmp_path, monkeypatch):
     config, runtime, instance = configured_pipeline(tmp_path, True)
     judge_call = install_pipeline_fakes(monkeypatch, runtime, instance)
-    monkeypatch.setattr(run_module, "generate_submission", Mock(return_value={"empty": True}))
+    empty = SubmissionManifest.model_validate(submission_manifest({}))
+    monkeypatch.setattr(run_module, "generate_submission", Mock(return_value=empty))
     failed = EvaluationResult.model_validate(
         evaluation_result(
             agent={"status": "failed"}, buggy_status="no_tests", golden_status="no_tests"
@@ -418,7 +420,7 @@ def test_reevaluation_marks_existing_judgment_stale_without_calling_a_model(tmp_
     paths.judge.rubric.write_text("# Rubric\n")
     config.judge.instructions = str(paths.judge.instructions)
     paths.judge.instructions.write_text("Judge the submission in $root.\n")
-    paths.config.write_text(yaml.safe_dump(config.to_dict(), sort_keys=False))
+    paths.config.write_text(yaml.safe_dump(config.model_dump(), sort_keys=False))
     write_json(paths.runtime, {"image": "example/runtime"})
     write_result(paths.instance, instance)
     write_json(paths.judge.judgment, completed_judgment())
@@ -426,9 +428,7 @@ def test_reevaluation_marks_existing_judgment_stale_without_calling_a_model(tmp_
     write_json(human_judgment, read_json(paths.judge.judgment))
     client = Mock()
 
-    @contextmanager
-    def client_context():
-        yield client
+    client_context = context_of(client)
 
     result = EvaluationResult.model_validate(evaluation_result())
     monkeypatch.setattr(run_module, "docker_client", client_context)

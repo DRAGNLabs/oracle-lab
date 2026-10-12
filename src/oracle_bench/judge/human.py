@@ -20,6 +20,7 @@ from oracle_bench.container.sandbox import (
     create_sandbox_container,
     docker_client,
 )
+from oracle_bench.generation import verify_bundle
 from oracle_bench.io import digest, read_json, require_files, utc_stamp, write_json
 from oracle_bench.judge.contracts import (
     RATER_ID,
@@ -71,6 +72,7 @@ def create_human_workspace(config: RunConfig, paths: RunPaths, rater: str) -> st
                 image,
                 read_instance_record(paths.instance),
                 read_evaluation_result(paths.results),
+                verify_bundle(paths),
                 persist=False,
             )
             if actual_spec != expected_spec:

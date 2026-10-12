@@ -1,4 +1,4 @@
-"""Readable, offline rendering of the events emitted by either agent CLI."""
+"""Readable, offline rendering of the events emitted by any of the agent CLIs."""
 
 import json
 from pathlib import Path
@@ -75,6 +75,10 @@ def _render_event(number: int, raw: str) -> list[str]:
 
 
 def render_session(paths: RunPaths) -> Path:
+    """Render the generation turn's prompt and trace as `generation/session.log`.
+
+    The judge's trace is kept raw in `judge/agent/trace.jsonl` and is not rendered.
+    """
     directory = paths.generation
     directory.mkdir(exist_ok=True)
     lines = [

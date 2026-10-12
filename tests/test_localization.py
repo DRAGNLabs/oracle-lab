@@ -1,12 +1,10 @@
 import difflib
 from contextlib import contextmanager
-from pathlib import Path
 
 import pytest
-from fixtures import instance_record
+from fixtures import RUN_CONFIG, instance_record, run_config
 
 import oracle_bench.localization as localization
-from oracle_bench.config import RuntimeConfig, load_config
 from oracle_bench.localization import production_diffs
 from oracle_bench.localization.patches import apply_patch, parse_patch
 from oracle_bench.localization.target import choose_target, compare
@@ -207,7 +205,7 @@ def test_the_target_artifact_round_trips_and_rejects_an_empty_target(tmp_path):
 
 # The stage: read buggy files from the image, then compare.
 
-SAMPLE = Path(__file__).parents[1] / "configs" / "smoke.yaml"
+SAMPLE = RUN_CONFIG
 
 
 class FileSandbox:
@@ -229,13 +227,7 @@ class FileSandbox:
 
 
 def run_stage(monkeypatch, tmp_path, patch: str, files: dict[str, str]):
-    config = load_config(SAMPLE)
-    config.runtime = RuntimeConfig(
-        image="example/runtime",
-        source_roots=["package"],
-        import_modules=["package"],
-        existing_test_globs=["tests"],
-    )
+    config = run_config("package", image="example/runtime")
     sandbox = FileSandbox({f"/testbed/{path}": text for path, text in files.items()})
     opened = []
 

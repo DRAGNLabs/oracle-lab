@@ -9,7 +9,6 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 
 import yaml
 
@@ -22,7 +21,7 @@ from oracle_bench.config import (
 from oracle_bench.container.images import prepare_image, require_saved_image
 from oracle_bench.container.sandbox import docker_client
 from oracle_bench.evaluation import check_reference, evaluate
-from oracle_bench.generation import generate_submission
+from oracle_bench.generation import generate_submission, verify_bundle
 from oracle_bench.harnesses import require_credentials
 from oracle_bench.instance import resolve_source, write_private_instance_artifacts
 from oracle_bench.io import read_json, write_json
@@ -35,27 +34,18 @@ from oracle_bench.judge.run import judge_stage
 from oracle_bench.localization import localize
 from oracle_bench.paths import RunPaths
 from oracle_bench.report import report
-from oracle_bench.results import EvaluationResult, read_instance_record, write_result
+from oracle_bench.results import (
+    EvaluationResult,
+    InstanceRecord,
+    read_instance_record,
+    write_result,
+    write_status,
+)
 from oracle_bench.spend import measure_spend
 
 
-def status(run_dir: Path, stage: str, state: str = "running", **details: Any) -> None:
-    write_json(
-        run_dir / "status.json",
-        {
-            "stage": stage,
-            "state": state,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-            **details,
-        },
-    )
-    print(f"[{stage}] {state}: {run_dir}", flush=True)
-
-
 def completion_state(result: EvaluationResult) -> str:
-    if result.agent.status == "completed" and result.both_completed and result.submission_compliant:
-        return "completed"
-    return "completed_with_errors"
+    return "completed_with_errors" if result.completion_problems else "completed"
 
 
 def run(config: RunConfig) -> Path:
@@ -71,39 +61,11 @@ def run(config: RunConfig) -> Path:
 
     stage = "resolve"
     try:
-        status(run_dir, stage)
-
-        # Look up the dataset record and the settings for running this repo.
-        instance, config.runtime = resolve_source(config.source)
-
-        # Now that we know the repo layout, check the agent's test directory is not
-        # inside the repo's source code.
-        # this is done because generate_dir can be set by the user, who might be tempted
-        # to set it to something inside src
-        validate_resolved_config(config)
-
-        # Copy the prompt and rubric into the run directory and point the config at
-        # the copies, so a rerun later uses the same files this run used.
-        config.task.prompt = str(paths.prompt)
-        if config.judge:
-            paths.judge.rubric.write_bytes(Path(config.judge.rubric).read_bytes())
-            paths.judge.instructions.write_bytes(Path(config.judge.instructions).read_bytes())
-            # Absolute, because reloading a config joins its paths to the run directory.
-            config.judge.rubric = str(paths.judge.rubric.resolve())
-            config.judge.instructions = str(paths.judge.instructions.resolve())
-
-        # Save the config. `evaluate`, `judge`, and `agreement` read this file, not
-        # the user's original.
-        paths.config.write_text(yaml.safe_dump(config.to_dict(), sort_keys=False))
-
-        # Save the answer key: the bug fix and the real tests. The agent must never
-        # see either. instance.json is the raw data, ground truth is the readable
-        # issue.md and fix.patch.
-        write_result(paths.instance, instance)
-        write_private_instance_artifacts(paths, instance)
+        write_status(run_dir, stage)
+        instance = _resolve(config, paths)
         with docker_client() as client:
             stage = "build"
-            status(run_dir, stage)
+            write_status(run_dir, stage)
             image = prepare_image(client, config, paths.build)
             write_json(paths.runtime, {"image": image})
 
@@ -112,7 +74,7 @@ def run(config: RunConfig) -> Path:
             target = None
             if config.task.scope == "localized":
                 stage = "localize"
-                status(run_dir, stage)
+                write_status(run_dir, stage)
                 target = localize(client, config, image, instance, paths)
             paths.prompt.write_text(
                 render_prompt(prompt_template, config, target.text if target else None)
@@ -121,46 +83,73 @@ def run(config: RunConfig) -> Path:
             # A pair that cannot distinguish its own revisions cannot score an
             # agent, so prove it before spending a generation call.
             stage = "reference"
-            status(run_dir, stage)
+            write_status(run_dir, stage)
             check_reference(client, config, image, instance, paths)
 
             # Only generation and the judge call a model, so spend is measured around them.
             harnesses = [config.agent] + ([config.judge] if config.judge else [])
-            with measure_spend(harnesses, paths.cost, lambda: status(run_dir, "cost")):
+            with measure_spend(harnesses, paths.cost, lambda: write_status(run_dir, "cost")):
                 stage = "generate"
-                status(run_dir, stage)
+                write_status(run_dir, stage)
                 submission = generate_submission(client, config, image, instance, paths)
 
                 stage = "evaluate"
-                status(run_dir, stage)
+                write_status(run_dir, stage)
                 result = evaluate(client, config, image, instance, paths)
 
                 judge_status = "disabled"
                 if config.judge:
-                    if submission["empty"] or result.no_tests:
+                    if submission.empty or result.no_tests:
                         judgment = skipped_judgment(
                             "No generated tests were collected; no judge turn was run."
                         )
                         write_json(paths.judge.judgment, judgment.model_dump())
                     else:
                         stage = "judge"
-                        status(run_dir, stage)
-                        judgment = judge_stage(client, config, paths, image, instance, result)
+                        write_status(run_dir, stage)
+                        judgment = judge_stage(
+                            client, config, paths, image, instance, result, verify_bundle(paths)
+                        )
                     judge_status = judgment.status
         report(paths)
-        status(
+        write_status(
             run_dir,
             "finished",
             completion_state(result),
             judge_status=judge_status,
         )
     except KeyboardInterrupt:
-        status(run_dir, stage, "interrupted")
+        write_status(run_dir, stage, "interrupted")
         raise
     except Exception as exc:
-        status(run_dir, stage, "failed", error=str(exc))
+        write_status(run_dir, stage, "failed", error=str(exc))
         raise
     return run_dir
+
+
+def _resolve(config: RunConfig, paths: RunPaths) -> InstanceRecord:
+    """Look up the instance, then freeze everything later stages read into the run."""
+    instance, config.runtime = resolve_source(config.source)
+    validate_resolved_config(config)
+
+    # Point the config at the run's own copies, so a rerun uses the files this run
+    # used. The prompt itself is written after localization.
+    config.task.prompt = str(paths.prompt)
+    if config.judge:
+        paths.judge.rubric.write_bytes(Path(config.judge.rubric).read_bytes())
+        paths.judge.instructions.write_bytes(Path(config.judge.instructions).read_bytes())
+        # Absolute, because reloading a config joins its paths to the run directory.
+        config.judge.rubric = str(paths.judge.rubric.resolve())
+        config.judge.instructions = str(paths.judge.instructions.resolve())
+
+    # `evaluate`, `judge`, and `agreement` read this saved config, not the user's.
+    paths.config.write_text(yaml.safe_dump(config.model_dump(), sort_keys=False))
+
+    # The answer key, which the agent must never see: the raw record, plus the
+    # readable issue.md and fix.patch.
+    write_result(paths.instance, instance)
+    write_private_instance_artifacts(paths, instance)
+    return instance
 
 
 def reevaluate(config: RunConfig, paths: RunPaths) -> Path:
@@ -171,7 +160,7 @@ def reevaluate(config: RunConfig, paths: RunPaths) -> Path:
     """
     image = read_json(paths.runtime)["image"]
     run_dir = paths.root
-    status(run_dir, "evaluate")
+    write_status(run_dir, "evaluate")
     try:
         with docker_client() as client:
             require_saved_image(client, image, "reevaluation")
@@ -179,7 +168,7 @@ def reevaluate(config: RunConfig, paths: RunPaths) -> Path:
         # Any judgment was based on the old results, so it no longer applies.
         mark_judgments_stale(paths)
         path = report(paths)
-        status(
+        write_status(
             run_dir,
             "finished",
             completion_state(result),
@@ -187,8 +176,8 @@ def reevaluate(config: RunConfig, paths: RunPaths) -> Path:
         )
         return path
     except KeyboardInterrupt:
-        status(run_dir, "evaluate", "interrupted")
+        write_status(run_dir, "evaluate", "interrupted")
         raise
     except Exception as exc:
-        status(run_dir, "evaluate", "failed", error=str(exc))
+        write_status(run_dir, "evaluate", "failed", error=str(exc))
         raise

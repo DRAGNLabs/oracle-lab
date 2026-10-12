@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime, timezone
 from string import Template
-from time import sleep
 
 from docker import DockerClient
 from docker.errors import DockerException
@@ -15,19 +15,17 @@ from oracle_bench.container.sandbox import Profile, docker_client, open_sandbox
 from oracle_bench.generation import verify_bundle
 from oracle_bench.harnesses import provenance, run_turn, turn_request
 from oracle_bench.harnesses.launch import require_credential
-from oracle_bench.harnesses.retry import RETRY_DELAYS_SECONDS, is_transient_failure
+from oracle_bench.harnesses.retry import with_retries
 from oracle_bench.io import archive_files, read_json, require_files, write_json
-from oracle_bench.judge.contracts import (
-    JudgmentResult,
-    failed_judgment,
-    parse_judgment,
-    validate_judgment,
-)
+from oracle_bench.judge.contracts import JudgmentResult, parse_judgment, validate_judgment
 from oracle_bench.judge.workspace import JUDGE_ROOT, build_judge_workspace
 from oracle_bench.paths import RunPaths
 from oracle_bench.results import (
     EvaluationResult,
     InstanceRecord,
+    SubmissionManifest,
+    failed_turn,
+    last_error_message,
     read_evaluation_result,
     read_instance_record,
 )
@@ -54,13 +52,11 @@ def judge(config: RunConfig, paths: RunPaths) -> JudgmentResult:
     evaluation = read_evaluation_result(paths.results)
 
     manifest = verify_bundle(paths)
-    if manifest["empty"] or evaluation.no_tests:
+    if manifest.empty or evaluation.no_tests:
         raise ValueError("Cannot judge a submission with no generated tests")
     with docker_client() as client:
         require_saved_image(client, image, "judging")
-        judgment = judge_stage(
-            client, config, paths, image, instance, evaluation, manifest=manifest
-        )
+        judgment = judge_stage(client, config, paths, image, instance, evaluation, manifest)
 
     if paths.status.is_file():
         status = read_json(paths.status)
@@ -77,8 +73,7 @@ def judge_stage(
     image: str,
     instance: InstanceRecord,
     evaluation: EvaluationResult,
-    *,
-    manifest: dict | None = None,
+    manifest: SubmissionManifest,
 ) -> JudgmentResult:
     """Build the workspace, run one judge turn, and always save a judgment either way."""
     # Built before anything is moved, so a bad harness pin fails without destroying
@@ -104,40 +99,34 @@ def judge_stage(
         paths.judge.prompt.write_text(
             instructions.substitute(root=JUDGE_ROOT) + paths.judge.rubric.read_text()
         )
-        result = None
-        for retry_delay in (*RETRY_DELAYS_SECONDS, None):
+
+        def attempt(will_retry: Callable[[dict], bool]) -> tuple[dict, None]:
             with open_sandbox(client, image, config, Profile.JUDGE, paths.judge.log) as sandbox:
-                build_judge_workspace(
-                    sandbox, config, paths, image, instance, evaluation, manifest=manifest
-                )
+                build_judge_workspace(sandbox, config, paths, image, instance, evaluation, manifest)
                 result = run_turn(sandbox, request)
-                retry = retry_delay is not None and is_transient_failure(result)
-                if not retry:
+                if not will_retry(result):
                     # Save before container cleanup so a cleanup failure cannot
                     # erase a valid answer the completed turn already produced.
                     _save_judgment(result, paths)
-            if not retry:
-                break
-            archive_files([paths.judge.agent], paths.judge.history)
-            sleep(retry_delay)
+            return result, None
+
+        with_retries(attempt, lambda: archive_files([paths.judge.agent], paths.judge.history))
     except (RuntimeError, OSError, ValueError, DockerException) as error:
-        # A judge failure is an annotation failure. It must never discard the completed
-        # generation and evaluation evidence it describes. A judgment this attempt
-        # already saved is kept, because a late failure such as container cleanup does
-        # not invalidate an answer the model already gave.
+        # A judge failure never touches generation or evaluation evidence. A result
+        # already saved is kept, since a late failure such as cleanup doesn't undo it.
         attempt_path = paths.judge.result
         if attempt_path.is_file():
-            attempt = read_json(attempt_path)
+            saved = read_json(attempt_path)
         else:
-            attempt = {
+            saved = {
                 "status": "failed",
                 "duration_seconds": 0,
                 "usage": None,
                 "errors": [],
                 **provenance(request),
             }
-        attempt["errors"] = [*attempt["errors"], {"message": str(error)}]
-        write_json(attempt_path, attempt)
+        saved["errors"] = [*saved["errors"], {"message": str(error)}]
+        write_json(attempt_path, saved)
         if not paths.judge.judgment_raw.exists():
             # Keep whatever the model managed to write before the failure.
             final = paths.judge.final
@@ -145,7 +134,7 @@ def judge_stage(
                 final.read_text(errors="replace") if final.is_file() else ""
             )
         if not paths.judge.judgment.is_file():
-            write_json(paths.judge.judgment, failed_judgment(str(error)).model_dump())
+            write_json(paths.judge.judgment, failed_turn(str(error)).model_dump())
     return validate_judgment(read_json(paths.judge.judgment))
 
 
@@ -158,12 +147,8 @@ def _save_judgment(result: dict, paths: RunPaths) -> None:
         judgment = parse_judgment(raw)
     else:
         # Prefer the harness's own last error over a generic status line.
-        errors = result["errors"]
-        if errors:
-            last = errors[-1]
-            message = last.get("message") if isinstance(last, dict) else None
-            reason = str(message or last)
-        else:
-            reason = f"Judge harness ended with status {result['status']}"
-        judgment = failed_judgment(reason, timed_out=result["status"] == "timeout")
+        reason = last_error_message(result["errors"]) or (
+            f"Judge harness ended with status {result['status']}"
+        )
+        judgment = failed_turn(reason, timed_out=result["status"] == "timeout")
     write_json(paths.judge.judgment, judgment.model_dump())

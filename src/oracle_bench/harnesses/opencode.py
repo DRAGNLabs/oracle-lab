@@ -9,7 +9,9 @@ from pathlib import Path
 from oracle_bench.container.sandbox import Sandbox
 from oracle_bench.harnesses.launch import (
     AgentTurnRequest,
+    read_trace,
     run_agent_turn,
+    turn_status,
 )
 from oracle_bench.results import Usage
 
@@ -19,29 +21,18 @@ def parse_trace(path: Path) -> dict:
     steps = []
     final_text = ""
     errors = []
-    malformed = 0
     completed = False
-    if path.exists():
-        for line in path.read_text(errors="replace").splitlines():
-            if not line.strip():
-                continue
-            try:
-                event = json.loads(line)
-            except json.JSONDecodeError:
-                malformed += 1
-                continue
-            if not isinstance(event, dict):
-                malformed += 1
-                continue
-            part = event.get("part") or {}
-            if event.get("type") == "text":
-                final_text = str(part.get("text", ""))
-            elif event.get("type") == "step_finish":
-                if part.get("tokens"):
-                    steps.append(part["tokens"])
-                completed = part.get("reason") == "stop"
-            elif event.get("type") == "error":
-                errors.append(event)
+    events, malformed = read_trace(path)
+    for event in events:
+        part = event.get("part") or {}
+        if event.get("type") == "text":
+            final_text = str(part.get("text", ""))
+        elif event.get("type") == "step_finish":
+            if part.get("tokens"):
+                steps.append(part["tokens"])
+            completed = part.get("reason") == "stop"
+        elif event.get("type") == "error":
+            errors.append(event)
 
     return {
         "usage": _usage(steps),
@@ -108,11 +99,5 @@ def run_turn(sandbox: Sandbox, request: AgentTurnRequest) -> dict:
     parsed = parse_trace(directory / "trace.jsonl")
     (directory / "final.txt").write_text(parsed.pop("final_text"))
     summary = {**asdict(outcome), **parsed}
-    summary["status"] = (
-        "timeout"
-        if outcome.timed_out
-        else "failed"
-        if outcome.exit_code or summary["turn_failed"] or not summary["turn_completed"]
-        else "completed"
-    )
+    summary["status"] = turn_status(outcome, summary)
     return summary

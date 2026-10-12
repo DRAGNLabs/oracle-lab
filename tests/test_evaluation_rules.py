@@ -5,18 +5,17 @@ each test sees the exact command sequence: patches, rebuilds, uploads, and the
 tests the runner was asked to run.
 """
 
-import json
 from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
-from fixtures import instance_record
+from fixtures import RUN_CONFIG, instance_record, write_submission
 
 import oracle_bench.evaluation as evaluation
 from oracle_bench.config import RuntimeConfig, load_config
 from oracle_bench.container.sandbox import CommandResult
-from oracle_bench.io import digest, read_json, write_json
+from oracle_bench.io import read_json, write_json
 from oracle_bench.paths import RunPaths
 from oracle_bench.results import read_paired_result
 
@@ -55,7 +54,7 @@ class RecordingSandbox:
 
 @pytest.fixture
 def setup(tmp_path, monkeypatch):
-    config = load_config(Path(__file__).parents[1] / "configs/smoke.yaml")
+    config = load_config(RUN_CONFIG)
     config.runtime = RuntimeConfig(
         image="example/image",
         source_roots=["app"],
@@ -83,26 +82,6 @@ def setup(tmp_path, monkeypatch):
     return config, paths, instance, sandboxes, outcomes
 
 
-def write_bundle(paths: RunPaths, files: dict[str, str]) -> None:
-    manifest_files = {}
-    for name, text in files.items():
-        path = paths.submission / "files" / name
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text)
-        manifest_files[name] = {"sha256": digest(text.encode()), "mode": 0o644}
-    (paths.submission / "files").mkdir(parents=True, exist_ok=True)
-    write_json(
-        paths.submission / "manifest.json",
-        {
-            "files": manifest_files,
-            "forbidden_changes": [],
-            "compliant": True,
-            "empty": not manifest_files,
-            "sha256": digest(json.dumps(manifest_files, sort_keys=True).encode()),
-        },
-    )
-
-
 def applied_patches(sandbox: RecordingSandbox) -> list[str]:
     """The local patch files uploaded and then applied, in order."""
     return [
@@ -118,10 +97,10 @@ def rebuild_positions(sandbox: RecordingSandbox) -> list[int]:
 
 def test_golden_gets_the_repair_and_a_rebuild_after_it_and_buggy_gets_neither(setup):
     config, paths, instance, sandboxes, _ = setup
-    write_bundle(paths, {"oracle_tests/test_new.py": "def test_a(): pass\n"})
+    manifest = write_submission(paths, {"oracle_tests/test_new.py": "def test_a(): pass\n"})
 
-    evaluation.run_version(Mock(), config, "image", instance, paths, "buggy")
-    evaluation.run_version(Mock(), config, "image", instance, paths, "golden")
+    evaluation.run_submission(Mock(), config, "image", instance, paths, "buggy", manifest)
+    evaluation.run_submission(Mock(), config, "image", instance, paths, "golden", manifest)
     (_, _, buggy), (_, _, golden) = sandboxes
 
     assert applied_patches(buggy) == []
@@ -138,7 +117,7 @@ def test_golden_gets_the_repair_and_a_rebuild_after_it_and_buggy_gets_neither(se
 def test_the_reference_run_keeps_existing_tests_and_runs_the_reference_ids(setup):
     config, paths, instance, sandboxes, _ = setup
 
-    evaluation.run_version(Mock(), config, "image", instance, paths, "buggy", reference=True)
+    evaluation.run_reference(Mock(), config, "image", instance, paths, "buggy")
     ((_, profile, sandbox),) = sandboxes
     directory = paths.reference / "buggy"
 
@@ -150,9 +129,9 @@ def test_the_reference_run_keeps_existing_tests_and_runs_the_reference_ids(setup
 
 def test_evaluation_hides_existing_tests_and_runs_only_the_generated_directory(setup):
     config, paths, instance, sandboxes, _ = setup
-    write_bundle(paths, {"oracle_tests/test_new.py": "def test_a(): pass\n"})
+    manifest = write_submission(paths, {"oracle_tests/test_new.py": "def test_a(): pass\n"})
 
-    evaluation.run_version(Mock(), config, "image", instance, paths, "buggy")
+    evaluation.run_submission(Mock(), config, "image", instance, paths, "buggy", manifest)
     ((_, profile, sandbox),) = sandboxes
     directory = paths.evaluation / "buggy"
 
@@ -162,20 +141,20 @@ def test_evaluation_hides_existing_tests_and_runs_only_the_generated_directory(s
     assert read_json(directory / "runner.json")["targets"] == ["oracle_tests"]
 
 
-def test_an_empty_submission_is_no_tests_and_never_starts_pytest(setup):
+def test_an_empty_submission_is_no_tests_and_never_opens_a_container(setup):
     config, paths, instance, sandboxes, _ = setup
-    write_bundle(paths, {})
+    manifest = write_submission(paths, {})
 
-    result = evaluation.run_version(Mock(), config, "image", instance, paths, "buggy")
-    ((_, _, sandbox),) = sandboxes
+    result = evaluation.run_submission(Mock(), config, "image", instance, paths, "buggy", manifest)
 
     assert result.status == "no_tests"
-    assert not sandbox.ran_runner()
+    assert sandboxes == []
+    assert read_json(paths.evaluation / "buggy/tests.json")["status"] == "no_tests"
 
 
 def test_both_versions_receive_the_same_verified_bundle(setup, monkeypatch):
     config, paths, instance, sandboxes, outcomes = setup
-    write_bundle(paths, {"oracle_tests/test_new.py": "def test_a(): pass\n"})
+    manifest = write_submission(paths, {"oracle_tests/test_new.py": "def test_a(): pass\n"})
     write_json(paths.generation / "result.json", {"status": "completed"})
     outcomes["buggy"]["oracle_tests/test_new.py::test_a"] = "fail"
     outcomes["golden"]["oracle_tests/test_new.py::test_a"] = "pass"
@@ -199,13 +178,13 @@ def test_both_versions_receive_the_same_verified_bundle(setup, monkeypatch):
 
     assert [version for version, _, _ in sandboxes] == ["buggy", "golden"]
     assert len(uploaded) == 2 and uploaded[0] == uploaded[1]
-    assert result.artifact_sha256 == read_json(paths.submission / "manifest.json")["sha256"]
+    assert result.artifact_sha256 == manifest.sha256
     assert result.detected
 
 
 def test_a_tampered_bundle_stops_evaluation_before_any_container(setup):
     config, paths, instance, sandboxes, _ = setup
-    write_bundle(paths, {"oracle_tests/test_new.py": "def test_a(): pass\n"})
+    write_submission(paths, {"oracle_tests/test_new.py": "def test_a(): pass\n"})
     (paths.submission / "files/oracle_tests/test_new.py").write_text("def test_a(): assert 0\n")
 
     with pytest.raises(ValueError, match="checksum mismatch"):

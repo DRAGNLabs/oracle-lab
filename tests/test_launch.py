@@ -1,15 +1,20 @@
 """Harness adapters share transport policy while retaining their own arguments."""
 
 import json
-from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
+from fixtures import RUN_CONFIG
 
 from oracle_bench.config import JudgeConfig, RuntimeConfig, WallTimeLimit, load_config
 from oracle_bench.container.sandbox import CommandResult
 from oracle_bench.harnesses import claude, codex, generate, opencode, run_turn
-from oracle_bench.harnesses.launch import AgentTurnRequest, run_agent_turn
+from oracle_bench.harnesses.launch import (
+    AgentTurnRequest,
+    read_trace,
+    run_agent_turn,
+    turn_status,
+)
 from oracle_bench.paths import RunPaths
 
 
@@ -34,7 +39,7 @@ def test_launch_routes_only_selected_credential(
     target,
 ):
     paths = RunPaths.create(tmp_path)
-    config = load_config(Path(__file__).parents[1] / "configs/smoke.yaml")
+    config = load_config(RUN_CONFIG)
     config.agent.harness = harness.__name__.rsplit(".", 1)[-1]
     config.agent.provider = provider
     config.agent.auth = auth
@@ -62,6 +67,14 @@ def test_launch_routes_only_selected_credential(
             if harness is codex:
                 assert "features.multi_agent=false" in argv
                 if provider == "openrouter":
+                    # The saved command lists the settings in the order they are written.
+                    settings = [argv[i + 1] for i, part in enumerate(argv) if part == "--config"]
+                    assert settings[:3] == [
+                        "features.multi_agent=false",
+                        'model_provider="openrouter"',
+                        'model_providers.openrouter.name="OpenRouter"',
+                    ]
+                    assert argv[:3] == ["codex", "exec", "--config"]
                     assert 'model_provider="openrouter"' in argv
                     assert "model_providers.openrouter.request_max_retries=4" in argv
                     assert "model_providers.openrouter.stream_max_retries=5" in argv
@@ -96,7 +109,7 @@ def test_launch_routes_only_selected_credential(
 
 def test_interruption_remains_visible_when_collection_fails(tmp_path, monkeypatch):
     RunPaths.create(tmp_path)
-    config = load_config(Path(__file__).parents[1] / "configs/smoke.yaml")
+    config = load_config(RUN_CONFIG)
     monkeypatch.setenv(config.agent.credential_env, "credential-fixture")
     sandbox = Mock()
     sandbox.run.side_effect = [CommandResult(0, 0), CommandResult(0, 0), KeyboardInterrupt()]
@@ -114,7 +127,7 @@ def test_interruption_remains_visible_when_collection_fails(tmp_path, monkeypatc
 
 
 def test_agent_turn_uses_caller_supplied_paths_and_working_directory(tmp_path, monkeypatch):
-    config = load_config(Path(__file__).parents[1] / "configs/smoke.yaml")
+    config = load_config(RUN_CONFIG)
     prompt = tmp_path / "judge-prompt.md"
     prompt.write_text("Inspect the saved evidence.")
     artifacts = tmp_path / "judge" / "agent"
@@ -227,3 +240,30 @@ def test_codex_judge_turn_collects_its_own_last_message_file(tmp_path, monkeypat
         required=False,
         secrets=("credential-fixture",),
     )
+
+
+def test_a_trace_keeps_json_objects_and_counts_every_other_non_blank_line(tmp_path):
+    trace = tmp_path / "trace.jsonl"
+    trace.write_text('{"type": "a"}\n\n   \nnot json\n[1, 2]\n{"type": "b"}\n')
+
+    assert read_trace(trace) == ([{"type": "a"}, {"type": "b"}], 2)
+    assert read_trace(tmp_path / "missing.jsonl") == ([], 0)
+
+
+@pytest.mark.parametrize(
+    "timed_out,exit_code,completed,failed,expected",
+    [
+        (True, 0, True, False, "timeout"),
+        (False, 1, True, False, "failed"),
+        (False, 0, True, True, "failed"),
+        (False, 0, False, False, "failed"),
+        (False, 0, True, False, "completed"),
+    ],
+)
+def test_every_harness_turn_ends_as_timeout_failed_or_completed(
+    timed_out, exit_code, completed, failed, expected
+):
+    outcome = CommandResult(exit_code=exit_code, duration_seconds=1, timed_out=timed_out)
+    parsed = {"turn_completed": completed, "turn_failed": failed}
+
+    assert turn_status(outcome, parsed) == expected

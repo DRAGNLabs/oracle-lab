@@ -2,12 +2,12 @@ import json
 import re
 
 import pytest
-from fixtures import judge_attempt, localized_target, usage
+from fixtures import instance_record, judge_attempt, localized_target, usage
 
 from oracle_bench.io import write_json
 from oracle_bench.paths import RunPaths
 from oracle_bench.report import report
-from oracle_bench.results import MATRIX_CELLS
+from oracle_bench.results import MATRIX_CELLS, write_result
 
 
 @pytest.mark.parametrize(
@@ -314,6 +314,33 @@ def test_report_links_the_saved_target(tmp_path):
     assert "[target](inputs/target.json)" in report(paths).read_text()
 
 
+def test_report_finds_the_classification_beside_the_runs_directory(tmp_path):
+    paths = RunPaths.create(tmp_path / "runs" / "run-1")
+    paths.results.write_text(json.dumps(report_results()))
+    instance = instance_record()
+    write_result(paths.instance, instance)
+    attempt = tmp_path / "classifications" / instance.instance_id / "20260101T000000Z-a"
+    write_json(
+        attempt / "classification.json",
+        {
+            "instance_id": instance.instance_id,
+            "base_commit": instance.base_commit,
+            "source_record_sha256": instance.source.record_sha256,
+            "rubric_sha256": "e" * 64,
+            "result": {
+                "status": "completed",
+                "task_nature": "out_of_scope",
+                "rationale": "A feature request.",
+            },
+        },
+    )
+
+    text = report(paths).read_text()
+
+    assert "Task nature: `out_of_scope`." in text
+    assert "classifications/owner__project-1/20260101T000000Z-a/classification.json" in text
+
+
 def test_report_renders_central_task_classification_and_provenance(tmp_path, monkeypatch):
     paths = RunPaths.create(tmp_path / "run")
     paths.results.write_text(json.dumps(report_results()))
@@ -353,7 +380,7 @@ def test_report_renders_central_task_classification_and_provenance(tmp_path, mon
         "rationale": "A nearby implementation establishes the expected behavior.",
     }
     monkeypatch.setattr(
-        "oracle_bench.report.latest_classification", lambda run_paths: (classification, attempt)
+        "oracle_bench.report._classification", lambda run_paths: (classification, attempt)
     )
 
     text = report(paths).read_text()
@@ -391,7 +418,7 @@ def test_report_renders_out_of_scope_and_unsuccessful_classifications(
     paths = RunPaths.create(tmp_path)
     paths.results.write_text(json.dumps(report_results()))
     monkeypatch.setattr(
-        "oracle_bench.report.latest_classification", lambda run_paths: (classification, None)
+        "oracle_bench.report._classification", lambda run_paths: (classification, None)
     )
 
     text = report(paths).read_text()

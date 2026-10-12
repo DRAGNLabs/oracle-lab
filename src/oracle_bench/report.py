@@ -2,29 +2,30 @@
 
 from pathlib import Path
 
+from oracle_bench.classification.contracts import (
+    CLASSIFICATION_LABELS,
+    latest_classification,
+)
 from oracle_bench.config import RunConfig, load_config
 from oracle_bench.io import read_json
 from oracle_bench.judge.contracts import (
     JUDGMENT_LABELS,
-    JudgeAttempt,
-    read_judge_attempt,
     read_judgment_state,
 )
 from oracle_bench.paths import RunPaths
-from oracle_bench.repo_classification.contracts import (
-    CLASSIFICATION_LABELS,
-    latest_classification,
-    read_classification_attempt,
-)
 from oracle_bench.results import (
     MATRIX_CELLS,
     VERSIONS,
+    AgentAttempt,
     EvaluationResult,
     HarnessResult,
     LocalizedTarget,
     MatrixCellName,
     Usage,
+    last_error_message,
+    read_agent_attempt,
     read_evaluation_result,
+    read_instance_record,
     read_paired_result,
     read_run_cost,
     read_version_result,
@@ -34,36 +35,22 @@ from oracle_bench.results import (
 def report(paths: RunPaths) -> Path:
     results = read_evaluation_result(paths.results)
     judgment = read_judgment_state(paths)
-    judge_attempt = read_judge_attempt(paths.judge.result) if paths.judge.result.is_file() else None
+    judge_attempt = read_agent_attempt(paths.judge.result) if paths.judge.result.is_file() else None
     config = load_config(paths.config, resolved=True) if paths.config.is_file() else None
+    classification, attempt = _classification(paths)
     lines = _title_lines(paths, results)
     lines.extend(_pipeline_lines(paths, config, results, judgment, judge_attempt))
     lines.extend(_outcome_lines(results))
     lines.extend(_judge_lines(judgment))
-    lines.extend(_classification_lines(paths))
+    lines.extend(_classification_lines(classification, attempt))
     lines.extend(_usage_lines(results, judge_attempt))
-    lines.extend(_file_lines(paths))
+    lines.extend(_file_lines(paths, attempt))
     paths.report.write_text("\n".join(lines))
     return paths.report
 
 
 def _title_lines(paths: RunPaths, results: EvaluationResult) -> list[str]:
-    reasons = []
-    if results.agent.status != "completed":
-        reasons.append(f"generation {results.agent.status}")
-    if results.no_tests:
-        reasons.append("no tests collected")
-    else:
-        reasons += [
-            f"{version} evaluation {status}"
-            for version, status in [
-                ("buggy", results.buggy_status),
-                ("golden", results.golden_status),
-            ]
-            if status != "completed"
-        ]
-    if results.diagnostic_only:
-        reasons.append("diagnostic only: edits outside the generated directory")
+    reasons = results.completion_problems
     state = "completed with errors" if reasons else "completed"
     lines = [
         f"# {results.instance_id}",
@@ -87,9 +74,7 @@ def _title_lines(paths: RunPaths, results: EvaluationResult) -> list[str]:
     if uncollected:
         lines += ["Files that failed to collect: " + ", ".join(uncollected) + ".", ""]
     if results.agent.errors:
-        error = results.agent.errors[-1]
-        message = error.get("message") or error.get("error", {}).get("message", "See agent logs")
-        lines += [f"Agent message: {message}", ""]
+        lines += [f"Agent message: {last_error_message(results.agent.errors)}", ""]
     return lines
 
 
@@ -102,7 +87,7 @@ def _pipeline_lines(
     config: RunConfig | None,
     results: EvaluationResult,
     judgment: dict,
-    judge_attempt: JudgeAttempt | None,
+    judge_attempt: AgentAttempt | None,
 ) -> list[str]:
     rows = []
     if config:
@@ -248,13 +233,25 @@ def _judge_lines(judgment: dict) -> list[str]:
     return lines
 
 
-def _classification_lines(paths: RunPaths) -> list[str]:
-    classification, attempt = latest_classification(paths)
+def _classification(paths: RunPaths) -> tuple[dict, Path | None]:
+    """The newest classification for this run's instance.
+
+    Classifications live in a `classifications` directory beside the runs
+    directory, and a run lives at `<runs>/<run-id>`.
+    """
+    # Early or synthetic runs may have no frozen instance; classification is optional.
+    if not paths.instance.is_file():
+        return {"status": "missing"}, None
+    classifications = paths.root.parent.parent / "classifications"
+    return latest_classification(classifications, read_instance_record(paths.instance))
+
+
+def _classification_lines(classification: dict, attempt: Path | None) -> list[str]:
     status = classification["status"]
     lines = ["## Task classification", ""]
     attempt_result = attempt / "agent/result.json" if attempt is not None else None
     if attempt_result is not None and attempt_result.is_file():
-        classifier = read_classification_attempt(attempt_result)
+        classifier = read_agent_attempt(attempt_result)
         lines += [
             f"Classifier: {_harness_text(classifier)}. Cost: {_cost(attempt / 'cost.json')}.",
             "",
@@ -284,7 +281,7 @@ def _classification_value(value: object) -> str:
     return ", ".join(value) if isinstance(value, list) else str(value)
 
 
-def _usage_lines(results: EvaluationResult, judge_attempt: JudgeAttempt | None) -> list[str]:
+def _usage_lines(results: EvaluationResult, judge_attempt: AgentAttempt | None) -> list[str]:
     rows = [("Generate", results.agent)]
     if judge_attempt:
         rows.append(("Judge", judge_attempt))
@@ -326,7 +323,7 @@ def _cost(path: Path) -> str:
     return text
 
 
-def _file_lines(paths: RunPaths) -> list[str]:
+def _file_lines(paths: RunPaths, attempt: Path | None) -> list[str]:
     groups = [
         (
             "Ground truth",
@@ -372,7 +369,6 @@ def _file_lines(paths: RunPaths) -> list[str]:
             ],
         ),
     ]
-    _, attempt = latest_classification(paths)
     if attempt is not None:
         groups.append(
             (

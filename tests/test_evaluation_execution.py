@@ -1,29 +1,26 @@
 """Evaluation execution preserves binary evidence and marks incomplete output."""
 
-from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
-from fixtures import instance_record, localized_target
+from fixtures import instance_record, localized_target, run_config, submission_manifest
 
 import oracle_bench.evaluation as evaluation
-from oracle_bench.config import RuntimeConfig, load_config
 from oracle_bench.container.sandbox import CommandResult
 from oracle_bench.evaluation import run_tests
 from oracle_bench.io import read_json, write_json
 from oracle_bench.paths import RunPaths
-from oracle_bench.results import VersionResult, read_evaluation_result, read_localized_target
+from oracle_bench.results import (
+    SubmissionManifest,
+    VersionResult,
+    read_evaluation_result,
+    read_localized_target,
+)
 
 
 @pytest.fixture
 def config():
-    value = load_config(Path(__file__).parents[1] / "configs/smoke.yaml")
-    value.runtime = RuntimeConfig(
-        image="example/image",
-        source_roots=["app"],
-        import_modules=["app"],
-        existing_test_globs=["tests"],
-    )
+    value = run_config("app", image="example/image")
     return value
 
 
@@ -98,11 +95,11 @@ def test_evaluation_records_the_target_the_agent_was_shown(config, tmp_path, mon
     write_json(paths.generation / "result.json", {"status": "completed"})
     for version in ("buggy", "golden"):
         write_json(paths.evaluation / version / "coverage.json", {"status": "unavailable"})
-    manifest = {"sha256": "a" * 64, "compliant": True, "forbidden_changes": []}
+    manifest = SubmissionManifest.model_validate(submission_manifest())
     monkeypatch.setattr(evaluation, "verify_bundle", lambda paths: manifest)
     monkeypatch.setattr(evaluation, "archive_previous_evaluation", lambda paths: None)
     completed = VersionResult(status="completed", tests={})
-    monkeypatch.setattr(evaluation, "run_version", lambda *args: completed)
+    monkeypatch.setattr(evaluation, "run_submission", lambda *args: completed)
 
     evaluation.evaluate(Mock(), config, "image", instance_record(), paths)
 

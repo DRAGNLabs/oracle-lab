@@ -1,0 +1,32 @@
+# The run config tests start from. It belongs to the tests: sample configs under
+# configs/ can change freely without breaking them.
+source:
+  instance: psf__requests-1142
+
+agent:
+  harness: claude
+  provider: openrouter
+  model: test-model
+  auth: api_key
+  multi_agent: false
+  limit:
+    kind: wall_seconds
+    value: 300
+
+judge:
+  rubric: ../prompts/judge/generated-test-evaluation-rubric.md
+  instructions: ../prompts/judge/generated-test-instructions.md
+  harness: claude
+  provider: openrouter
+  model: judge-model
+  auth: api_key
+  limit:
+    kind: wall_seconds
+    value: 300
+
+task:
+  prompt: ../prompts/agent/smoke-tests.md
+  scope: repository
+  existing_tests: hide_all
+
+output: ../runs

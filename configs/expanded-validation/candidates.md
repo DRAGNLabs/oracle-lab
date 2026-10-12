@@ -24,10 +24,13 @@ check that before committing to the full batch.
 All candidates are in Oracle Bench's pinned Verified dataset, have a supported
 repository layout and Python localization target, and have pytest-style
 `FAIL_TO_PASS` reference IDs. Django and SymPy are omitted because their
-reference IDs require repository-specific test runners that Oracle Bench does
-not yet support. The dataset's “fix time” is a repair-difficulty estimate, not
-a test-writing or runtime estimate. No candidate image or reference test has
-been run yet.
+reference IDs require repository-specific test runners; Oracle Bench supports
+only repositories whose tests run under pytest. The dataset's “fix time” is a
+repair-difficulty estimate, not a test-writing or runtime estimate. One candidate
+per repository was run in batch `20260923T220231Z-087f21ff`:
+`matplotlib__matplotlib-24627`, `pytest-dev__pytest-10051`, `pydata__xarray-6744`,
+`sphinx-doc__sphinx-11510`, and `scikit-learn__scikit-learn-14710`. The other ten
+have not been run.
 
 ## Matplotlib
 

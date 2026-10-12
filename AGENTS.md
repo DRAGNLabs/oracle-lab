@@ -13,8 +13,8 @@ Read these references before changing related behavior:
 - `README.md` for the user workflow and CLI overview.
 - `docs/configuration.md` for the complete YAML interface.
 - `docs/results.md` for the run artifact contracts.
-- `docs/implementation-plan.md` for staged scope and deferred work.
-- `docs/spec.md` for the benchmark's original goals.
+- `docs/judging.md` for the LLM judge, human ratings, and agreement.
+- `docs/containers.md` for Docker transport and image builds.
 
 ## Architecture and trust boundaries
 
@@ -30,7 +30,7 @@ Preserve these boundaries:
 - Never expose `instance.json`, the golden repair, the reference test patch, or
   private evaluation results to the generation agent. The judge deliberately
   receives all of it; keep that bundle in the judge modules rather than relaxing
-  `RepositoryWorkspace.prepare()` or the generation upload policy.
+  `Repository.prepare()` or the generation upload policy.
 - The localized target (`inputs/target.json`) is the one thing derived from the
   golden repair that the agent sees. It names existing files, functions, and
   classes only; never add patch text, changed lines, or expected behavior to it.
@@ -75,10 +75,14 @@ The pipeline stages run in this order, and each is one module or package that
 
 Supporting these:
 
-- `src/oracle_bench/cli.py`: `run`, `batch`, `evaluate`, `judge`,
+- `src/oracle_bench/cli.py`: `run`, `batch`, `evaluate`, `judge`, `classify`,
   `judge-workspace`, `agreement`, and `report` command interface.
 - `src/oracle_bench/run.py`: the stage sequence and run status.
 - `src/oracle_bench/batch/`: sequential batch execution and its summary.
+- `src/oracle_bench/classification/`: standalone task classification, run with
+  `classify` outside the run stages. Reports read the newest matching attempt.
+- `src/oracle_bench/spend.py`: the OpenRouter key spend measured around a run's
+  model stages, saved as `cost.json`.
 - `src/oracle_bench/config.py`, `paths.py`, `results.py`: the input contract, the
   artifact layout, and the result contracts.
 - `src/oracle_bench/repository.py`: the repository checkout inside a sandbox,
@@ -128,10 +132,10 @@ When adding or changing persisted artifacts:
 3. Update `docs/results.md` and report links when applicable.
 4. Add tests for parsing, failure behavior, integrity, or rendering.
 
-Model every persisted contract in `results.py` or `judge/contracts.py` and
-validate it where container output enters the host, not at each reader. Test
-fixtures for these artifacts belong in `tests/fixtures.py` so one schema change
-breaks in one place.
+Model every persisted contract in `results.py`, `judge/contracts.py`, or
+`classification/contracts.py`, and validate it where container output enters the
+host, not at each reader. Test fixtures for these artifacts belong in
+`tests/fixtures.py` so one schema change breaks in one place.
 
 Two conventions keep call sites predictable: `RunPaths` is the handle for a run,
 and only `cli.py` builds one from a user-supplied path; container-side logic is a
@@ -161,8 +165,8 @@ ORACLE_BENCH_SMOKE_RUN=runs/<run-id> uv run pytest -q -m docker
 ```
 
 Run a paid or quota-limited model smoke test only when the user authorizes it.
-Prefer the small smoke prompt, bounded turns, and a provider budget where the
-harness supports one. A successful pipeline does not require the generated tests
+Prefer the small smoke prompt, a short wall-time limit, and a provider budget
+where the harness supports one. A successful pipeline does not require the generated tests
 to detect the hidden bug.
 
 ## Result semantics
@@ -184,7 +188,8 @@ that the oracle is incorrect. Coverage failures must not erase valid test result
 ## Current limitations
 
 Do not accidentally present deferred features as implemented. Current gaps
-include arbitrary repository environment construction, concurrent batch
-execution, history sanitization, internet-use auditing, systematic bug taxonomy,
-and reconstruction of discarded agent tests. Extend these deliberately through
-the staged plan rather than embedding one-off behavior in the Stage 1 path.
+include arbitrary repository environment construction, repositories whose tests
+do not run under pytest (such as Django and SymPy), concurrent batch execution,
+internet-use auditing, and reconstruction of discarded agent tests. Add these
+deliberately, as their own changes, rather than as one-off behavior in the
+existing pipeline.

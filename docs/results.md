@@ -1,43 +1,11 @@
 # Results and artifacts reference
 
-Every `oracle-bench run` creates a timestamped attempt directory beneath the
-configured `output` path. The directory is the complete record of one agent
-attempt: its inputs, resolved dataset instance, runtime, agent activity, captured
-submission, reference check, paired evaluations, and report.
+Every `oracle-bench run` creates a timestamped run directory under the configured
+`output` path. It is the complete record of one agent attempt: its inputs, the
+resolved dataset instance, the runtime, the agent's activity, the captured
+submission, the reference check, the paired evaluations, and the report.
 
 ## Directory layout
-
-Standalone task classifications use a parallel central store rather than the run
-directory:
-
-```text
-classifications/<instance-id>/<timestamp>-<id>/
-├── inputs/
-│   ├── config.resolved.yaml
-│   ├── instance.json
-│   └── rubric.md
-├── image-build/
-├── agent/
-├── workspace-spec.json
-├── classification.raw.txt
-├── classification.json
-├── cost.json
-└── status.json
-```
-
-Every invocation creates a new immutable attempt. Reports search the
-`classifications` directory beside their configured `runs` output, select the newest
-attempt for the exact SWE-bench `instance_id`, and verify its base commit and source
-record checksum. The central artifact is read in place and is not copied into a run.
-The newest failed or invalid attempt remains visible rather than falling back silently.
-
-`classification.json` contains immutable instance/rubric hashes and a normalized
-result. Completed in-scope results contain every rubric facet; out-of-scope results
-contain task nature and rationale only. `invalid_output`, `failed`, and `timed_out`
-are explicit result states. The raw final response, frozen rubric, harness trace,
-model provenance, image provenance, and workspace exposure manifest remain alongside
-it for audit. `cost.json` records the classifier turn's spend in the same format
-as a run's [`cost.json`](#costjson).
 
 ```text
 runs/<run-id>/
@@ -108,89 +76,88 @@ runs/<run-id>/
 └── evaluation-history/<archived reevaluations>/
 ```
 
-A run that stops early contains only the files produced before the failure. For
-example, an image-build failure will not have generation or evaluation artifacts.
-Consult `status.json` and the last stage log when expected files are absent.
+A run that stops early holds only the files written before the failure. For
+example, a run whose image build failed has no generation or evaluation files.
+When a file is missing, check `status.json` and the last stage's log.
+
+Generation, judge, and classification turns are retried after a recognized
+transient API or transport error. There are up to three retries, after 30, 90,
+and 180 seconds. Each retry uses a fresh container and workspace. The earlier
+attempt is kept under `generation-history/`, `judge-history/`, or a
+classification attempt's `agent-history/`. Other harness failures and deadlines
+are not retried; they end with their normal status.
+
+## Classification attempts
+
+Task classifications are stored centrally, not in run directories:
+
+```text
+classifications/<instance-id>/<timestamp>-<id>/
+├── inputs/
+│   ├── config.resolved.yaml
+│   ├── instance.json
+│   └── rubric.md
+├── image-build/
+├── agent/
+├── agent-history/ (when a transient failure was retried)
+├── workspace-spec.json
+├── classification.raw.txt
+├── classification.json
+├── cost.json
+└── status.json
+```
+
+Every `classify` call creates a new attempt, and attempts are never changed.
+
+A run's report finds its classification like this:
+
+1. It looks in the `classifications` directory beside the run's `runs` output.
+2. It picks the newest attempt for the run's exact `instance_id`.
+3. It checks that attempt's base commit and source record checksum.
+
+The report reads the attempt in place; nothing is copied into the run. If the
+newest attempt failed or is invalid, the report shows that. It does not fall back
+to an older attempt.
+
+`classification.json` holds the instance and rubric hashes and the normalized
+result:
+
+- A completed in-scope result has every rubric facet.
+- An out-of-scope result has only the task nature and the rationale.
+- `invalid_output`, `failed`, and `timed_out` are explicit states.
+
+Beside it, for audit, are the raw final response, the frozen rubric, the harness
+trace, the model and image provenance, and the manifest of what the workspace
+exposed. `cost.json` records the classifier turn's spend, in the same format as a
+run's [`cost.json`](#costjson).
 
 ## Judge workspace manifests
 
-`workspace-spec.json` records the workspace-layout version, prepared image ID
-and digests, base commit, patch, rubric and container-helper hashes,
-repository-view construction method, reconstruction commands, and every exposed
-artifact. The separate
-`bundle-manifest.json` is the compact destination-to-SHA-256 inventory.
+`workspace-spec.json` records:
 
-The disposable container receives `rubric.md` and the rendered `instructions.md`
-alongside `/oracle-judge/buggy` and
-`/oracle-judge/golden` repository views, the generated submission in both views,
-the issue and patches, and saved evaluation evidence. Oracle Bench verifies the
-submission bundle before transfer and checks every generated file again inside
-both views. Repository views are not copied back to the host; the saved run
-artifacts and workspace specification are the reproducible inputs.
+- the prepared image ID and digests;
+- the base commit;
+- the hashes of the repair, the reference-test patch, and the rubric;
+- how the repository views were built, and the commands to rebuild them;
+- every artifact the judge can see.
 
-Run the judge independently after paired evaluation:
+`bundle-manifest.json` is the short list of each destination path and its
+SHA-256.
 
-```sh
-uv run oracle-bench judge runs/<run-id>
-```
+The judge's disposable container receives:
 
-The command requires the configured judge credential and the saved runtime image.
-It writes the exact prompt and raw final response before validating
-`judgment.json`. Invalid model output is retained as `status: invalid_output` and
-is not retried automatically. Generation and judgment turns that fail with a
-recognized transient API or transport error are retried up to three times, after
-30, 90, and 180 seconds. Each retry uses a fresh container and workspace; prior
-attempt evidence is preserved under `generation-history/` or `judge-history/`.
-Other harness failures and deadlines are not retried and produce their normal
-explicit status. A manual judge rerun archives the complete prior attempt under
-`judge-history/<UTC timestamp>/` before rebuilding the workspace.
+- `rubric.md` and the rendered `instructions.md`;
+- the `/oracle-judge/buggy` and `/oracle-judge/golden` repository views, each
+  with the generated submission;
+- the issue and the patches;
+- the saved evaluation evidence.
 
-## Interactive human judging
+Oracle Bench verifies the submission bundle before the transfer. It checks every
+generated file again inside both views. The repository views are not copied back
+to the host. The saved run files and the workspace specification are enough to
+rebuild them.
 
-Create a blinded human workspace from the same saved `workspace-spec.json` used
-for model judging:
-
-```sh
-uv run oracle-bench judge-workspace create runs/<run-id> --rater rater_01
-```
-
-The command reconstructs the bundle and refuses to continue if its specification
-differs from the saved one. It leaves a named container running without network
-access or model credentials and prints commands for opening a shell or attaching
-VS Code. The common evidence is read-only; the non-root `oracle` user can write
-only `/oracle-judge/output/`. LLM responses and earlier human ratings are never
-uploaded into this container.
-
-Each run freezes the rubric used when it was created. Judgments from earlier
-rubrics do not satisfy the current contract; create a new run to use this rubric
-rather than mixing ratings across versions.
-
-Read `/oracle-judge/instructions.md` alongside `rubric.md`; it combines the
-human workflow, evidence-file guide, and task-specific outcome summary. The
-workspace opens with `/oracle-judge/output/judgment.json` already populated
-with placeholders for `tests_issue`, `attempt_detail`, `no_attempt_reason`,
-`cheating`, and `rationale`. Replace each with the appropriate rubric label, JSON `null`, or
-the string `"null"` for an inapplicable conditional field;
-then write a short rationale. The answer is the rater's own
-judgment; collection validates but does not derive or override it. Then collect it:
-
-```sh
-uv run oracle-bench judge-workspace collect <container-name>
-uv run oracle-bench judge-workspace remove <container-name>
-```
-
-Invalid JSON or invalid labels do not stop or remove the workspace, allowing the
-rater to correct the draft. A valid rating is saved under
-`judge/human/<opaque-rater-id>/` with both the submitted JSON and normalized
-result. Its `provenance.json` records the hashes of the rubric and common
-workspace specification, which includes `instructions.md`. Collection refuses to overwrite
-that result. To replace it deliberately,
-pass `--archive-existing`; Oracle Bench first moves the previous files under
-`judge/human-history/<opaque-rater-id>/<UTC timestamp>/`. The `remove` operation
-checks the container's profile label and refuses to remove unrelated containers.
-Rerunning the automated judge preserves these human artifacts. Reevaluation marks
-both automated and human judgments stale because their execution evidence has
-changed.
+[Judging](judging.md) covers running the judge and collecting human ratings.
 
 ## Primary results
 
@@ -210,52 +177,24 @@ The human-readable summary, in this order:
 - Task classification: the central classification for the problem.
 - Usage: wall time and input, cached input, and output tokens for generation
   and judge.
-- Files: links to the artifacts that exist, grouped by stage, including the
-  private ground truth. Ground truth is written on the host and never mounted or
-  copied into the generation container.
+- Files: links to the files that exist, grouped by stage. This includes the
+  private ground truth, which is written on the host and never reaches the
+  generation container.
 
-`oracle-bench report runs/<run-id>` regenerates this file from saved data. It does
-not execute tests or call a model.
+`oracle-bench report runs/<run-id>` rebuilds this file from saved data. It runs
+no tests and calls no model.
 
-A run with no frozen rubric renders the judge as `disabled`; a frozen rubric
-without `judgment.json` renders as `missing`. Failed, timed-out, invalid, and
-stale judgments render their diagnostic fields without assuming successful label
-fields are present.
-
-## `judge/`
-
-### `judge/judgment.json`
-
-The normalized semantic annotation. A completed judgment contains `status`,
-`tests_issue`, `attempt_detail`, `no_attempt_reason`, `cheating`, and `rationale`. The
-conditional fields are saved as JSON `null` when inapplicable, even if the
-submitted response used the string `"null"`. The raw response is retained.
-Other states are explicit:
-
-| Status | Meaning |
-|---|---|
-| `invalid_output` | The final response was not one valid rubric JSON object |
-| `failed` | Harness or judge-workspace execution failed |
-| `timed_out` | The judge exceeded its wall-time limit |
-| `stale` | Reevaluation replaced the execution evidence; the prior annotation is nested for audit |
-
-### Judge model evidence
-
-`judgment.raw.txt` preserves the final assistant response before parsing.
-`prompt.md` and `rubric.md` preserve the exact instructions. `agent/result.json`
-records status, usage, duration, harness, provider, model, CLI version, and
-the stopping limit that bounded the turn;
-the neighboring command, version, trace, stderr, and final files have the same
-roles as their generation counterparts.
+The judge shows as `disabled` when the run has no frozen rubric, and as `missing`
+when it has a rubric but no `judgment.json`. A failed, timed-out, invalid, or
+stale judgment shows its diagnostic fields, not labels.
 
 ### `evaluation/results.json`
 
-The machine-readable aggregate for the generated tests. It is a validated
-contract: per-version `tests.json` is checked as it enters the host from the
-container, so unreadable runner output becomes an explicit incomplete result
-rather than a missing outcome discovered later. Artifacts carry no schema
-version; a file written by an earlier revision fails to load rather than being
-partially interpreted.
+The machine-readable summary of the generated tests. Each version's `tests.json`
+is validated as it comes out of the container. Unreadable runner output
+therefore becomes an explicit incomplete result, not a gap found later. Files
+carry no schema version. A file written by an earlier revision fails to load; it
+is never half-read.
 
 | Field | Meaning |
 |---|---|
@@ -274,14 +213,14 @@ partially interpreted.
 | `failure_kinds` | Assertion, other-exception, and unknown failure counts for each version |
 | `coverage` | Normalized coverage summaries for both versions |
 
-Diagnostic-only status is derived from `submission_compliant`. Detection in the
-expected direction is derived from the `fail_on_buggy_pass_on_golden` matrix count;
-neither value is duplicated as a separately persisted field.
+Two values are computed, not stored. A run is diagnostic-only when
+`submission_compliant` is false. It detected the bug when it is compliant, both
+versions completed, and the `fail_on_buggy_pass_on_golden` count is above zero.
 
-Each `tests` row contains `test_id`, `buggy`, `golden`, and `cell`. Failed sides
-also include `buggy_failure` or `golden_failure` with a diagnostic kind, exception
-type, and message. `cell` is null when either execution is incomplete or an
-outcome is not binary.
+Each `tests` row has `test_id`, `buggy`, `golden`, and `cell`. A failing side
+also has `buggy_failure` or `golden_failure`, with a failure kind, exception
+type, and message. `cell` is null when either execution is incomplete or either
+outcome is not a plain pass or fail.
 
 | Matrix key | Buggy | Golden | Meaning |
 |---|---|---|---|
@@ -290,42 +229,51 @@ outcome is not binary.
 | `pass_on_buggy_fail_on_golden` | pass | fail | Test prefers buggy behavior or rejects the repair |
 | `fail_on_both` | fail | fail | Test rejects both implementations |
 
-These cells describe behavior; they do not prove whether an oracle is correct.
-Skips, expected failures, setup or teardown errors, collection failures, missing
-test IDs, and incomplete runs remain in `other_outcomes`.
+The cells describe behavior. They do not prove whether a test's oracle is
+correct. Skips, expected failures, setup or teardown errors, collection
+failures, missing test IDs, and incomplete runs go in `other_outcomes`.
 
 ### `status.json`
 
-The latest lifecycle checkpoint, containing `stage`, `state`, `updated_at`, and an
-error when applicable. Stages progress through `resolve`, `build`, `localize`
-(localized runs only), `reference`, `generate`, `evaluate`, optional `judge`,
-`cost`, and `finished`. Capturing the
-submission is part of the `generate` stage. `cost` is the wait for the spend
-reading described in [`cost.json`](#costjson).
+The run's latest checkpoint: `stage`, `state`, `updated_at`, and an error if
+there was one. The stages, in order:
 
-The final state is `completed` only when the agent and both evaluations completed
-and the submission was compliant. `completed_with_errors` means the run retained
-results but one of those conditions failed. The independent `judge_status` is
-`disabled`, `completed`, `invalid_output`, `failed`, `timed_out`, `skipped`,
-`stale`, or `missing`. A configured judge is `skipped` without a model call when
-generation produces no test files, or when neither version collects a generated
-test (`no_tests`). Tests captured from a timed-out or otherwise
-incomplete generation are still evaluated and judged. Judge failure does not
-replace a completed evaluation state. An early exception records its stage and a
-failed state.
+1. `resolve`
+2. `build`
+3. `localize` (localized runs only)
+4. `reference`
+5. `generate`, which includes capturing the submission
+6. `evaluate`
+7. `judge` (when configured)
+8. `cost`, the wait for the spend reading in [`cost.json`](#costjson)
+9. `finished`
+
+The final state is `completed` only when the agent and both evaluations
+completed and the submission was compliant. Otherwise it is
+`completed_with_errors`, and the results are still kept. An exception records
+the stage it happened in and a failed state.
+
+`judge_status` is separate. It is `disabled`, `completed`, `invalid_output`,
+`failed`, `timed_out`, `skipped`, `stale`, or `missing`. A configured judge is
+`skipped`, with no model call, when generation wrote no test files or neither
+version collected a generated test (`no_tests`). Tests captured from a timed-out
+or otherwise incomplete generation are still evaluated and judged. A judge
+failure never changes a completed evaluation's state.
 
 ### `cost.json`
 
-What the run's model stages cost. The host reads the OpenRouter key's total spend
-(`GET /api/v1/key`) just before generation, and again after the judge, or after
-evaluation when no judge runs. The difference is the run's cost, covering
-generation and judge together. Resolve, build, the reference check, and
-evaluation call no model.
+What the run's model stages cost. The host reads the OpenRouter key's total
+spend (`GET /api/v1/key`) twice: just before generation, and after the judge (or
+after evaluation, when there is no judge). The difference is the run's cost for
+generation and the judge together. No other stage calls a model.
 
-OpenRouter updates the total about a minute after a request, and consecutive
-readings can briefly disagree. The final reading polls every 5 s, waits at least
-60 s, and accepts the total once it has risen and three readings in a row match.
-It stops at 180 s.
+OpenRouter updates the total about a minute after a request, and readings taken
+close together can disagree. So the final reading:
+
+- polls every 5 seconds;
+- waits at least 60 seconds;
+- accepts the total once it has risen and three readings in a row match;
+- gives up at 180 seconds.
 
 | Field | Meaning |
 |---|---|
@@ -335,42 +283,63 @@ It stops at 180 s.
 | `waited_seconds` | Time spent waiting for the final reading |
 | `error` | The lookup error, when `unavailable` |
 
-The difference counts everything charged to the key while the run's model stages
-ran. Another use of the same key during that time inflates it; a key used only by
-the benchmark avoids this. A run that fails after generation starts is still
-measured. An interrupted run is not. A cost failure never changes the run's state.
-Runs made before this file existed have no cost.
+The difference counts everything charged to the key while the model stages ran.
+Any other use of the key in that time inflates it, so give the benchmark its own
+key. A run that fails after generation starts is still measured. An interrupted
+run is not. A cost failure never changes the run's state.
+
+## `judge/`
+
+### `judge/judgment.json`
+
+The normalized judgment. A completed one has `status`, `tests_issue`,
+`attempt_detail`, `no_attempt_reason`, `cheating`, and `rationale`. A conditional
+field that does not apply is saved as JSON `null`, even when the response used
+the string `"null"`. The raw response is kept as well. The other states:
+
+| Status | Meaning |
+|---|---|
+| `invalid_output` | The final response was not one valid rubric JSON object |
+| `failed` | Harness or judge-workspace execution failed |
+| `timed_out` | The judge exceeded its wall-time limit |
+| `skipped` | No tests were collected, so no judge turn ran; `reason` says why |
+| `stale` | Reevaluation replaced the execution evidence; the prior annotation is nested for audit |
+
+### Judge model evidence
+
+`judgment.raw.txt` is the model's final response before parsing. `prompt.md`
+and `rubric.md` are the exact instructions it got. `agent/result.json` records
+the status, usage, duration, harness, provider, model, CLI version, and wall-time
+limit. The other files in `agent/` match their namesakes under `generation/`.
 
 ## Inputs and reproducibility
 
 ### `inputs/config.resolved.yaml`
 
-The schema-versioned run lock. It expands the small input configuration with the
-source adapter's repository `runtime`, Oracle Bench's pinned `toolchain`, agent
-defaults, dataset revision, and absolute host paths. During a run, `task.prompt`
-points to this attempt's frozen `prompt.txt`. Credentials and credential values
-are not stored. See the [configuration reference](configuration.md).
+The full configuration the run used. It adds to the input file the repository
+`runtime`, the pinned `toolchain`, every default, the dataset revision, and
+absolute host paths. `task.prompt` points to this run's frozen `prompt.txt`.
+Credentials are not stored. See the [configuration reference](configuration.md).
 
 ### `inputs/instance.json`
 
-The resolved dataset record and provenance. It includes the base commit, golden
-repair patch, private reference-test patch and IDs, source dataset metadata, a
-record hash, and the original record. This is private evaluator data that may
-reveal the defect and repair; it must not be exposed to the generation agent.
+The resolved dataset record and where it came from. It has the base commit, the
+golden repair patch, the private reference-test patch and test IDs, the dataset
+metadata, a hash of the record, and the original record. It reveals the bug and
+the fix, so the generation agent must never see it.
 
 ### `inputs/prompt.txt`
 
-The exact prompt delivered to the agent after resolving its environment
-variables. Agent-facing instructions remain in the selected prompt template.
-For localized tasks this contains the target from `target.json`, but no private
-patch text, changed line numbers, or expected behavior.
+The exact prompt sent to the agent, with its variables filled in. For a
+localized run it includes the target from `target.json`. It never includes patch
+text, changed line numbers, or expected behavior.
 
 ### `inputs/target.json`
 
-The localized target: the part of the buggy repository the agent is told to test.
-Only localized runs have it. It names the existing code the golden repair
-changes, found by comparing the syntax trees of the buggy and repaired files. It
-contains no patch text or changed lines.
+The part of the buggy repository the agent is told to test. Only localized runs
+have it. It names the existing code the golden repair changes. That code is
+found by comparing the syntax trees of the buggy and repaired files. The file
+holds no patch text or changed lines.
 
 | Field | Meaning |
 |---|---|
@@ -380,81 +349,84 @@ contains no patch text or changed lines.
 | `files[].lines` | Lines the entry spans in the buggy file |
 | `text` | Exactly what replaces `${test_target}` in the prompt |
 
-The level is chosen across all changed production files. Changed existing
-functions win. Classes whose own body changed are used only when no function
-changed, and whole files only when neither did. Comment and formatting edits, and
-definitions the repair adds, never enter the target.
+One level is chosen for all changed production files. Changed existing
+functions come first. Classes whose own body changed are used only when no
+function changed. Whole files are used only when neither changed. Comment and
+formatting edits never enter the target, and nor do definitions the repair adds.
 
 `inputs/target.log` is the container output from reading the buggy files. The
-stage resets the checkout to `base_commit` first, as the agent's workspace is
-reset, so it reads the code the agent sees.
-
-### `image-build/runtime.json`
-
-The exact locally built Docker image ID used by the run. Reevaluation requires
-this image to remain available. Its source images are detailed in
-`image-build/images.json`.
+stage first resets the checkout to `base_commit`, as the agent's workspace is, so
+it reads the same code the agent sees.
 
 ## `image-build/`
 
+### `image-build/runtime.json`
+
+The ID of the locally built Docker image the run used. Reevaluation needs this
+image to still exist. `images.json` describes the images it was built from.
+
 ### Build contexts and inputs
 
-`image-build/harnesses/` and `image-build/runtime/` contain copies of the
-checked-in Dockerfiles, the harness package lock, and public Python helpers.
-These directories are isolated build contexts containing only approved assets.
-Host run data and credentials do not enter either context. The runtime recipe
-copies the complete locked harness toolchain from its reusable image and extends
-the prepared repository image.
+`image-build/harnesses/` and `image-build/runtime/` are the two build contexts.
+They hold copies of the checked-in Dockerfiles, the harness package lock, and the
+public Python helpers, and nothing else. No run data or credentials enter them.
+The runtime recipe copies the locked CLI toolchain from its shared image onto the
+prepared repository image.
 
-`requested.json` records source/Node references, platform, all installed harness
-pins, and the package-lock hash before any pull. `harnesses.inputs.json` and
-`runtime.inputs.json` record non-secret arguments, platform, recipe name, and
-SHA-256 hashes of all context files before their builds. Cache tags depend on
-these inputs, including lockfile and helper contents.
+These are written before anything is pulled or built:
+
+- `requested.json`: the source and Node image references, the platform, every
+  CLI pin, and the package-lock hash.
+- `harnesses.inputs.json` and `runtime.inputs.json`: the build arguments (none
+  secret), platform, recipe name, and the SHA-256 of every context file.
+
+Cache tags are derived from these inputs, so a changed lockfile or helper makes a
+new tag.
+
 ### `image-build/images.json`
 
-Configured references and resolved IDs or digests for the repository, Node,
-shared harness-toolchain, and final runtime images. It also records the requested
-harness pins, lockfile hash, and each installed CLI's observed `--version`
-output. This record is updated as each image becomes available, so interrupted
-builds can contain only the completed stages.
+The configured references and resolved IDs or digests for four images: the
+repository, Node, the shared CLI toolchain, and the final runtime. It also
+records the requested CLI pins, the lockfile hash, and each installed CLI's
+actual `--version` output. It is updated as each image becomes ready, so an
+interrupted build records only the finished steps.
 
 ### `image-build/output.log`
 
-Raw SDK JSON events from pulls and builds, including build failure evidence.
-It may be empty when all images are cached.
+Raw SDK JSON events from pulls and builds, including any build failure. It may
+be empty when every image was cached.
 
 ## `generation/`
 
 ### `generation/session.log`
 
-The readable agent transcript generated from `trace.jsonl`: prompt, agent
-messages, exposed tool calls and results, errors, standard error, and the harness
-result. This is the best file for reviewing what the agent did.
+The readable agent transcript, built from `trace.jsonl`. It shows the prompt,
+the agent's messages, tool calls and their results, errors, standard error, and
+the harness result. It is the best file for reviewing what the agent did.
 
-It cannot include hidden reasoning that the provider did not expose. Tool output
-may already be truncated by the CLI. `oracle-bench report` can rebuild it without
-a model call.
+It cannot show reasoning the provider hid. The CLI may already have truncated
+tool output. It is written once, after generation. `oracle-bench report` never
+rebuilds it.
 
 ### `generation/trace.jsonl`
 
-Raw newline-delimited events emitted by Codex, Claude Code, or OpenCode. Event shapes depend
-on the pinned CLI version. This is the authoritative low-level transcript used to
-extract completion, errors, usage, cost, and `session.log`.
+The raw JSON Lines events from Codex, Claude Code, or OpenCode. Their shape
+depends on the pinned CLI version. This is the source of truth: completion,
+errors, usage, and `session.log` are all read from it. Cost is not; it comes from
+the OpenRouter key (see [`cost.json`](#costjson)).
 
 ### `generation/command.json`
 
-The exact agent CLI argument vector, including model, isolation flags, provider
-overrides, and the configured stopping limit. Credential values are absent.
+The exact agent CLI arguments: the model, isolation flags, provider overrides,
+and the wall-time limit. No credential values.
 
 ### `generation/version.txt`
 
-Output of the selected harness's `--version` command inside the container.
+The selected CLI's `--version` output, run inside the container.
 
 ### `generation/final.txt`
 
-The agent's final natural-language response. It may be empty when generation
-fails or times out.
+The agent's final message. It may be empty when generation fails or times out.
 
 ### `generation/result.json`
 
@@ -482,7 +454,7 @@ Normalized generation metadata.
 | `raw_usage` | The CLI's own usage object. OpenCode reports usage per step, so this is `{"steps": [...]}` |
 
 Each CLI counts tokens differently. Claude Code and OpenCode leave cached prompt
-tokens out of their input count, and OpenCode leaves reasoning out of its output
+tokens out of their input count. OpenCode leaves reasoning out of its output
 count. Each adapter adds them back.
 
 ### Agent logs
@@ -494,48 +466,48 @@ count. Each adapter adds them back.
 | `launch.log` | Agent launch and setup diagnostics |
 | `capture.log` | Final snapshot, workspace diff, and generated-file copy diagnostics |
 
-Agent stdout goes to `trace.jsonl`, so `launch.log` is not the transcript. SDK
-transfers and snapshot tools are normally silent. Streamed agent output is
-redacted before host writes, including credentials split across output chunks.
+Agent stdout goes to `trace.jsonl`, so `launch.log` is not the transcript. File
+transfers and snapshots are normally silent. Agent output is redacted before it
+is written on the host, even when a credential is split across output chunks.
 
 ### Workspace preparation inputs
 
-`generation/workspace.json` (and the corresponding file in each evaluation directory)
-records public workspace preparation inputs: repository path, generated directory,
-test visibility, and test globs. It contains no private patches or credentials.
+`generation/workspace.json`, and the same file in each evaluation directory,
+records how the workspace was prepared: the repository path, generated
+directory, test visibility, and test globs. It holds no private patches or
+credentials.
 
 ### `generation/baseline.txt`
 
-The Git commit created immediately before generation. It includes the selected
-existing-test visibility and empty generated-test directory and anchors the final
-workspace diff.
+The Git commit made just before generation. It reflects the test-visibility
+setting and the empty generated-test directory. The final workspace diff starts
+from it.
 
 ### `generation/before.json` and `generation/after.json`
 
-Complete filesystem metadata snapshots before and after generation. Every
-repository-relative path maps to its entry kind, Unix mode, size, and SHA-256.
-Their comparison determines allowed files and forbidden changes independently of
-Git status. These can be large, but contain metadata rather than every file's
-contents.
+Snapshots of the repository's file metadata before and after generation. Each
+path maps to its kind, Unix mode, size, and SHA-256. Comparing the two decides
+which files are allowed and which changes are forbidden, without relying on Git.
+They can be large, but they hold metadata, not file contents.
 
 ### `generation/workspace.diff`
 
-The complete Git-oriented diff from `baseline.txt` through the final agent state,
-including staged, unstaged, and untracked changes. Use it to inspect policy
-violations and production edits.
+The full Git diff from `baseline.txt` to the agent's final state, including
+staged, unstaged, and untracked changes. Use it to inspect forbidden changes and
+production edits.
 
 ## `submission/`
 
 ### `submission/files/`
 
-The frozen submission. Each allowed new regular file is copied here while
-preserving its repository-relative path. Evaluations copy these exact files into
-fresh buggy and golden workspaces. The directory may be absent for an empty
-submission.
+The frozen submission. Each allowed new regular file is copied here at its
+repository-relative path. Evaluation copies these exact files into fresh buggy
+and golden workspaces. The directory always exists; an empty submission leaves
+it empty.
 
 ### `submission/manifest.json`
 
-The artifact inventory and compliance decision.
+What was captured, and whether the submission is compliant.
 
 | Field | Meaning |
 |---|---|
@@ -545,23 +517,25 @@ The artifact inventory and compliance decision.
 | `empty` | Whether no allowed files were captured |
 | `sha256` | Hash of the canonical `files` mapping |
 
-Before evaluation, Oracle Bench verifies the manifest checksum, every captured
-file's checksum, and that the bundle contains no unmanifested files. It rejects
-silent modification of the frozen artifact.
+Evaluation and judging each verify the bundle once, at the start of the stage.
+The check covers the manifest's hash, every file's hash, and that no file is
+missing from the manifest. Any change to the frozen files fails it. Both code
+versions and the judge then receive that one verified bundle.
 
 ## `ground-truth/`
 
-`issue.md` contains the SWE-bench problem statement in readable form.
-`fix.patch` is the exact golden patch applied to transform the buggy checkout.
-Both are private evaluator evidence retained for human analysis; neither is
-available inside the generation container.
+`issue.md` is the SWE-bench problem statement, formatted for reading.
+`fix.patch` is the exact golden patch that turns the buggy checkout into the
+fixed one. Both are kept for people analyzing the run. Neither is ever inside the
+generation container.
 
 ## Evaluation directories
 
 `evaluation/buggy/`, `evaluation/golden/`, `reference-check/buggy/`, and
-`reference-check/golden/` use the same layout. The evaluation pair evaluates generated tests; the reference pair checks
-the private developer regression before generation. Golden directories also have
-`repair.patch`; reference directories have `reference.patch`.
+`reference-check/golden/` share one layout. The evaluation pair runs the
+generated tests. The reference pair runs the private developer test before
+generation. Golden directories also have `repair.patch`. Reference directories
+also have `reference.patch`.
 
 ### `tests.json`
 
@@ -575,15 +549,15 @@ Normalized pytest results.
 | `collection_errors` | Structured collection failures |
 | `tests` | Pytest node IDs mapped to outcomes and phase records |
 
-Each test records its normalized outcome and available setup, call, and teardown
-phases, including phase outcome, duration, and failure details. Outcomes preserve
-passes, failures, skips, expected failures, unexpected passes, and setup or
-teardown errors.
+Each test records its outcome and each phase it reached (setup, call,
+teardown), with the phase's outcome, duration, and failure details. Outcomes
+keep passes, failures, skips, expected failures, unexpected passes, and setup or
+teardown errors apart.
 
-Incomplete statuses include `no_tests`, `collection_error`, `timeout`,
-`runner_error`, and `infrastructure_error`, with an `error` explanation. A failing
-assertion is an ordinary per-test failure and does not make the overall execution
-incomplete.
+The incomplete statuses are `no_tests`, `collection_error`, `timeout`,
+`runner_error`, and `infrastructure_error`. Each comes with an `error`
+explanation. A failing assertion is an ordinary test failure. It does not make
+the execution incomplete.
 
 pytest runs with `--continue-on-collection-errors`. A file that fails to collect is
 listed in `collection_errors`, and the other files still run. The status is
@@ -595,36 +569,36 @@ collect.
 
 | File | Contents |
 |---|---|
-| `coverage.json` | Stable normalized status, totals, percentage, and per-file data used by Oracle Bench |
-| `coverage.raw.json` | Detailed unmodified JSON emitted by the configured coverage.py version |
-| `.coverage` | Binary coverage.py data file, requiring a compatible coverage version to inspect |
+| `coverage.json` | The normalized status, totals, percentage, and per-file data Oracle Bench uses |
+| `coverage.raw.json` | The unmodified JSON report from the configured coverage.py version |
+| `.coverage` | coverage.py's binary data file; reading it needs a compatible coverage version |
 
-When coverage is unavailable, `coverage.json` contains `status: unavailable` and
-a reason. Coverage failure does not discard test results. Source files that the
-task's selected Python interpreter cannot parse are omitted from coverage rather
-than making coverage unavailable for the rest of the source tree.
+When coverage is unavailable, `coverage.json` has `status: unavailable` and a
+reason. A coverage failure never discards test results. A source file the
+project's Python cannot parse is left out of coverage. The rest of the source
+tree is still measured.
 
 ### Other execution files
 
 | File | Contents |
 |---|---|
-| `imports.json` | Configured modules mapped to imported file paths, detecting accidental use of another installed copy |
-| `runner.json` | Inputs to the in-container runner: workdir, output, targets, source roots, and imports |
-| `command.json` | Concrete pytest command; distinct from the agent command |
-| `execution.json` | Runner exit code, duration, and timeout flag |
-| `output.log` | Workspace setup, patching, pytest, coverage, and Docker diagnostics |
-| `repair.patch` | Exact golden source patch, only in golden executions |
-| `reference.patch` | Private test patch, only in reference executions |
+| `imports.json` | Each configured module and the file it imported from; catches an import from another installed copy |
+| `runner.json` | The in-container runner's inputs: workdir, output, targets, source roots, and imports |
+| `command.json` | The pytest command (not the agent command) |
+| `execution.json` | The runner's exit code, duration, and timeout flag |
+| `output.log` | Output from workspace setup, patching, pytest, coverage, and Docker |
+| `repair.patch` | The exact golden source patch; golden executions only |
+| `reference.patch` | The private test patch; reference executions only |
 
-Start with `output.log` when `tests.json` reports a runner or infrastructure
-failure.
+When `tests.json` reports a runner or infrastructure failure, start with
+`output.log`.
 
 ## `reference-check/results.json`
 
-The paired private-regression result. It has the same matrix shape as the paired
-portion of `evaluation/results.json`. Generation begins only when
-At least one `fail_on_buggy_pass_on_golden` matrix entry is required, verifying
-the base commit, repair, private test, and environment before model spending.
+The paired result of the private developer test. Its matrix has the same shape
+as the one in `evaluation/results.json`. Generation starts only when it has at
+least one `fail_on_buggy_pass_on_golden` entry. This proves the base commit,
+repair, private test, and environment work before any money is spent on a model.
 
 ## Reevaluation archives
 
@@ -634,52 +608,54 @@ Running:
 uv run oracle-bench evaluate runs/<run-id>
 ```
 
-moves the current contents of `evaluation/` into
-`evaluation-history/<UTC timestamp>/`, verifies the frozen manifest, and evaluates it in
-fresh containers. Generation evidence, provenance, runtime identity, and frozen
-tests remain unchanged. Earlier reevaluations therefore remain available for
-comparison.
+does three things:
 
-Reevaluation marks an existing `judge/judgment.json` as `stale` because its saved
-execution evidence has been replaced. Human judgments are marked stale for the
-same reason. Each stale record retains the previous normalized judgment for audit.
-Reevaluation never calls the judge model; invoke `oracle-bench judge` explicitly
-to produce a new automated annotation.
+1. It moves the current `evaluation/` into `evaluation-history/<UTC timestamp>/`.
+2. It verifies the frozen manifest.
+3. It evaluates the frozen tests in fresh containers.
 
-`generation/session.log` is rendered from the original trace when generation
-finishes. It is generation evidence rather than an evaluation result and is not archived.
+Generation files, provenance, the runtime image, and the frozen tests stay
+unchanged. Every earlier evaluation stays available for comparison.
+`generation/session.log` belongs to generation, so it is not archived.
+
+Reevaluation marks an existing `judge/judgment.json` as `stale`, because the
+evidence it rated has been replaced. Human judgments become stale for the same
+reason. Each stale record keeps the previous judgment inside it. Reevaluation
+never calls the judge model. Run `oracle-bench judge` to get a new LLM judgment.
 
 ## Empty, optional, and absent files
 
-Several files are expected to be empty or absent in normal circumstances:
+Some files are normally empty or absent:
 
-- `generation/launch.log`, `generation/capture.log`, and sometimes `generation/stderr.log` are
-  empty when normally silent commands succeed;
-- `image-build/output.log` may be minimal or absent when the runtime is cached;
-- `generation/final.txt` may be empty after an agent failure;
-- `submission/files/` may be absent for an empty submission;
-- raw and binary coverage files may be absent when coverage fails;
-- `evaluation/results.json` and `report.md` are absent if the pipeline stops before final
-  evaluation.
+- `generation/launch.log`, `generation/capture.log`, and often
+  `generation/stderr.log` are empty when their commands succeed quietly.
+- `image-build/output.log` may be short or absent when the runtime was cached.
+- `generation/final.txt` may be empty after an agent failure.
+- `submission/files/` is empty for an empty submission.
+- The raw and binary coverage files may be absent when coverage fails.
+- `evaluation/results.json` and `report.md` are absent when the pipeline stops
+  before final evaluation.
 
-Interpret absence together with `status.json`, the relevant `execution.json`, and
-the closest stage log.
+To explain a missing file, read `status.json`, the relevant `execution.json`, and
+the nearest stage log.
 
-# Batch artifacts
+## Batch artifacts
 
-`oracle-bench batch` writes a batch directory containing the original manifest,
-the resolved and checksum-locked job list, batch status, `summary.json`, and
-`report.md`. The summary preserves each job's state, run-directory link, paired
-matrix counts, coverage, and generation measurements. When a run has judge
-artifacts, its job record also contains the judge status, answer, conditional
-details, model provenance, token usage, and duration. Runs without judge
-configuration are recorded as `disabled`; configured runs without a result are
-`missing`. Invalid, failed, timed-out, and stale judgments remain explicit and do
-not make an otherwise completed evaluation resumable.
+`oracle-bench batch` writes a batch directory with the original manifest, the
+resolved job list with its checksums, the batch status, `summary.json`, and
+`report.md`.
 
-The Markdown job table shows each run ID as plain text alongside the linked
-instance name, so runs can be located under `runs/<run-id>` without following a
-Markdown link. Jobs that failed before creating a run show `—` instead.
+The summary keeps each job's state, run-directory link, paired matrix counts,
+coverage, and generation measurements. A job whose run has judge files also
+records the judge's status, answer, conditional fields, model, token usage, and
+duration. A run without a judge is recorded as `disabled`. A run with a judge
+but no result is `missing`. Invalid, failed, timed-out, and stale judgments are
+recorded as such. They never make a job with a completed evaluation count as
+unfinished on `--resume`.
+
+The Markdown job table shows each run ID as plain text beside the linked
+instance name. You can then find the run under `runs/<run-id>` without following
+a link. A job that failed before creating a run shows `—`.
 
 `summary.json` distinguishes three denominators:
 
@@ -687,61 +663,61 @@ Markdown link. Jobs that failed before creating a run show `—` instead.
 - `completed_evaluations`: jobs whose buggy and golden executions both completed;
 - `judge.valid_judgments`: jobs with a normalized `completed` judgment.
 
-`matrix_detection_rate` is the fraction of completed evaluations with a compliant
-fail-on-buggy/pass-on-golden result. A non-compliant submission stays in the
-denominator and counts as not detected: editing files outside the generated
-directory is an agent failure. Runs without two completed evaluations, including
-runs that stopped before generation, are left out. `judge_tests_issue_yes_rate` is the fraction of valid judgments whose
-`tests_issue` answer is `yes`. These metrics answer different questions and are
-reported separately.
+`matrix_detection_rate` is the share of completed evaluations that are compliant
+and have a fail-on-buggy/pass-on-golden result. A non-compliant submission stays
+in the denominator and counts as not detected, because editing files outside the
+generated directory is an agent failure. Runs without two completed evaluations
+are left out, including runs that stopped before generation.
 
-The `judge` object contains status counts, per-facet label frequencies, and these
-cross-tabs:
+`judge_tests_issue_yes_rate` is the share of valid judgments whose `tests_issue`
+answer is `yes`. The two rates answer different questions, so they are reported
+separately.
+
+The `judge` object has status counts, label counts for each field, and these
+cross-tabulations:
 
 - matrix detection by the `tests_issue` answer;
 - attempt detail by the presence or absence of each matrix cell.
 
-Each job record carries its run's `cost_status` and `cost_usd` from `cost.json`,
-including for a run that failed after generation started. `total_cost_usd` sums
-every job with a cost, and `costed_runs` counts them; the total is `null` when
-none has one. The Markdown report
-presents a compact per-run comparison and the facet frequency tables; the
-complete cross-tabs remain in `summary.json`.
+Each job record has its run's `cost_status` and `cost_usd` from `cost.json`. A
+run that failed after generation started has them too. `total_cost_usd` sums
+every job with a cost, and `costed_runs` counts those jobs. The total is `null`
+when no job has a cost.
 
-# Agreement artifacts
+The Markdown report shows a short per-run comparison and the label count tables.
+The full cross-tabulations are only in `summary.json`.
 
-After blinded human ratings have been collected, run the offline agreement
-analysis for a batch:
+## Agreement artifacts
 
-```sh
-uv run oracle-bench agreement batches/<batch-id> --sample-per-stratum 8
-```
+`oracle-bench agreement` writes `agreement/report.md`, `agreement/summary.json`,
+and `agreement/calibration-sample.json` inside the batch directory.
 
-The command writes `agreement/report.md`, `agreement/summary.json`, and
-`agreement/calibration-sample.json` inside the batch directory. It never loads
-credentials, starts containers, or calls a model.
+Agreement is reported separately for each label (`tests_issue`,
+`attempt_detail`, `no_attempt_reason`, and `cheating`). Within each label,
+human–human and human–LLM agreement are also separate. Each result has:
 
-Agreement is reported independently for the answer and both conditional fields,
-and separately
-for human–human and human–LLM comparisons. Each result contains its observation
-count, raw agreement, an observation-weighted mean of the per-rater-pair Cohen's
-kappas, a pooled confusion matrix, and individual disagreements. Each rater pair
-also retains its own expected agreement and Cohen's kappa. A pair enters these calculations
-only when both ratings are valid and complete. Possible, available, and missing
-pair counts are explicit, and every absent rater is retained as `status:
-missing` in the per-run records. Kappa is `null` when no observations exist or
-when expected agreement is one.
+- the number of observations;
+- raw agreement;
+- Cohen's kappa (agreement corrected for chance) for each rater pair, and their
+  mean weighted by observations;
+- a pooled confusion matrix;
+- each disagreement.
 
-The report records every rubric, LLM prompt, human instruction, and workspace
-specification hash together with the judge model identities. This makes results
-from changed rating conditions visible instead of silently combining them.
+Each rater pair also keeps its own expected agreement. A pair counts only when
+both ratings are valid and complete. The possible, available, and missing pair
+counts are all reported. A rater with no rating appears as `status: missing` in
+the per-run records. Kappa is `null` when there are no observations, or when
+expected agreement is one.
 
-The calibration sample lives only in `calibration-sample.json`; `summary.json`
-carries the agreement figures and per-run ratings. The sample selects a
-deterministic maximum per stratum for F→P, F→F, P→P, invalid, and LLM-judged
-unrelated submissions, ordered by a hash of each run's instance ID and directory
-name, so relocating a batch does not change the selection. A run may appear in
-more than one stratum. The sample records whether every unique selected run has
-at least two completed human ratings; agreement is not presented as calibrated
-until that condition is met. Do not give the sample manifest or existing labels
-to raters—the interactive workspace remains the blinded rating interface.
+The report records the hash of every rubric, LLM prompt, human instruction, and
+workspace specification, plus the judge models. Ratings made under different
+conditions then show up as different, instead of being merged without notice.
+
+`summary.json` holds the agreement figures and per-run ratings.
+`calibration-sample.json` holds the calibration sample, and only it. The sample
+takes up to a fixed number of runs from each group: F→P, F→F, P→P, invalid, and
+submissions the LLM judged unrelated. (F→P means failed on buggy, passed on
+golden.) Runs are ordered by a hash of the instance ID and directory name, so
+moving a batch does not change the choice. A run may fall in more than one
+group. The sample records whether every selected run has at least two completed
+human ratings. Until it does, agreement is not reported as calibrated.

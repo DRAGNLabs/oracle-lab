@@ -13,6 +13,7 @@ from pydantic import Field, model_validator
 
 from oracle_bench.batch.summary import write_summary
 from oracle_bench.config import ConfigModel, NonBlank, RunConfig, load_config
+from oracle_bench.container.lifecycle import preserve_failure
 from oracle_bench.io import digest, read_json, write_json
 from oracle_bench.run import run
 
@@ -24,9 +25,8 @@ class BatchJob(ConfigModel):
 
 
 class BatchExecution(ConfigModel):
-    """Execution policy kept intentionally small for the first batch runner."""
+    """Jobs always run one at a time; this only says whether a failure stops the batch."""
 
-    concurrency: Annotated[int, Field(strict=True, ge=1, le=1)] = 1
     continue_on_error: Annotated[bool, Field(strict=True)] = True
 
 
@@ -130,8 +130,10 @@ def run_batch(
                 if not config.execution.continue_on_error:
                     raise
             finally:
-                _write_manifest(batch_dir, config, jobs)
-                write_summary(batch_dir, config.name, jobs)
+                # A summary that cannot be written must not hide why the job stopped.
+                with preserve_failure("The batch summary could not be updated."):
+                    _write_manifest(batch_dir, config, jobs)
+                    write_summary(batch_dir, config.name, jobs)
     except KeyboardInterrupt:
         write_json(batch_dir / "status.json", {"state": "interrupted"})
         raise

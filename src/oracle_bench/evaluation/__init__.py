@@ -6,6 +6,7 @@ distinguish its revisions, and the paired evaluation of the agent's submission.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from docker import DockerClient
@@ -29,6 +30,7 @@ from oracle_bench.results import (
     EvaluationResult,
     HarnessResult,
     InstanceRecord,
+    SubmissionManifest,
     VersionResult,
     read_localized_target,
     read_version_result,
@@ -84,39 +86,76 @@ def run_tests(
     return result
 
 
-def run_version(
+def run_reference(
     client: DockerClient,
     config: RunConfig,
     image: str,
     instance: InstanceRecord,
     paths: RunPaths,
     version: str,
-    *,
-    reference: bool = False,
 ) -> VersionResult:
-    runtime = config.require_runtime()
-    directory = (paths.reference if reference else paths.evaluation) / version
+    """Run the dataset's reference tests on one version, with existing tests kept."""
+
+    def setup(sandbox: Sandbox, workspace: Repository, directory: Path) -> list[str]:
+        workspace.apply_patch(instance.reference_test_patch, directory / "reference.patch")
+        if not instance.reference_test_ids:
+            raise ValueError("No reference test IDs available for the pair smoke check")
+        return instance.reference_test_ids
+
+    directory = paths.reference / version
+    return _run_version(
+        client, config, image, instance, version, directory, Profile.REFERENCE, setup
+    )
+
+
+def run_submission(
+    client: DockerClient,
+    config: RunConfig,
+    image: str,
+    instance: InstanceRecord,
+    paths: RunPaths,
+    version: str,
+    manifest: SubmissionManifest,
+) -> VersionResult:
+    """Run the verified submission on one version, with existing tests hidden."""
+    directory = paths.evaluation / version
+    if manifest.empty:
+        directory.mkdir(parents=True, exist_ok=True)
+        return incomplete_result(directory, "no_tests", "Agent produced no test files")
+
+    def setup(sandbox: Sandbox, workspace: Repository, directory: Path) -> list[str]:
+        workdir = config.require_runtime().workdir
+        sandbox.upload(paths.submission / "files", workdir, contents=True)
+        return [config.task.generated_dir]
+
+    return _run_version(
+        client, config, image, instance, version, directory, Profile.EVALUATION, setup
+    )
+
+
+def _run_version(
+    client: DockerClient,
+    config: RunConfig,
+    image: str,
+    instance: InstanceRecord,
+    version: str,
+    directory: Path,
+    profile: Profile,
+    setup: Callable[[Sandbox, Repository, Path], list[str]],
+) -> VersionResult:
+    """Check out one version, let `setup` add the tests and name the targets, then run them."""
     directory.mkdir(parents=True, exist_ok=True)
-    log = directory / "output.log"
     try:
-        profile = Profile.REFERENCE if reference else Profile.EVALUATION
-        with open_sandbox(client, image, config, profile, log) as sandbox:
+        with open_sandbox(client, image, config, profile, directory / "output.log") as sandbox:
             workspace = Repository(sandbox, config)
-            workspace.prepare(instance.base_commit, directory, reference=reference)
+            # Only the reference run keeps the repository's existing tests.
+            workspace.prepare(
+                instance.base_commit, directory, reference=profile is Profile.REFERENCE
+            )
             if version == "golden":
                 workspace.apply_patch(instance.golden_patch, directory / "repair.patch")
                 workspace.rebuild()
-            if reference:
-                workspace.apply_patch(instance.reference_test_patch, directory / "reference.patch")
-                targets = instance.reference_test_ids
-                if not targets:
-                    raise ValueError("No reference test IDs available for the pair smoke check")
-            else:
-                manifest = verify_bundle(paths)
-                if manifest["empty"]:
-                    return incomplete_result(directory, "no_tests", "Agent produced no test files")
-                sandbox.upload(paths.submission / "files", runtime.workdir, contents=True)
-                targets = [config.task.generated_dir]
+            targets = setup(sandbox, workspace, directory)
             return run_tests(sandbox, config, targets, directory)
     except (RuntimeError, OSError, ValueError, DockerException) as exc:
         return incomplete_result(directory, "infrastructure_error", str(exc))
@@ -129,8 +168,8 @@ def check_reference(
     instance: InstanceRecord,
     paths: RunPaths,
 ) -> None:
-    buggy = run_version(client, config, image, instance, paths, "buggy", reference=True)
-    golden = run_version(client, config, image, instance, paths, "golden", reference=True)
+    buggy = run_reference(client, config, image, instance, paths, "buggy")
+    golden = run_reference(client, config, image, instance, paths, "golden")
     paired = pair_results(buggy, golden)
     write_result(paths.reference / "results.json", paired)
     if not paired.has_fail_on_buggy_pass_on_golden:
@@ -156,17 +195,18 @@ def evaluate(
     instance: InstanceRecord,
     paths: RunPaths,
 ) -> EvaluationResult:
+    # Verified once; both versions then receive this same bundle.
     manifest = verify_bundle(paths)
     archive_previous_evaluation(paths)
-    buggy = run_version(client, config, image, instance, paths, "buggy")
-    golden = run_version(client, config, image, instance, paths, "golden")
+    buggy = run_submission(client, config, image, instance, paths, "buggy", manifest)
+    golden = run_submission(client, config, image, instance, paths, "golden", manifest)
     paired = pair_results(buggy, golden)
     result = EvaluationResult(
         **paired.model_dump(),
         instance_id=instance.instance_id,
-        artifact_sha256=manifest["sha256"],
-        submission_compliant=manifest["compliant"],
-        forbidden_changes=manifest["forbidden_changes"],
+        artifact_sha256=manifest.sha256,
+        submission_compliant=manifest.compliant,
+        forbidden_changes=manifest.forbidden_changes,
         task_scope=config.task.scope,
         test_target=read_localized_target(paths.target)
         if config.task.scope == "localized"

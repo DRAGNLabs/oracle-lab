@@ -1,21 +1,27 @@
-import json
 from contextlib import contextmanager
-from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
 import yaml
 from docker.errors import DockerException, ImageNotFound
-from fixtures import evaluation_result, instance_record, usage
+from fixtures import (
+    RUN_CONFIG,
+    context_of,
+    evaluation_result,
+    instance_record,
+    run_config,
+    usage,
+    write_submission,
+)
 
-from oracle_bench.config import JudgeConfig, RuntimeConfig, load_config
+from oracle_bench.config import JudgeConfig, load_config
 from oracle_bench.harnesses import claude
-from oracle_bench.io import digest, read_json, write_json
+from oracle_bench.io import read_json, write_json
 from oracle_bench.judge.run import judge as run_judge
 from oracle_bench.paths import RunPaths
 from oracle_bench.results import write_result
 
-SAMPLE = Path(__file__).parents[1] / "configs/smoke.yaml"
+SAMPLE = RUN_CONFIG
 VALID_JUDGMENT = """{
   "no_attempt_reason": null,
   "tests_issue": "yes",
@@ -32,13 +38,7 @@ def judge(paths):
 
 def saved_run(tmp_path):
     paths = RunPaths.create(tmp_path)
-    config = load_config(SAMPLE)
-    config.runtime = RuntimeConfig(
-        image="example/runtime",
-        source_roots=["package"],
-        import_modules=["package"],
-        existing_test_globs=["tests"],
-    )
+    config = run_config("package", image="example/runtime")
     config.judge = JudgeConfig(
         rubric=str(paths.judge.rubric),
         instructions=str(paths.judge.instructions),
@@ -49,45 +49,25 @@ def saved_run(tmp_path):
         model="judge-model",
         limit={"kind": "wall_seconds", "value": 300},
     )
-    paths.config.write_text(yaml.safe_dump(config.to_dict(), sort_keys=False))
+    paths.config.write_text(yaml.safe_dump(config.model_dump(), sort_keys=False))
     paths.judge.rubric.write_text("# Frozen rubric\n\nChoose labels.\n")
     paths.judge.instructions.write_text("Inspect $root/buggy/ and $root/golden/.\n\n")
     write_json(paths.runtime, {"image": "example/runtime"})
     write_json(paths.status, {"stage": "finished", "state": "completed", "judge_status": "missing"})
     write_result(paths.instance, instance_record())
     write_json(paths.results, evaluation_result())
-    generated = paths.submission / "files/oracle_tests/test_generated.py"
-    generated.parent.mkdir(parents=True)
-    generated.write_text("def test_generated(): pass\n")
-    files = {
-        "oracle_tests/test_generated.py": {
-            "sha256": digest(generated.read_bytes()),
-            "mode": 0o644,
-        }
-    }
-    write_json(
-        paths.submission / "manifest.json",
-        {
-            "files": files,
-            "empty": False,
-            "sha256": digest(json.dumps(files, sort_keys=True).encode()),
-        },
-    )
+    write_submission(paths)
     return paths
 
 
 def install_fakes(monkeypatch, final_text=VALID_JUDGMENT, status="completed"):
     client = Mock()
 
-    @contextmanager
-    def client_context():
-        yield client
+    client_context = context_of(client)
 
     sandbox = Mock()
 
-    @contextmanager
-    def sandbox_context(*args, **kwargs):
-        yield sandbox
+    sandbox_context = context_of(sandbox)
 
     def claude_turn(_sandbox, request):
         assert request.working_directory == "/oracle-judge"
@@ -173,7 +153,7 @@ def test_transient_harness_failure_is_archived_and_retried(tmp_path, monkeypatch
 
     monkeypatch.setattr("oracle_bench.harnesses.claude.run_turn", transient_then_complete)
     delay = Mock()
-    monkeypatch.setattr("oracle_bench.judge.run.sleep", delay)
+    monkeypatch.setattr("oracle_bench.harnesses.retry.sleep", delay)
 
     output = judge(paths)
 
@@ -203,7 +183,7 @@ def test_transient_harness_failure_stops_after_three_retries(tmp_path, monkeypat
     turn = Mock(side_effect=always_rate_limited)
     monkeypatch.setattr("oracle_bench.harnesses.claude.run_turn", turn)
     delay = Mock()
-    monkeypatch.setattr("oracle_bench.judge.run.sleep", delay)
+    monkeypatch.setattr("oracle_bench.harnesses.retry.sleep", delay)
 
     output = judge(paths)
 
@@ -343,9 +323,7 @@ def test_missing_runtime_image_does_not_archive_previous_attempt(tmp_path, monke
     client = Mock()
     client.images.get.side_effect = ImageNotFound("missing")
 
-    @contextmanager
-    def client_context():
-        yield client
+    client_context = context_of(client)
 
     monkeypatch.setattr("oracle_bench.judge.run.docker_client", client_context)
 
@@ -353,6 +331,19 @@ def test_missing_runtime_image_does_not_archive_previous_attempt(tmp_path, monke
         judge(paths)
 
     assert read_json(paths.judge.judgment) == {"old": True}
+
+
+def test_a_tampered_submission_is_rejected_before_docker(tmp_path, monkeypatch):
+    paths = saved_run(tmp_path)
+    (paths.submission / "files/oracle_tests/test_generated.py").write_text("tampered")
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "credential-fixture")
+    docker = Mock()
+    monkeypatch.setattr("oracle_bench.judge.run.docker_client", docker)
+
+    with pytest.raises(ValueError, match="checksum mismatch"):
+        judge(paths)
+
+    docker.assert_not_called()
 
 
 def test_empty_submission_is_rejected_before_docker(tmp_path, monkeypatch):

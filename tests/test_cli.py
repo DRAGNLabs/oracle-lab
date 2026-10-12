@@ -1,11 +1,11 @@
 import os
-from pathlib import Path
 
 import pytest
+from fixtures import RUN_CONFIG
 
 from oracle_bench import cli
 
-SAMPLE = Path(__file__).parents[1] / "configs" / "smoke.yaml"
+SAMPLE = RUN_CONFIG
 
 
 def test_saved_run_config_is_loaded_once_at_cli_boundary(tmp_path, monkeypatch):
@@ -37,7 +37,7 @@ def test_run_loads_local_keys_without_overriding_shell(tmp_path, monkeypatch, sh
 
     def run(config):
         assert os.environ["OPENAI_API_KEY"] == (shell_value or "literal-${HOME}")
-        assert "literal-${HOME}" not in str(config.to_dict())
+        assert "literal-${HOME}" not in str(config.model_dump())
         return tmp_path
 
     monkeypatch.setattr(cli, "run", run)

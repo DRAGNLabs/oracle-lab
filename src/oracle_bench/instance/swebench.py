@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
@@ -20,17 +21,53 @@ from oracle_bench.results import InstanceRecord, SourceProvenance
 UPSTREAM_REVISION = "3947b299c121bb1f45f5094180c0f39fa0c599a0"
 
 
+@dataclass(frozen=True)
+class RepositoryLayout:
+    """Where one repository keeps its code and tests, and what its tests need."""
+
+    source_root: str
+    import_module: str
+    existing_tests: tuple[str, ...]
+    pythonpath: str | None = None
+    pytest_plugins: tuple[str, ...] = ()
+
+
 REPOSITORY_LAYOUTS = {
-    "astropy/astropy": ("astropy", "astropy", ["astropy/**/tests"]),
-    "matplotlib/matplotlib": ("lib/matplotlib", "matplotlib", ["lib/matplotlib/tests"]),
-    "mwaskom/seaborn": ("seaborn", "seaborn", ["tests"]),
-    "pallets/flask": ("src/flask", "flask", ["tests"]),
-    "psf/requests": ("requests", "requests", ["test_requests.py", "tests"]),
-    "pydata/xarray": ("xarray", "xarray", ["xarray/tests"]),
-    "pylint-dev/pylint": ("pylint", "pylint", ["tests"]),
-    "pytest-dev/pytest": ("src/_pytest", "_pytest", ["testing"]),
-    "scikit-learn/scikit-learn": ("sklearn", "sklearn", ["sklearn/**/tests"]),
-    "sphinx-doc/sphinx": ("sphinx", "sphinx", ["tests"]),
+    "astropy/astropy": RepositoryLayout("astropy", "astropy", ("astropy/**/tests",)),
+    "matplotlib/matplotlib": RepositoryLayout(
+        "lib/matplotlib", "matplotlib", ("lib/matplotlib/tests",)
+    ),
+    "mwaskom/seaborn": RepositoryLayout("seaborn", "seaborn", ("tests",)),
+    "pallets/flask": RepositoryLayout("src/flask", "flask", ("tests",)),
+    "psf/requests": RepositoryLayout("requests", "requests", ("test_requests.py", "tests")),
+    "pydata/xarray": RepositoryLayout("xarray", "xarray", ("xarray/tests",)),
+    "pylint-dev/pylint": RepositoryLayout("pylint", "pylint", ("tests",)),
+    "pytest-dev/pytest": RepositoryLayout(
+        "src/_pytest",
+        "_pytest",
+        ("testing",),
+        # A src-layout project: its installed distribution may be a different
+        # version from the checked-out task revision.
+        pythonpath="/testbed/src",
+        # The repository enables pytester through addopts, which the benchmark
+        # clears. Keep this required plugin without the other repository options.
+        pytest_plugins=("pytester",),
+    ),
+    "scikit-learn/scikit-learn": RepositoryLayout("sklearn", "sklearn", ("sklearn/**/tests",)),
+    "sphinx-doc/sphinx": RepositoryLayout("sphinx", "sphinx", ("tests",)),
+}
+
+
+@dataclass(frozen=True)
+class TestTools:
+    pytest_version: str
+    coverage_version: str
+
+
+# Instances whose image cannot run the default pytest and coverage.
+OLDER_TEST_TOOLS = {
+    # This image uses Python 3.6.
+    "scikit-learn__scikit-learn-14710": TestTools(pytest_version="6.2.5", coverage_version="6.2"),
 }
 
 
@@ -46,24 +83,17 @@ def runtime_for(record: dict) -> RuntimeConfig:
     repo = record["repo"]
     if repo not in REPOSITORY_LAYOUTS:
         raise ValueError(f"No tested SWE-bench runtime profile for repository {repo!r}")
-    source_root, import_module, existing_test_globs = REPOSITORY_LAYOUTS[repo]
-    uses_python_36 = record["instance_id"] == "scikit-learn__scikit-learn-14710"
+    layout = REPOSITORY_LAYOUTS[repo]
+    tools = OLDER_TEST_TOOLS.get(record["instance_id"])
     return RuntimeConfig(
         image=image_for(record["instance_id"]),
-        source_roots=[source_root],
-        import_modules=[import_module],
-        existing_test_globs=existing_test_globs,
-        # pytest is a src-layout project; its installed distribution may be a
-        # different version from the checked-out task revision.
-        pythonpath="/testbed/src" if repo == "pytest-dev/pytest" else None,
-        # The repository enables pytester through addopts, which the benchmark
-        # intentionally clears. Keep this required plugin without inheriting
-        # unrelated repository options or default test targets.
-        pytest_plugins=["pytester"] if repo == "pytest-dev/pytest" else [],
-        # This particular upstream image uses Python 3.6. The normal test
-        # toolchain requires a newer interpreter.
-        pytest_version="6.2.5" if uses_python_36 else None,
-        coverage_version="6.2" if uses_python_36 else None,
+        source_roots=[layout.source_root],
+        import_modules=[layout.import_module],
+        existing_test_globs=list(layout.existing_tests),
+        pythonpath=layout.pythonpath,
+        pytest_plugins=list(layout.pytest_plugins),
+        pytest_version=tools.pytest_version if tools else None,
+        coverage_version=tools.coverage_version if tools else None,
         # Official instance images already contain an installed checkout. Patches to
         # Python sources are visible through that editable install; rerunning a generic
         # pip build can require build-only dependencies absent from the final image.
@@ -85,7 +115,7 @@ def resolve(config: SourceConfig) -> tuple[InstanceRecord, RuntimeConfig]:
         # always gives rows we can loop over. The cast just tells the type checker.
         rows = cast(
             Iterable[dict],
-            load_dataset(config.dataset_name, split=config.split, revision=config.dataset_revision),
+            load_dataset(config.dataset_name, split=config.split, revision=config.revision),
         )
         matches = [row for row in rows if row["instance_id"] == config.instance]
         if len(matches) != 1:
@@ -119,7 +149,7 @@ def resolve(config: SourceConfig) -> tuple[InstanceRecord, RuntimeConfig]:
             kind=config.kind,
             dataset=config.dataset,
             name=config.dataset_name,
-            revision=config.dataset_revision,
+            revision=config.revision,
             split=config.split,
             upstream_revision=UPSTREAM_REVISION,
             record_sha256=digest(json.dumps(record, sort_keys=True).encode()),

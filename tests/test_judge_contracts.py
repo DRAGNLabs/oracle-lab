@@ -4,16 +4,15 @@ import pytest
 
 from oracle_bench.io import read_json, write_json
 from oracle_bench.judge.contracts import (
-    MAX_RATIONALE_LENGTH,
     CompletedJudgment,
     complete_human_judgment,
-    failed_judgment,
     mark_judgments_stale,
     parse_judgment,
     skipped_judgment,
     validate_judgment,
 )
 from oracle_bench.paths import RunPaths
+from oracle_bench.results import MAX_RATIONALE_LENGTH, failed_turn
 
 
 def labels(**changes):
@@ -188,8 +187,8 @@ def test_human_rating_rejects_unfilled_rationale():
 
 
 def test_failure_results_distinguish_failure_from_timeout():
-    assert failed_judgment("harness exited").status == "failed"
-    assert failed_judgment("deadline exceeded", timed_out=True).status == "timed_out"
+    assert failed_turn("harness exited").status == "failed"
+    assert failed_turn("deadline exceeded", timed_out=True).status == "timed_out"
 
 
 def test_skipped_judgment_records_why_no_turn_was_run():

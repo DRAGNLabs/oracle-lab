@@ -13,3 +13,5 @@ dist/
 !.env.example
 classifications/
 notes/
+runs/
+batches/

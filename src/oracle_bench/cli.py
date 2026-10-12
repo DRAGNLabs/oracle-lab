@@ -7,6 +7,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from oracle_bench.batch import run_batch
+from oracle_bench.classification.run import classify
 from oracle_bench.config import RunConfig, load_classification_config, load_config
 from oracle_bench.io import read_json
 from oracle_bench.judge.agreement import analyze_agreement
@@ -17,7 +18,6 @@ from oracle_bench.judge.human import (
 )
 from oracle_bench.judge.run import judge
 from oracle_bench.paths import RunPaths
-from oracle_bench.repo_classification.run import classify
 from oracle_bench.report import report
 from oracle_bench.run import reevaluate, run
 

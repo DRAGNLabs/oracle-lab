@@ -13,7 +13,6 @@ jobs:
   - config: ../initial-nex/sphinx.yaml
 
 execution:
-  concurrency: 1
   continue_on_error: true
 
 output: ../../batches

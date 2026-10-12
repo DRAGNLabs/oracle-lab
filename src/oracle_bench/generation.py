@@ -9,19 +9,24 @@ rather than silently dropped.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path, PurePosixPath
-from time import sleep
 
 from docker import DockerClient
 
 from oracle_bench.config import RunConfig, repo_path
 from oracle_bench.container.sandbox import Profile, Sandbox, open_sandbox
 from oracle_bench.harnesses import generate
-from oracle_bench.harnesses.retry import RETRY_DELAYS_SECONDS, is_transient_failure
-from oracle_bench.io import archive_files, digest, read_json, write_json
+from oracle_bench.harnesses.retry import with_retries
+from oracle_bench.io import archive_files, digest, read_json
 from oracle_bench.paths import RunPaths
 from oracle_bench.repository import Repository
-from oracle_bench.results import InstanceRecord
+from oracle_bench.results import (
+    InstanceRecord,
+    SubmissionFile,
+    SubmissionManifest,
+    write_result,
+)
 
 
 def generate_submission(
@@ -30,51 +35,32 @@ def generate_submission(
     image: str,
     instance: InstanceRecord,
     paths: RunPaths,
-) -> dict:
+) -> SubmissionManifest:
     """Run generation in a fresh checkout, retrying transient provider failures."""
-    for retry_delay in (*RETRY_DELAYS_SECONDS, None):
-        result, submission = _generation_attempt(
-            client,
-            config,
-            image,
-            instance,
-            paths,
-            retry_available=retry_delay is not None,
-        )
-        if retry_delay is None or not is_transient_failure(result):
-            assert submission is not None
-            return submission
 
+    def attempt(
+        will_retry: Callable[[dict], bool],
+    ) -> tuple[dict, SubmissionManifest | None]:
+        log = paths.generation / "setup.log"
+        with open_sandbox(client, image, config, Profile.GENERATION, log) as sandbox:
+            workspace = Repository(sandbox, config)
+            # The agent needs Git for normal inspection and diffing, but must not be able
+            # to recover hidden tests or issue details from the source repository's past.
+            workspace.prepare(instance.base_commit, paths.generation, sanitize_history=True)
+            before = snapshot(sandbox, paths.generation / "before.json", log)
+            baseline = workspace.baseline(paths.generation / "baseline.txt")
+            result = generate(sandbox, config, paths)
+            if will_retry(result):
+                return result, None
+            return result, capture(sandbox, config, paths, before, baseline)
+
+    def archive() -> None:
         # An interrupted agent may have left incomplete tests and repository edits.
-        # Archive its evidence and discard its container before the next attempt.
         archive_files(list(paths.generation.iterdir()), paths.generation_history)
-        sleep(retry_delay)
 
-    raise AssertionError("generation retry loop did not return")
-
-
-def _generation_attempt(
-    client: DockerClient,
-    config: RunConfig,
-    image: str,
-    instance: InstanceRecord,
-    paths: RunPaths,
-    *,
-    retry_available: bool,
-) -> tuple[dict, dict | None]:
-    """Run and capture one generation attempt in its own disposable container."""
-    log = paths.generation / "setup.log"
-    with open_sandbox(client, image, config, Profile.GENERATION, log) as sandbox:
-        workspace = Repository(sandbox, config)
-        # The agent needs Git for normal inspection and diffing, but must not be able
-        # to recover hidden tests or issue details from the source repository's past.
-        workspace.prepare(instance.base_commit, paths.generation, sanitize_history=True)
-        before = snapshot(sandbox, paths.generation / "before.json", log)
-        baseline = workspace.baseline(paths.generation / "baseline.txt")
-        result = generate(sandbox, config, paths)
-        if retry_available and is_transient_failure(result):
-            return result, None
-        return result, capture(sandbox, config, paths, before, baseline)
+    submission = with_retries(attempt, archive)
+    assert submission is not None
+    return submission
 
 
 def changed_files(before: dict, after: dict, generated_dir: str) -> tuple[list[str], list[str]]:
@@ -112,7 +98,7 @@ def snapshot(sandbox: Sandbox, target: Path, log: Path) -> dict:
 
 def capture(
     sandbox: Sandbox, config: RunConfig, paths: RunPaths, before: dict, baseline: str
-) -> dict:
+) -> SubmissionManifest:
     runtime = config.require_runtime()
     log = paths.generation / "capture.log"
     after = snapshot(sandbox, paths.generation / "after.json", log)
@@ -140,30 +126,35 @@ def capture(
         paths.generation / "workspace.diff",
         required=False,
     )
-    files = {}
+    files: dict[str, SubmissionFile] = {}
     for name in allowed:
         target = generated / "files" / name
         sandbox.download(runtime.workdir + "/" + name, target)
         # Copy only regular files with the exact bytes measured in the final snapshot.
         if target.is_symlink() or digest(target.read_bytes()) != after[name]["sha256"]:
             raise RuntimeError(f"Artifact changed during capture: {name}")
-        files[name] = {"sha256": after[name]["sha256"], "mode": after[name]["mode"]}
-    manifest = {
-        "files": files,
-        "forbidden_changes": forbidden,
-        "compliant": not forbidden,
-        "empty": not files,
-        "sha256": digest(json.dumps(files, sort_keys=True).encode()),
-    }
-    write_json(generated / "manifest.json", manifest)
+        files[name] = SubmissionFile(sha256=after[name]["sha256"], mode=after[name]["mode"])
+    manifest = SubmissionManifest(
+        files=files,
+        forbidden_changes=forbidden,
+        compliant=not forbidden,
+        empty=not files,
+        sha256=_files_digest(files),
+    )
+    write_result(generated / "manifest.json", manifest)
     return manifest
 
 
-def verify_bundle(paths: RunPaths) -> dict:
+def _files_digest(files: dict[str, SubmissionFile]) -> str:
+    plain = {name: entry.model_dump() for name, entry in files.items()}
+    return digest(json.dumps(plain, sort_keys=True).encode())
+
+
+def verify_bundle(paths: RunPaths) -> SubmissionManifest:
     """Validate the external bundle before transferring it to either code version."""
     generated = paths.submission
-    manifest = read_json(generated / "manifest.json")
-    if digest(json.dumps(manifest["files"], sort_keys=True).encode()) != manifest["sha256"]:
+    manifest = SubmissionManifest.model_validate(read_json(generated / "manifest.json"))
+    if _files_digest(manifest.files) != manifest.sha256:
         raise ValueError("Generated manifest checksum mismatch")
     root = generated / "files"
     entries = {
@@ -171,10 +162,10 @@ def verify_bundle(paths: RunPaths) -> dict:
         for path in root.rglob("*")
         if path.is_symlink() or not path.is_dir()
     }
-    if entries != set(manifest["files"]):
+    if entries != set(manifest.files):
         raise ValueError("Generated bundle contains missing or unmanifested files")
-    for name, info in manifest["files"].items():
+    for name, info in manifest.files.items():
         path = root / repo_path(name)
-        if path.is_symlink() or not path.is_file() or digest(path.read_bytes()) != info["sha256"]:
+        if path.is_symlink() or not path.is_file() or digest(path.read_bytes()) != info.sha256:
             raise ValueError(f"Generated artifact checksum mismatch: {name}")
     return manifest

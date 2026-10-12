@@ -1,29 +1,22 @@
-import json
-from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
-from fixtures import detecting_result, instance_record
+from fixtures import RUN_CONFIG, detecting_result, instance_record, run_config, write_submission
 
-from oracle_bench.config import JudgeConfig, RuntimeConfig, load_config
+from oracle_bench.config import JudgeConfig
 from oracle_bench.container.sandbox import CommandResult
-from oracle_bench.io import digest, read_json, write_json
+from oracle_bench.generation import verify_bundle
+from oracle_bench.io import read_json, write_json
 from oracle_bench.judge.workspace import JUDGE_ROOT, build_judge_workspace
 from oracle_bench.paths import RunPaths
 from oracle_bench.results import read_evaluation_result
 
-SAMPLE = Path(__file__).parents[1] / "configs/smoke.yaml"
+SAMPLE = RUN_CONFIG
 
 
 def prepared_run(tmp_path):
     paths = RunPaths.create(tmp_path)
-    config = load_config(SAMPLE)
-    config.runtime = RuntimeConfig(
-        image="example/runtime",
-        source_roots=["package"],
-        import_modules=["package"],
-        existing_test_globs=["tests"],
-    )
+    config = run_config("package", image="example/runtime")
     config.judge = JudgeConfig(
         rubric="rubric.md",
         instructions="instructions.md",
@@ -38,25 +31,10 @@ def prepared_run(tmp_path):
     (paths.ground_truth / "fix.patch").write_text(fix)
     (paths.generation / "session.log").write_text("agent session\n")
     (paths.generation / "workspace.diff").write_text("generated diff\n")
-    generated = paths.submission / "files/oracle_tests/test_generated.py"
-    generated.parent.mkdir(parents=True)
-    generated.write_text("def test_generated():\n    assert True\n")
-    files = {
-        "oracle_tests/test_generated.py": {
-            "sha256": digest(generated.read_bytes()),
-            "mode": 0o644,
-        }
-    }
-    write_json(
-        paths.submission / "manifest.json",
-        {
-            "files": files,
-            "forbidden_changes": [],
-            "compliant": True,
-            "empty": False,
-            "sha256": digest(json.dumps(files, sort_keys=True).encode()),
-        },
+    manifest = write_submission(
+        paths, {"oracle_tests/test_generated.py": "def test_generated():\n    assert True\n"}
     )
+    files = {name: entry.model_dump() for name, entry in manifest.files.items()}
     write_json(
         paths.results,
         detecting_result(
@@ -129,7 +107,9 @@ def test_workspace_exposes_complete_hashed_bundle_and_identical_tests(tmp_path):
     config, paths, instance, files, evaluation = prepared_run(tmp_path)
     sandbox = fake_sandbox(files)
 
-    spec = build_judge_workspace(sandbox, config, paths, "example/runtime", instance, evaluation)
+    spec = build_judge_workspace(
+        sandbox, config, paths, "example/runtime", instance, evaluation, verify_bundle(paths)
+    )
 
     assert spec.workspace_method == "git_worktree"
     assert spec.prepared_image.image_id == "sha256:" + "1" * 64
@@ -161,7 +141,9 @@ def test_workspace_falls_back_to_explicit_repository_copies(tmp_path):
     config, paths, instance, files, evaluation = prepared_run(tmp_path)
     sandbox = fake_sandbox(files, worktrees=False)
 
-    spec = build_judge_workspace(sandbox, config, paths, "example/runtime", instance, evaluation)
+    spec = build_judge_workspace(
+        sandbox, config, paths, "example/runtime", instance, evaluation, verify_bundle(paths)
+    )
 
     assert spec.workspace_method == "directory_copy"
     assert all("copy-views" in command for command in spec.reconstruction_commands)
@@ -171,24 +153,25 @@ def test_workspace_reconstruction_manifest_is_deterministic(tmp_path):
     config, paths, instance, files, evaluation = prepared_run(tmp_path)
 
     first = build_judge_workspace(
-        fake_sandbox(files), config, paths, "example/runtime", instance, evaluation
+        fake_sandbox(files),
+        config,
+        paths,
+        "example/runtime",
+        instance,
+        evaluation,
+        verify_bundle(paths),
     )
     second = build_judge_workspace(
-        fake_sandbox(files), config, paths, "example/runtime", instance, evaluation
+        fake_sandbox(files),
+        config,
+        paths,
+        "example/runtime",
+        instance,
+        evaluation,
+        verify_bundle(paths),
     )
 
     assert first == second
-
-
-def test_workspace_rejects_tampered_submission_before_container_work(tmp_path):
-    config, paths, instance, _, evaluation = prepared_run(tmp_path)
-    (paths.submission / "files/oracle_tests/test_generated.py").write_text("tampered")
-    sandbox = Mock()
-
-    with pytest.raises(ValueError, match="checksum"):
-        build_judge_workspace(sandbox, config, paths, "example/runtime", instance, evaluation)
-
-    sandbox.run.assert_not_called()
 
 
 def test_workspace_reports_missing_evaluation_evidence(tmp_path):
@@ -197,5 +180,11 @@ def test_workspace_reports_missing_evaluation_evidence(tmp_path):
 
     with pytest.raises(FileNotFoundError, match="golden/tests.json"):
         build_judge_workspace(
-            fake_sandbox(files), config, paths, "example/runtime", instance, evaluation
+            fake_sandbox(files),
+            config,
+            paths,
+            "example/runtime",
+            instance,
+            evaluation,
+            verify_bundle(paths),
         )

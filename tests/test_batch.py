@@ -331,3 +331,25 @@ def test_every_judge_label_is_counted_independently():
         assert set(aggregation["label_counts"][facet]) == {
             value if value is not None else "null" for value in values
         }
+
+
+def test_a_failing_summary_does_not_hide_an_interrupted_job(tmp_path, monkeypatch):
+    (tmp_path / "prompt.md").write_text("Generate tests")
+    write_run_config(tmp_path / "one.yaml", "owner__one-1")
+    manifest = tmp_path / "batch.yaml"
+    write_batch_config(manifest, ["one.yaml"])
+
+    def broken_summary(*args):
+        raise ValueError("saved run does not validate")
+
+    def interrupted(config):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("oracle_bench.batch.write_summary", broken_summary)
+
+    with pytest.raises(KeyboardInterrupt) as error:
+        run_batch(manifest, run_one=interrupted)
+
+    assert error.value.__notes__ == ["The batch summary could not be updated."]
+    (batch_dir,) = (tmp_path / "batches").iterdir()
+    assert read_json(batch_dir / "status.json") == {"state": "interrupted"}

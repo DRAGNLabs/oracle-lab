@@ -11,7 +11,12 @@ def test_parse_trace_accumulates_usage_and_final_text(tmp_path):
             "type": "step_finish",
             "part": {
                 "reason": "tool-calls",
-                "tokens": {"input": 10, "output": 2, "reasoning": 1},
+                "tokens": {
+                    "input": 10,
+                    "output": 2,
+                    "reasoning": 1,
+                    "cache": {"read": 100, "write": 5},
+                },
             },
         },
         {"type": "text", "part": {"text": "done"}},
@@ -19,7 +24,12 @@ def test_parse_trace_accumulates_usage_and_final_text(tmp_path):
             "type": "step_finish",
             "part": {
                 "reason": "stop",
-                "tokens": {"input": 20, "output": 3, "reasoning": 2},
+                "tokens": {
+                    "input": 20,
+                    "output": 3,
+                    "reasoning": 2,
+                    "cache": {"read": 200, "write": 0},
+                },
             },
         },
     ]
@@ -28,11 +38,13 @@ def test_parse_trace_accumulates_usage_and_final_text(tmp_path):
     result = parse_trace(trace)
 
     assert result["turn_completed"]
-    assert result["usage"] == {
-        "input_tokens": 30,
-        "output_tokens": 5,
-        "reasoning_tokens": 3,
-    }
+    usage = result["usage"]
+    # OpenCode counts cache reads, cache writes and reasoning apart; they are added back.
+    assert usage["input_tokens"] == 30 + 300 + 5
+    assert usage["cached_input_tokens"] == 300
+    assert usage["output_tokens"] == 5 + 3
+    assert usage["reasoning_tokens"] == 3
+    assert len(usage["raw_usage"]["steps"]) == 2
     assert result["final_text"] == "done"
 
 

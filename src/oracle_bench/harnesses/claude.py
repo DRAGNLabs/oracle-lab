@@ -11,6 +11,7 @@ from oracle_bench.harnesses.launch import (
     AgentTurnRequest,
     run_agent_turn,
 )
+from oracle_bench.results import Usage
 
 
 def parse_trace(path: Path) -> dict:
@@ -43,11 +44,27 @@ def parse_trace(path: Path) -> dict:
     return {
         "turn_completed": completed,
         "turn_failed": bool(result and not completed),
-        "usage": result.get("usage") if result else None,
+        "usage": _usage(result.get("usage")) if result else None,
         "errors": errors,
         "unparsed_trace_lines": malformed,
         "final_text": result.get("result", "") if result else "",
     }
+
+
+def _usage(raw: dict | None) -> dict | None:
+    if not raw:
+        return None
+    # Claude's input_tokens leaves out the prompt tokens read from or written to cache.
+    cached = raw.get("cache_read_input_tokens", 0)
+    return Usage(
+        input_tokens=raw.get("input_tokens", 0)
+        + cached
+        + raw.get("cache_creation_input_tokens", 0),
+        cached_input_tokens=cached,
+        output_tokens=raw.get("output_tokens", 0),
+        reasoning_tokens=(raw.get("output_tokens_details") or {}).get("thinking_tokens"),
+        raw_usage=raw,
+    ).model_dump()
 
 
 def run_turn(sandbox: Sandbox, request: AgentTurnRequest) -> dict:

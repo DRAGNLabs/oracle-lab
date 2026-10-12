@@ -129,6 +129,18 @@ class PairedOutcome(ArtifactModel):
     golden_failure: dict | None = None
 
 
+class Usage(ArtifactModel):
+    """Token counts with one meaning for every harness. `raw_usage` is the CLI's own."""
+
+    # Every prompt token, read from cache or not.
+    input_tokens: int
+    cached_input_tokens: int
+    # Every generated token, reasoning included.
+    output_tokens: int
+    reasoning_tokens: int | None
+    raw_usage: dict
+
+
 class HarnessResult(ArtifactModel):
     """A harness's own report. Adapters add their own trace fields."""
 
@@ -136,7 +148,7 @@ class HarnessResult(ArtifactModel):
 
     status: str
     duration_seconds: float | None = None
-    usage: dict | None = None
+    usage: Usage | None = None
     errors: list[dict] = Field(default_factory=list)
 
 

@@ -1,6 +1,7 @@
 # Oracle Bench cleanup review
 
-2026-09-30, branch `cleanup` at `1d6ff8f`. Nothing here is changed yet.
+2026-09-30, branch `cleanup` at `1d6ff8f`. E4, E6, E7 and E8 are done and removed;
+the remaining IDs keep their original numbers.
 
 Findings have IDs so we can work through them one at a time:
 
@@ -30,22 +31,26 @@ function above gets named.
 - `pytest-dev__pytest-10051`, which is in the expanded-validation batch, gets
   `src/_pytest/logging.py (clear, reset)`. `LogCaptureHandler.reset` is
   unchanged. The repair adds `LogCaptureHandler.clear` below it.
-- Across Verified, **31 of 488** targets name an unchanged definition this way.
-  Examples: `django__django-11087`, `-13279`, `-13449`, `-14631`.
+- Across the 192 supported Verified instances that get a target, **9** name an
+  unchanged definition this way. Examples: `pylint-dev__pylint-8898` names
+  `_check_csv` when the repair adds `_check_regexp_csv` below it;
+  `scikit-learn__scikit-learn-13439` names `_iter`.
 
 **Effect:** the agent is pointed at code the bug is not in.
 
 ### E2. Most target names are bare and ambiguous
 
-- 846 of the 897 symbols in Verified targets are bare names without a class.
-- 113 of them are bare dunder methods, like `__init__` or `__repr__`.
-- 21 instances name a bare `__init__`. In a file with several classes, that does
+Counts are over the 192 supported Verified instances that get a target.
+
+- 326 of the 342 symbols are bare names without a class.
+- 30 of them are bare dunder methods, like `__init__` or `__repr__`.
+- 13 instances name a bare `__init__`. In a file with several classes, that does
   not say which one.
 - Whether a name gets its class depends on whether the hunk happens to show the
   `class` line. So target precision varies from instance to instance for reasons
   unrelated to the task.
-- Example: `django__django-16560` lists both `CheckConstraint.__init__` and a
-  bare `__init__` for the same file.
+- Example: `pydata__xarray-3095` lists both `PandasIndexAdapter.__init__` and a
+  bare `__init__` for the same file. Three instances mix the two forms this way.
 
 ### E3. Other ways the diff-text heuristic goes wrong
 
@@ -60,7 +65,7 @@ These are rare in Verified today. Each gives a wrong or empty symbol.
 | Deleted file (`+++ /dev/null`) after another file | the deleted names, credited to the *previous* file | the deleted file |
 | Non-Python file under a source root | included as a target | excluded |
 
-The probe script is `probe_target.py`, in this session's scratchpad directory.
+The original probe script lived in a session scratchpad and is gone.
 
 **Recommendation for E1–E3:** get the target from the buggy file's abstract
 syntax tree (AST) instead of from diff text.
@@ -77,32 +82,11 @@ The cost: the target can only be computed after the build stage, so prompt
 rendering moves out of resolve.
 
 **Cheaper alternative:** fix only E1. Do not fall back to the header inside a
-definition the repair adds. Measured on Verified, that corrects all 31 targets.
-It leaves E2 and E3 as they are.
+definition the repair adds. That removes all 9 wrong names and changes no other
+target. It leaves E2 and E3 as they are.
 
 I recommend the AST route. It is about as much code as the current state machine,
 and it can be tested locally with small source fixtures.
-
-### E4. Django and SymPy look supported but can never pass the reference check
-
-**Where:** `REPOSITORY_LAYOUTS`, `src/oracle_bench/instance/swebench.py:25` and `:34`.
-
-- Both repositories are listed, but their `FAIL_TO_PASS` entries are not pytest
-  node IDs. Django uses `test_ascii_validator (auth_tests.test_validators...)`.
-  SymPy uses `test_issue_11617`.
-- The reference check passes them to pytest unchanged. It cannot reproduce a
-  fail-on-buggy/pass-on-golden test, so the run stops after the build.
-- That is 306 of 500 Verified instances (Django 231, SymPy 75). The code accepts
-  them; only `configs/expanded-validation/candidates.md` mentions the problem.
-- Pylint is the reverse case. Its IDs are pytest-style, but it has no layout.
-  `configs/initial-nex/pylint.yaml` is part of `configs/batches/initial-nex.yaml`
-  and fails at resolve every time.
-
-**Fix:**
-
-- Remove the Django and SymPy layouts, or reject reference IDs without `::` at
-  resolve, with a clear message.
-- Add a pylint layout, or drop that job.
 
 ### E5. Nothing checks that the scope and the prompt agree
 
@@ -116,57 +100,6 @@ and it can be tested locally with small source fixtures.
 
 **Fix:** at resolve, require `${test_target}` in the template exactly when scope is
 `localized`. That is a few lines plus one test.
-
-### E6. The batch detection rate counts problems with the instance against the agent
-
-- `detection_rate_attempted` (`batch/summary.py:105`) divides by every job that
-  started. That includes runs that stopped at build or at the reference check,
-  which say nothing about the agent.
-- `runs/` has 6 such runs: 3 stopped at reference, 3 at build. They were rerun on
-  resume, so the final summary does not show them. Without the resume, they would
-  have counted as attempted and not detected.
-- `matrix_detection_rate` keeps non-compliant completed evaluations in its
-  denominator, and those can never count as detected. That penalizes policy
-  violations. It may be intended, but `docs/results.md` does not say so.
-
-**Fix:**
-
-- Count runs that stopped before generation separately.
-- Use runs that reached generation as the attempted denominator.
-- State the non-compliance rule in the docs.
-
-### E7. One broken test file wipes out the whole version (decision needed)
-
-- When collection fails, pytest stops before running any test. It exits with code
-  2 and prints "Interrupted: N errors during collection".
-- The runner then marks the version `collection_error`
-  (`container/helpers/pytest_runner.py:166`).
-- `pair_results` only fills matrix cells when both versions completed
-  (`evaluation/outcomes.py:45`, `:67`).
-- So five good test files plus one that fails to import on golden earn zero
-  matrix cells.
-
-This is a scoring rule, not a bug. There are two options:
-
-- **Keep it:** the submission is one unit, and one bad file voids it.
-- **Change it:** run pytest with `--continue-on-collection-errors`, and let tests
-  that completed earn cells while the collection error stays on record. This also
-  needs a different status rule, not just the flag.
-
-### E8. Token counts mean different things for each harness
-
-`usage` is copied raw from each CLI.
-
-- Claude's `input_tokens` leaves out cache reads and writes. One saved report
-  shows 24 input tokens for a turn that read about 226k from cache.
-- Codex's `input_tokens` includes cached tokens.
-- The OpenCode adapter drops the cache counts entirely.
-
-The report's Usage table and `summary.json` still put these side by side.
-
-**Fix:** have each adapter report the same fields: `input_tokens` (all prompt
-tokens), `cached_input_tokens`, `output_tokens` and `reasoning_tokens`. Keep the
-CLI's original object as `raw_usage`.
 
 ---
 
@@ -510,24 +443,11 @@ Cut it down to what a user actually sets.
 - **Sample configs.** All 43 load.
 - **Rubrics.** Every label in both rubrics matches its parser.
 
-## Decisions
-
-- **E7:** keep the other tests. Run pytest with `--continue-on-collection-errors`.
-  Tests that ran on both versions earn cells; the broken file stays recorded as a
-  collection error, outside the matrix.
-- **E6a:** `detection_rate_attempted` is removed. `matrix_detection_rate` is the
-  only detection rate; its denominator is runs whose buggy and golden evaluations
-  both completed. Runs that stop early are ordinary incomplete runs.
-- **E6b:** non-compliant submissions stay in the `matrix_detection_rate`
-  denominator as not detected. Document the rule.
-
 ## Suggested order
 
-1. **Decisions:** E7 (the scoring rule) and E6 (the denominators).
-2. **Small fixes that prevent bad runs:** E4 and E5.
-3. **Safety-net tests on current behavior,** before any refactor: T1–T5.
-4. **Target rewrite:** E1–E3, together with T6.
-5. **Deduplication:** C1–C6. Then C7–C10.
-6. **Usage normalization:** E8.
-7. **Docs last,** once the code settles. The D1 corrections can go in at any
+1. **Small fix that prevents bad runs:** E5.
+2. **Safety-net tests on current behavior,** before any refactor: T1–T5.
+3. **Target rewrite:** E1–E3, together with T6.
+4. **Deduplication:** C1–C6. Then C7–C10.
+5. **Docs last,** once the code settles. The D1 corrections can go in at any
    time.

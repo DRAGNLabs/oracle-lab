@@ -11,6 +11,7 @@ from oracle_bench.harnesses.launch import (
     AgentTurnRequest,
     run_agent_turn,
 )
+from oracle_bench.results import Usage
 
 # Codex writes its final response to a file instead of the JSON event stream.
 LAST_MESSAGE_PATH = "/tmp/oracle-agent/final.txt"
@@ -35,7 +36,7 @@ def parse_trace(path: Path) -> dict:
                 malformed += 1
                 continue
             if event.get("type") == "turn.completed":
-                usage = event.get("usage")
+                usage = _usage(event.get("usage"))
                 completed = True
                 failed = False
             if event.get("type") == "turn.failed":
@@ -50,6 +51,19 @@ def parse_trace(path: Path) -> dict:
         "turn_completed": completed,
         "turn_failed": failed,
     }
+
+
+def _usage(raw: dict | None) -> dict | None:
+    if not raw:
+        return None
+    # Codex's input_tokens already counts the cached prompt tokens.
+    return Usage(
+        input_tokens=raw.get("input_tokens", 0),
+        cached_input_tokens=raw.get("cached_input_tokens", 0),
+        output_tokens=raw.get("output_tokens", 0),
+        reasoning_tokens=raw.get("reasoning_output_tokens"),
+        raw_usage=raw,
+    ).model_dump()
 
 
 def run_turn(sandbox: Sandbox, request: AgentTurnRequest) -> dict:

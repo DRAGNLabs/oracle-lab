@@ -22,6 +22,7 @@ from oracle_bench.results import (
     EvaluationResult,
     HarnessResult,
     MatrixCellName,
+    Usage,
     read_evaluation_result,
     read_paired_result,
     read_run_cost,
@@ -284,11 +285,12 @@ def _usage_lines(results: EvaluationResult, judge_attempt: JudgeAttempt | None) 
     return [
         "## Usage",
         "",
-        "| Stage | Wall time | Input tokens | Output tokens |",
-        "|---|---:|---:|---:|",
+        "| Stage | Wall time | Input tokens | Cached input tokens | Output tokens |",
+        "|---|---:|---:|---:|---:|",
         *[
             f"| {stage} | {_seconds(result.duration_seconds)} | "
             f"{_tokens(result.usage, 'input_tokens')} | "
+            f"{_tokens(result.usage, 'cached_input_tokens')} | "
             f"{_tokens(result.usage, 'output_tokens')} |"
             for stage, result in rows
         ],
@@ -300,9 +302,8 @@ def _seconds(value: float | None) -> str:
     return "—" if value is None else f"{value:.0f} s"
 
 
-def _tokens(usage: dict | None, key: str) -> str:
-    value = (usage or {}).get(key)
-    return "—" if value is None else f"{value:,}"
+def _tokens(usage: Usage | None, key: str) -> str:
+    return "—" if usage is None else f"{getattr(usage, key):,}"
 
 
 def _cost(path: Path) -> str:

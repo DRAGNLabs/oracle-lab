@@ -206,7 +206,8 @@ The human-readable summary, in this order:
   causes per version.
 - Judgment: the labels and rationale, or the judge's non-completed state.
 - Task classification: the central classification for the problem.
-- Usage: wall time and input and output tokens for generation and judge.
+- Usage: wall time and input, cached input, and output tokens for generation
+  and judge.
 - Files: links to the artifacts that exist, grouped by stage, including the
   private ground truth. Ground truth is written on the host and never mounted or
   copied into the generation container.
@@ -441,10 +442,21 @@ Normalized generation metadata.
 | `turn_completed`, `turn_failed` | Terminal event flags parsed from the trace |
 | `errors` | Structured errors extracted from the trace |
 | `unparsed_trace_lines` | Lines that were not valid JSON |
-| `usage` | Provider/CLI token data, or null |
+| `usage` | Token counts with one meaning for every harness, or null |
 
-Provider usage structures are semi-structured and may change between CLI
-versions.
+`usage` has the same fields for every harness:
+
+| Field | Meaning |
+|---|---|
+| `input_tokens` | Every prompt token, read from cache or not |
+| `cached_input_tokens` | Prompt tokens read from cache |
+| `output_tokens` | Every generated token, reasoning included |
+| `reasoning_tokens` | Reasoning tokens, or null when the CLI does not report them |
+| `raw_usage` | The CLI's own usage object. OpenCode reports usage per step, so this is `{"steps": [...]}` |
+
+Each CLI counts tokens differently. Claude Code and OpenCode leave cached prompt
+tokens out of their input count, and OpenCode leaves reasoning out of its output
+count. Each adapter adds them back.
 
 ### Agent logs
 

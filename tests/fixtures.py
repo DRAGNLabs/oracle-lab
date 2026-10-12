@@ -87,12 +87,25 @@ def completed_judgment(**changes) -> dict:
     return judgment
 
 
+def usage(**changes) -> dict:
+    """Normalized token counts, as every harness adapter reports them."""
+    counts = {
+        "input_tokens": 100,
+        "cached_input_tokens": 0,
+        "output_tokens": 20,
+        "reasoning_tokens": None,
+        "raw_usage": {},
+    }
+    counts.update(changes)
+    return counts
+
+
 def judge_attempt(**changes) -> dict:
     """A saved judge turn: harness result plus the provenance the dispatcher adds."""
     attempt = {
         "status": "completed",
         "duration_seconds": 4.5,
-        "usage": {"input_tokens": 100, "output_tokens": 20},
+        "usage": usage(),
         "errors": [],
         "harness": "codex",
         "provider": "openai",

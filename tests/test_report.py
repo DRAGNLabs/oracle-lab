@@ -2,7 +2,7 @@ import json
 import re
 
 import pytest
-from fixtures import judge_attempt
+from fixtures import judge_attempt, usage
 
 from oracle_bench.io import write_json
 from oracle_bench.paths import RunPaths
@@ -90,7 +90,7 @@ def report_results(**changes):
         "agent": {
             "status": "completed",
             "duration_seconds": 4,
-            "usage": {"input_tokens": 12},
+            "usage": usage(input_tokens=12),
         },
         "buggy_status": "completed",
         "golden_status": "completed",
@@ -141,7 +141,7 @@ def test_report_renders_completed_judge_with_provenance_and_supporting_files(tmp
             model="judge-model",
             harness_version="2.1.263",
             duration_seconds=3,
-            usage={"input_tokens": 20},
+            usage=usage(input_tokens=20),
         ),
     )
 
@@ -153,8 +153,8 @@ def test_report_renders_completed_judge_with_provenance_and_supporting_files(tmp
     )
     assert "| yes | correct_assertion | — | no |" in text
     assert "> The generated assertion reaches the issue" in text
-    assert "| Generate | 4 s | 12 | — |" in text
-    assert "| Judge | 3 s | 20 | — |" in text
+    assert "| Generate | 4 s | 12 | 0 | 20 |" in text
+    assert "| Judge | 3 s | 20 | 0 | 20 |" in text
     assert "[workspace](judge/workspace-spec.json)" in text
     for target in re.findall(r"\[[^]]+\]\(([^)]+)\)", text):
         assert (tmp_path / target).is_file(), target
@@ -316,7 +316,7 @@ def test_report_renders_central_task_classification_and_provenance(tmp_path, mon
         {
             "status": "completed",
             "duration_seconds": 2,
-            "usage": {"input_tokens": 10},
+            "usage": usage(input_tokens=10),
             "errors": [],
             "harness": "codex",
             "provider": "openrouter",

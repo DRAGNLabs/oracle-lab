@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import pytest
 import yaml
 from docker.errors import DockerException, ImageNotFound
-from fixtures import evaluation_result, instance_record
+from fixtures import evaluation_result, instance_record, usage
 
 from oracle_bench.config import JudgeConfig, RuntimeConfig, load_config
 from oracle_bench.harnesses import claude
@@ -99,7 +99,7 @@ def install_fakes(monkeypatch, final_text=VALID_JUDGMENT, status="completed"):
         return {
             "status": status,
             "duration_seconds": 2.5,
-            "usage": {"input_tokens": 10, "output_tokens": 5},
+            "usage": usage(),
             "errors": [] if status == "completed" else [{"message": "harness failed"}],
         }
 
@@ -167,7 +167,7 @@ def test_transient_harness_failure_is_archived_and_retried(tmp_path, monkeypatch
         return {
             "status": "completed",
             "duration_seconds": 2,
-            "usage": {"input_tokens": 10, "output_tokens": 5},
+            "usage": usage(),
             "errors": [],
         }
 

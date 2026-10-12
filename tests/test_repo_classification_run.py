@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
-from fixtures import instance_record
+from fixtures import instance_record, usage
 
 from oracle_bench.config import ClassificationConfig
 from oracle_bench.io import read_json, write_json
@@ -113,7 +113,7 @@ def install_stage_fakes(monkeypatch, final=VALID_CLASSIFICATION, status="complet
         result = {
             "status": status,
             "duration_seconds": 2.5,
-            "usage": {"input_tokens": 10, "output_tokens": 5},
+            "usage": usage(),
             "errors": [] if status == "completed" else [{"message": "harness failed"}],
             "harness": "codex",
             "provider": "openrouter",

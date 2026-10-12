@@ -32,11 +32,24 @@ def test_reevaluation_archives_results_but_preserves_generated_tests(tmp_path):
     assert (paths.submission / "manifest.json").read_text() == "keep"
 
 
-def test_trace_usage_is_reported(tmp_path):
+def test_codex_usage_already_counts_cached_prompt_tokens(tmp_path):
+    raw = {
+        "input_tokens": 103067,
+        "cached_input_tokens": 82068,
+        "cache_write_input_tokens": 20523,
+        "output_tokens": 3728,
+        "reasoning_output_tokens": 852,
+    }
     path = tmp_path / "trace.jsonl"
-    path.write_text('not-json\n{"type":"turn.completed","usage":{"input_tokens":12}}\n')
+    path.write_text("not-json\n" + json.dumps({"type": "turn.completed", "usage": raw}) + "\n")
     result = parse_trace(path)
-    assert result["usage"] == {"input_tokens": 12}
+    assert result["usage"] == {
+        "input_tokens": 103067,
+        "cached_input_tokens": 82068,
+        "output_tokens": 3728,
+        "reasoning_tokens": 852,
+        "raw_usage": raw,
+    }
     assert result["unparsed_trace_lines"] == 1
 
 

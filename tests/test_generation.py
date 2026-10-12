@@ -2,12 +2,14 @@ import json
 import subprocess
 import sys
 from contextlib import contextmanager
+from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
 from fixtures import HELPERS
 
-from oracle_bench.generation import changed_files, generate_submission, verify_bundle
+from oracle_bench.config import RuntimeConfig, load_config
+from oracle_bench.generation import capture, changed_files, generate_submission, verify_bundle
 from oracle_bench.io import digest, read_json, write_json
 from oracle_bench.paths import RunPaths
 
@@ -172,3 +174,101 @@ def test_capture_diff_includes_agent_commits_and_untracked_files(tmp_path):
     )
     diff = output.read_text()
     assert "-old" in diff and "+new" in diff and "+def test_new(): pass" in diff
+
+
+class CaptureSandbox:
+    """Serves the final workspace snapshot, the diff, and each file's bytes."""
+
+    helpers = "/opt/oracle-bench/container-helpers"
+
+    def __init__(self, runtime, after: dict, contents: dict[str, bytes], diff: str | None = "d"):
+        self.runtime = runtime
+        self.after = after
+        self.contents = contents
+        self.diff = diff
+        self.downloads = []
+
+    def run(self, argv, **kwargs):
+        pass
+
+    def download(self, source, destination, required=True):
+        self.downloads.append(source)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if source == "/tmp/oracle-snapshot.json":
+            write_json(destination, self.after)
+        elif source == "/tmp/oracle-workspace.diff":
+            if self.diff is None:
+                return False
+            destination.write_text(self.diff)
+        else:
+            destination.write_bytes(self.contents[source.removeprefix("/testbed/")])
+        return True
+
+
+def capture_config():
+    config = load_config(Path(__file__).parents[1] / "configs/smoke.yaml")
+    config.runtime = RuntimeConfig(
+        image="example/image",
+        source_roots=["app"],
+        import_modules=["app"],
+        existing_test_globs=["tests"],
+    )
+    return config
+
+
+def run_capture(tmp_path, after, contents, before=None, diff="d"):
+    config = capture_config()
+    paths = RunPaths.create(tmp_path)
+    sandbox = CaptureSandbox(config.runtime, after, contents, diff)
+    manifest = capture(sandbox, config, paths, before or {}, "baseline")
+    return manifest, sandbox, paths
+
+
+def test_capture_downloads_new_tests_and_writes_a_manifest_of_their_hashes(tmp_path):
+    test = b"def test_new(): assert True\n"
+    after = {"oracle_tests/test_new.py": entry(test)}
+
+    manifest, sandbox, paths = run_capture(tmp_path, after, {"oracle_tests/test_new.py": test})
+
+    assert "/testbed/oracle_tests/test_new.py" in sandbox.downloads
+    assert (paths.submission / "files/oracle_tests/test_new.py").read_bytes() == test
+    files = {"oracle_tests/test_new.py": {"sha256": digest(test), "mode": 0o644}}
+    assert manifest == {
+        "files": files,
+        "forbidden_changes": [],
+        "compliant": True,
+        "empty": False,
+        "sha256": digest(json.dumps(files, sort_keys=True).encode()),
+    }
+    assert read_json(paths.submission / "manifest.json") == manifest
+    assert (paths.generation / "workspace.diff").read_text() == "d"
+    # The bundle passes the same check evaluation runs.
+    assert verify_bundle(paths) == manifest
+
+
+def test_capture_records_forbidden_edits_without_downloading_them(tmp_path):
+    before = {"app/core.py": entry(b"old")}
+    after = {"app/core.py": entry(b"new"), "oracle_tests/test_new.py": entry(b"t")}
+
+    manifest, sandbox, _ = run_capture(
+        tmp_path, after, {"oracle_tests/test_new.py": b"t"}, before=before
+    )
+
+    assert manifest["forbidden_changes"] == ["app/core.py"]
+    assert not manifest["compliant"]
+    assert "/testbed/app/core.py" not in sandbox.downloads
+
+
+def test_a_file_that_changes_during_capture_is_rejected(tmp_path):
+    after = {"oracle_tests/test_new.py": entry(b"as snapshotted")}
+
+    with pytest.raises(RuntimeError, match="changed during capture: oracle_tests/test_new.py"):
+        run_capture(tmp_path, after, {"oracle_tests/test_new.py": b"rewritten since"})
+
+
+def test_no_new_tests_is_an_empty_compliant_submission(tmp_path):
+    manifest, _, paths = run_capture(tmp_path, {}, {}, diff=None)
+
+    assert manifest["empty"] and manifest["compliant"]
+    assert list((paths.submission / "files").iterdir()) == []
+    assert not (paths.generation / "workspace.diff").exists()

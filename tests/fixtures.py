@@ -40,6 +40,17 @@ def instance_record(**changes) -> InstanceRecord:
     return InstanceRecord.model_validate(record)
 
 
+def localized_target(**changes) -> dict:
+    """A saved localized target naming one changed method."""
+    target = {
+        "level": "function",
+        "files": [{"path": "package/core.py", "names": ["Client.send"], "lines": 12}],
+        "text": "- `package/core.py`: `Client.send`",
+    }
+    target.update(changes)
+    return target
+
+
 def evaluation_result(**changes) -> dict:
     """A valid `evaluation/results.json`; tests override only what they exercise."""
     result = {

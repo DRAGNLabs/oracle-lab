@@ -47,7 +47,8 @@ runs/<run-id>/
 ├── inputs/
 │   ├── config.resolved.yaml
 │   ├── instance.json
-│   └── prompt.txt
+│   ├── prompt.txt
+│   └── target.json (localized runs only)
 ├── image-build/
 │   ├── runtime.json
 │   ├── harnesses/{harnesses.Dockerfile,package.json,package-lock.json}
@@ -359,8 +360,28 @@ reveal the defect and repair; it must not be exposed to the generation agent.
 
 The exact prompt delivered to the agent after resolving its environment
 variables. Agent-facing instructions remain in the selected prompt template.
-For localized tasks this contains the sanitized production path or enclosing
-symbol, but no private patch text, changed line numbers, or expected behavior.
+For localized tasks this contains the target from `target.json`, but no private
+patch text, changed line numbers, or expected behavior.
+
+### `inputs/target.json`
+
+The localized target: the part of the buggy repository the agent is told to test.
+Only localized runs have it. It names the existing code the golden repair
+changes, found by comparing the syntax trees of the buggy and repaired files. It
+contains no patch text or changed lines.
+
+| Field | Meaning |
+|---|---|
+| `level` | `function`, `class` or `file`: the most specific level any changed file reaches |
+| `files` | One entry per file, each with `path`, `names` and `lines` |
+| `files[].names` | Qualified functions (`Outer.method`) or classes, in file order; empty for a whole-file entry |
+| `files[].lines` | Lines the entry spans in the buggy file |
+| `text` | Exactly what replaces `${test_target}` in the prompt |
+
+The level is chosen across all changed production files. Changed existing
+functions win. Classes whose own body changed are used only when no function
+changed, and whole files only when neither did. Comment and formatting edits, and
+definitions the repair adds, never enter the target.
 
 ### `image-build/runtime.json`
 

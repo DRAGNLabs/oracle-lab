@@ -84,6 +84,27 @@ class InstanceRecord(ArtifactModel):
     original_record: dict
 
 
+class TargetFile(ArtifactModel):
+    """One file of a localized target, and what in it the agent is pointed at."""
+
+    path: str
+    # Qualified functions or classes, in file order; empty when the whole file is the target.
+    names: list[str]
+    lines: int  # buggy-file lines this entry spans
+
+
+class LocalizedTarget(ArtifactModel):
+    """The part of the buggy repository a localized run tells the agent to test.
+
+    It names the existing code the golden repair changes, so it is derived from
+    private data, but it contains no patch text or changed lines.
+    """
+
+    level: Literal["function", "class", "file"]
+    files: Annotated[list[TargetFile], Field(min_length=1)]
+    text: str  # exactly what replaces `${test_target}` in the prompt
+
+
 class TestCase(ArtifactModel):
     """One collected test as the in-container runner recorded it."""
 
@@ -218,6 +239,10 @@ class EvaluationResult(PairedResult):
 
 def read_instance_record(path: Path) -> InstanceRecord:
     return InstanceRecord.model_validate(read_json(path))
+
+
+def read_localized_target(path: Path) -> LocalizedTarget:
+    return LocalizedTarget.model_validate(read_json(path))
 
 
 def read_version_result(path: Path) -> VersionResult:

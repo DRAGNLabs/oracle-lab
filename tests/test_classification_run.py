@@ -4,17 +4,17 @@ from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
-from fixtures import instance_record
+from fixtures import context_of, instance_record, usage
 
-from oracle_bench.config import ClassificationConfig
-from oracle_bench.io import read_json, write_json
-from oracle_bench.repo_classification.contracts import OutOfScopeClassification
-from oracle_bench.repo_classification.run import (
+from oracle_bench.classification.contracts import OutOfScopeClassification
+from oracle_bench.classification.run import (
     CLASSIFICATION_ROOT,
     _classification_stage,
     build_classification_workspace,
     classify,
 )
+from oracle_bench.config import ClassificationConfig
+from oracle_bench.io import read_json, write_json
 from oracle_bench.results import write_result
 
 
@@ -102,9 +102,7 @@ def prepared_attempt(tmp_path):
 def install_stage_fakes(monkeypatch, final=VALID_CLASSIFICATION, status="completed"):
     sandbox = Mock()
 
-    @contextmanager
-    def sandbox_context(*args, **kwargs):
-        yield sandbox
+    sandbox_context = context_of(sandbox)
 
     def turn(_sandbox, request):
         assert request.prompt == request.artifact_directory.parent / "inputs/rubric.md"
@@ -113,7 +111,7 @@ def install_stage_fakes(monkeypatch, final=VALID_CLASSIFICATION, status="complet
         result = {
             "status": status,
             "duration_seconds": 2.5,
-            "usage": {"input_tokens": 10, "output_tokens": 5},
+            "usage": usage(),
             "errors": [] if status == "completed" else [{"message": "harness failed"}],
             "harness": "codex",
             "provider": "openrouter",
@@ -124,11 +122,9 @@ def install_stage_fakes(monkeypatch, final=VALID_CLASSIFICATION, status="complet
         write_json(request.artifact_directory / "result.json", result)
         return result
 
-    monkeypatch.setattr("oracle_bench.repo_classification.run.open_sandbox", sandbox_context)
-    monkeypatch.setattr(
-        "oracle_bench.repo_classification.run.build_classification_workspace", Mock()
-    )
-    monkeypatch.setattr("oracle_bench.repo_classification.run.run_turn", turn)
+    monkeypatch.setattr("oracle_bench.classification.run.open_sandbox", sandbox_context)
+    monkeypatch.setattr("oracle_bench.classification.run.build_classification_workspace", Mock())
+    monkeypatch.setattr("oracle_bench.classification.run.run_turn", turn)
     return sandbox, turn
 
 
@@ -154,7 +150,7 @@ def test_invalid_model_output_is_preserved_without_retry(tmp_path, monkeypatch):
     attempt, instance = prepared_attempt(tmp_path)
     _, fake_turn = install_stage_fakes(monkeypatch, final="explanation before JSON")
     turn = Mock(wraps=fake_turn)
-    monkeypatch.setattr("oracle_bench.repo_classification.run.run_turn", turn)
+    monkeypatch.setattr("oracle_bench.classification.run.run_turn", turn)
 
     result = _classification_stage(
         Mock(), classification_config(), attempt, "sha256:image", instance
@@ -164,6 +160,38 @@ def test_invalid_model_output_is_preserved_without_retry(tmp_path, monkeypatch):
     assert (attempt / "classification.raw.txt").read_text() == "explanation before JSON"
     assert read_json(attempt / "classification.json")["result"]["status"] == "invalid_output"
     assert turn.call_count == 1
+
+
+def test_a_transient_failure_is_retried_and_its_attempt_archived(tmp_path, monkeypatch):
+    attempt, instance = prepared_attempt(tmp_path)
+    _, turn = install_stage_fakes(monkeypatch)
+    calls = []
+
+    def flaky_turn(sandbox, request):
+        result = turn(sandbox, request)
+        calls.append(result)
+        if len(calls) == 1:
+            result = {
+                **result,
+                "status": "failed",
+                "errors": [{"message": "503 Service Unavailable"}],
+            }
+            write_json(request.artifact_directory / "result.json", result)
+        return result
+
+    monkeypatch.setattr("oracle_bench.classification.run.run_turn", flaky_turn)
+    waits = []
+    monkeypatch.setattr("oracle_bench.harnesses.retry.sleep", waits.append)
+
+    result = _classification_stage(
+        Mock(), classification_config(), attempt, "sha256:image", instance
+    )
+
+    assert result.status == "completed"
+    assert waits == [30]
+    (archived,) = (attempt / "agent-history").iterdir()
+    assert read_json(archived / "agent/result.json")["status"] == "failed"
+    assert read_json(attempt / "agent/result.json")["status"] == "completed"
 
 
 @pytest.mark.parametrize(
@@ -189,7 +217,7 @@ def test_workspace_or_transport_failure_is_saved(tmp_path, monkeypatch):
     attempt, instance = prepared_attempt(tmp_path)
     install_stage_fakes(monkeypatch)
     monkeypatch.setattr(
-        "oracle_bench.repo_classification.run.build_classification_workspace",
+        "oracle_bench.classification.run.build_classification_workspace",
         Mock(side_effect=RuntimeError("workspace failed")),
     )
 
@@ -212,7 +240,7 @@ def test_late_container_cleanup_failure_keeps_completed_classification(tmp_path,
         yield Mock()
         raise RuntimeError("cleanup failed")
 
-    monkeypatch.setattr("oracle_bench.repo_classification.run.open_sandbox", failing_cleanup)
+    monkeypatch.setattr("oracle_bench.classification.run.open_sandbox", failing_cleanup)
 
     result = _classification_stage(
         Mock(), classification_config(), attempt, "sha256:image", instance
@@ -231,18 +259,16 @@ def test_classify_resolves_builds_and_records_attempt_lifecycle(tmp_path, monkey
     instance = instance_record()
     stages = []
 
-    @contextmanager
-    def client_context():
-        yield Mock()
+    client_context = context_of(Mock())
 
     monkeypatch.setenv("OPENROUTER_API_KEY", "credential-fixture")
     monkeypatch.setattr(
-        "oracle_bench.repo_classification.run.resolve_source",
+        "oracle_bench.classification.run.resolve_source",
         lambda source: (instance, config.require_runtime()),
     )
-    monkeypatch.setattr("oracle_bench.repo_classification.run.docker_client", client_context)
+    monkeypatch.setattr("oracle_bench.classification.run.docker_client", client_context)
     monkeypatch.setattr(
-        "oracle_bench.repo_classification.run.prepare_image",
+        "oracle_bench.classification.run.prepare_image",
         lambda client, resolved, paths: "sha256:image",
     )
 
@@ -250,7 +276,7 @@ def test_classify_resolves_builds_and_records_attempt_lifecycle(tmp_path, monkey
         stages.append((image, resolved_instance.instance_id))
         return OutOfScopeClassification(task_nature="out_of_scope", rationale="Feature request.")
 
-    monkeypatch.setattr("oracle_bench.repo_classification.run._classification_stage", stage)
+    monkeypatch.setattr("oracle_bench.classification.run._classification_stage", stage)
     spent = []
 
     @contextmanager
@@ -258,7 +284,7 @@ def test_classify_resolves_builds_and_records_attempt_lifecycle(tmp_path, monkey
         spent.append(([harness.harness for harness in harnesses], path.name))
         yield
 
-    monkeypatch.setattr("oracle_bench.repo_classification.run.measure_spend", measure_spend)
+    monkeypatch.setattr("oracle_bench.classification.run.measure_spend", measure_spend)
 
     attempt = classify(config)
 
@@ -276,8 +302,8 @@ def test_missing_credential_fails_before_resolving_or_starting_docker(tmp_path, 
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     resolve = Mock()
     docker = Mock()
-    monkeypatch.setattr("oracle_bench.repo_classification.run.resolve_source", resolve)
-    monkeypatch.setattr("oracle_bench.repo_classification.run.docker_client", docker)
+    monkeypatch.setattr("oracle_bench.classification.run.resolve_source", resolve)
+    monkeypatch.setattr("oracle_bench.classification.run.docker_client", docker)
 
     with pytest.raises(RuntimeError, match="OPENROUTER_API_KEY"):
         classify(config)
@@ -294,18 +320,16 @@ def test_build_failure_records_failed_stage_in_created_attempt(tmp_path, monkeyp
     config.output = str(tmp_path / "classifications")
     instance = instance_record()
 
-    @contextmanager
-    def client_context():
-        yield Mock()
+    client_context = context_of(Mock())
 
     monkeypatch.setenv("OPENROUTER_API_KEY", "credential-fixture")
     monkeypatch.setattr(
-        "oracle_bench.repo_classification.run.resolve_source",
+        "oracle_bench.classification.run.resolve_source",
         lambda source: (instance, config.require_runtime()),
     )
-    monkeypatch.setattr("oracle_bench.repo_classification.run.docker_client", client_context)
+    monkeypatch.setattr("oracle_bench.classification.run.docker_client", client_context)
     monkeypatch.setattr(
-        "oracle_bench.repo_classification.run.prepare_image",
+        "oracle_bench.classification.run.prepare_image",
         Mock(side_effect=RuntimeError("image build failed")),
     )
 

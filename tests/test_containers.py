@@ -5,15 +5,14 @@ import json
 import subprocess
 import sys
 import tarfile
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 from docker.errors import APIError, ImageNotFound, NotFound
-from fixtures import DOCKERFILES, HELPERS
+from fixtures import DOCKERFILES, HELPERS, run_config
 
-from oracle_bench.config import HARNESS_VERSIONS, RuntimeConfig, load_config
+from oracle_bench.config import HARNESS_VERSIONS
 from oracle_bench.container.files import RedactedOutput, download, upload
 from oracle_bench.container.images import (
     build_image,
@@ -29,13 +28,7 @@ from oracle_bench.repository import Repository
 
 @pytest.fixture
 def config():
-    config = load_config(Path(__file__).parents[1] / "configs/smoke.yaml")
-    config.runtime = RuntimeConfig(
-        image="example/image:latest",
-        source_roots=["requests"],
-        import_modules=["requests"],
-        existing_test_globs=["tests"],
-    )
+    config = run_config("requests", image="example/image:latest")
     return config
 
 
@@ -146,6 +139,16 @@ def test_failed_start_is_cleaned_up_without_masking_failure(config, tmp_path):
         with open_sandbox(client, "image", config, Profile.EVALUATION, tmp_path / "log"):
             pytest.fail("start failed")
     assert "cleanup also failed" in error.value.__notes__[0]
+
+
+def test_a_container_that_cannot_be_removed_after_successful_work_is_an_error(config, tmp_path):
+    client = Mock()
+    container = client.containers.create.return_value
+    container.remove.side_effect = APIError("cleanup failed")
+
+    with pytest.raises(RuntimeError, match="Could not remove benchmark container"):
+        with open_sandbox(client, "image", config, Profile.EVALUATION, tmp_path / "log"):
+            pass
 
 
 def test_docker_client_checks_daemon_and_closes_connection(monkeypatch):

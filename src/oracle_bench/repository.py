@@ -26,11 +26,9 @@ class Repository:
         reference: bool = False,
         sanitize_history: bool = False,
     ) -> None:
-        """Restore tracked code while retaining artifacts supplied by the runtime image.
+        """Reset tracked code to the base commit, keeping the image's untracked files.
 
-        Every sandbox starts from a fresh image, so untracked files cannot come from a
-        previous agent. SWE-bench images intentionally contain ignored compiled modules
-        and editable-install metadata that ``git clean -fdx`` would destroy.
+        Those are compiled modules and install metadata, which ``git clean`` would delete.
         """
         self.sandbox.run(["git", "reset", "--hard", base_commit], timeout=self.setup_timeout)
         self.rebuild()
@@ -52,14 +50,14 @@ class Repository:
                 self.sandbox.helpers + "/prepare.py",
                 "/tmp/oracle-workspace.json",
             ],
-            timeout=self.config.limits.setup_seconds,
+            timeout=self.setup_timeout,
         )
 
     def rebuild(self) -> None:
         # A source adapter's installation recipe is intentionally a shell script.
         self.sandbox.run(
             ["/bin/bash", "-c", "set -euo pipefail\n" + self.runtime.rebuild],
-            timeout=self.config.limits.setup_seconds,
+            timeout=self.setup_timeout,
         )
 
     def apply_patch(self, patch: str, path: Path) -> None:

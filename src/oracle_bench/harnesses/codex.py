@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import asdict
 from pathlib import Path
 
 from oracle_bench.container.sandbox import Sandbox
 from oracle_bench.harnesses.launch import (
     AgentTurnRequest,
+    read_trace,
     run_agent_turn,
+    turn_status,
 )
+from oracle_bench.results import Usage
 
 # Codex writes its final response to a file instead of the JSON event stream.
 LAST_MESSAGE_PATH = "/tmp/oracle-agent/final.txt"
@@ -19,29 +21,18 @@ LAST_MESSAGE_PATH = "/tmp/oracle-agent/final.txt"
 def parse_trace(path: Path) -> dict:
     usage = None
     errors = []
-    malformed = 0
     completed = False
     failed = False
-    if path.exists():
-        for line in path.read_text(errors="replace").splitlines():
-            if not line.strip():
-                continue
-            try:
-                event = json.loads(line)
-            except json.JSONDecodeError:
-                malformed += 1
-                continue
-            if not isinstance(event, dict):
-                malformed += 1
-                continue
-            if event.get("type") == "turn.completed":
-                usage = event.get("usage")
-                completed = True
-                failed = False
-            if event.get("type") == "turn.failed":
-                failed = True
-            if event.get("type") in {"error", "turn.failed"}:
-                errors.append(event)
+    events, malformed = read_trace(path)
+    for event in events:
+        if event.get("type") == "turn.completed":
+            usage = _usage(event.get("usage"))
+            completed = True
+            failed = False
+        if event.get("type") == "turn.failed":
+            failed = True
+        if event.get("type") in {"error", "turn.failed"}:
+            errors.append(event)
 
     return {
         "usage": usage,
@@ -50,6 +41,19 @@ def parse_trace(path: Path) -> dict:
         "turn_completed": completed,
         "turn_failed": failed,
     }
+
+
+def _usage(raw: dict | None) -> dict | None:
+    if not raw:
+        return None
+    # Codex's input_tokens already counts the cached prompt tokens.
+    return Usage(
+        input_tokens=raw.get("input_tokens", 0),
+        cached_input_tokens=raw.get("cached_input_tokens", 0),
+        output_tokens=raw.get("output_tokens", 0),
+        reasoning_tokens=raw.get("reasoning_output_tokens"),
+        raw_usage=raw,
+    ).model_dump()
 
 
 def run_turn(sandbox: Sandbox, request: AgentTurnRequest) -> dict:
@@ -73,12 +77,13 @@ def run_turn(sandbox: Sandbox, request: AgentTurnRequest) -> dict:
         LAST_MESSAGE_PATH,
         "-",
     ]
+    settings = []
     if not harness.multi_agent:
-        argv[2:2] = ["--config", "features.multi_agent=false"]
+        settings.append("features.multi_agent=false")
     if harness.provider == "openrouter":
         # CLI overrides still apply with --ignore-user-config. Credentials stay
         # in the process environment, never in the saved command or config.
-        for setting in [
+        settings += [
             'model_provider="openrouter"',
             'model_providers.openrouter.name="OpenRouter"',
             'model_providers.openrouter.base_url="https://openrouter.ai/api/v1"',
@@ -88,13 +93,11 @@ def run_turn(sandbox: Sandbox, request: AgentTurnRequest) -> dict:
             # so a CLI upgrade cannot silently change benchmark behavior.
             "model_providers.openrouter.request_max_retries=4",
             "model_providers.openrouter.stream_max_retries=5",
-        ]:
-            argv[2:2] = ["--config", setting]
-        for setting in [
             'model_providers.openrouter.auth.command="sh"',
             'model_providers.openrouter.auth.args=["-c", "echo $OPENROUTER_API_KEY"]',
-        ]:
-            argv[2:2] = ["--config", setting]
+        ]
+    # Settings go right after `codex exec`, in the order written above.
+    argv[2:2] = [part for setting in settings for part in ("--config", setting)]
     credential_name = "OPENROUTER_API_KEY" if harness.provider == "openrouter" else "CODEX_API_KEY"
 
     outcome = run_agent_turn(
@@ -107,11 +110,5 @@ def run_turn(sandbox: Sandbox, request: AgentTurnRequest) -> dict:
     )
 
     summary = {**asdict(outcome), **parse_trace(directory / "trace.jsonl")}
-    summary["status"] = (
-        "timeout"
-        if outcome.timed_out
-        else "failed"
-        if outcome.exit_code or summary["turn_failed"] or not summary["turn_completed"]
-        else "completed"
-    )
+    summary["status"] = turn_status(outcome, summary)
     return summary

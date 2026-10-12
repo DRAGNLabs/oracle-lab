@@ -40,6 +40,7 @@ def fake_result(
     instance: str,
     detected: bool = False,
     *,
+    compliant: bool = True,
     matrix_overrides: dict[str, int] | None = None,
 ) -> None:
     paths = RunPaths.create(run_dir)
@@ -58,6 +59,8 @@ def fake_result(
         paths.results,
         evaluation_result(
             instance_id=instance,
+            submission_compliant=compliant,
+            forbidden_changes=[] if compliant else ["package/core.py"],
             matrix=matrix,
             coverage={
                 "buggy": {"status": "available", "percent": 12.5},
@@ -139,12 +142,37 @@ def test_batch_continues_after_failure_and_aggregates_results(tmp_path):
     assert summary["attempted"] == 2
     assert summary["completed_with_results"] == 1
     assert summary["detected"] == 1
-    assert summary["detection_rate_attempted"] == 0.5
+    assert summary["completed_evaluations"] == 1
+    assert summary["matrix_detection_rate"] == 1.0
+    assert "detection_rate_attempted" not in summary
     assert read_json(batch_dir / "status.json")["state"] == "completed_with_errors"
     report = (batch_dir / "report.md").read_text()
     assert "| Instance | Run ID | State |" in report
     assert "| `owner__two-2` | completed |" in report
     assert "| — | failed |" in report
+
+
+def test_a_non_compliant_run_stays_in_the_denominator_but_is_never_detected(tmp_path):
+    (tmp_path / "prompt.md").write_text("Generate tests")
+    write_run_config(tmp_path / "one.yaml", "owner__one-1")
+    write_run_config(tmp_path / "two.yaml", "owner__two-2")
+    manifest = tmp_path / "batch.yaml"
+    write_batch_config(manifest, ["one.yaml", "two.yaml"])
+
+    def run_one(config):
+        run_dir = tmp_path / "runs" / config.source.instance
+        # Both runs have a fail-on-buggy, pass-on-golden test; only one is compliant.
+        compliant = config.source.instance == "owner__one-1"
+        fake_result(run_dir, config.source.instance, detected=True, compliant=compliant)
+        return run_dir
+
+    summary = read_json(run_batch(manifest, run_one=run_one) / "summary.json")
+
+    assert summary["completed_evaluations"] == 2
+    assert summary["detected"] == 1
+    assert summary["matrix_detection_rate"] == 0.5
+    detected = {job["instance_id"]: job["detected"] for job in summary["jobs"]}
+    assert detected == {"owner__one-1": True, "owner__two-2": False}
 
 
 def test_resume_skips_completed_jobs_and_retries_failed_job(tmp_path):
@@ -303,3 +331,25 @@ def test_every_judge_label_is_counted_independently():
         assert set(aggregation["label_counts"][facet]) == {
             value if value is not None else "null" for value in values
         }
+
+
+def test_a_failing_summary_does_not_hide_an_interrupted_job(tmp_path, monkeypatch):
+    (tmp_path / "prompt.md").write_text("Generate tests")
+    write_run_config(tmp_path / "one.yaml", "owner__one-1")
+    manifest = tmp_path / "batch.yaml"
+    write_batch_config(manifest, ["one.yaml"])
+
+    def broken_summary(*args):
+        raise ValueError("saved run does not validate")
+
+    def interrupted(config):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("oracle_bench.batch.write_summary", broken_summary)
+
+    with pytest.raises(KeyboardInterrupt) as error:
+        run_batch(manifest, run_one=interrupted)
+
+    assert error.value.__notes__ == ["The batch summary could not be updated."]
+    (batch_dir,) = (tmp_path / "batches").iterdir()
+    assert read_json(batch_dir / "status.json") == {"state": "interrupted"}

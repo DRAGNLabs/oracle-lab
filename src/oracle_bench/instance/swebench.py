@@ -9,7 +9,8 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Iterable
-from pathlib import Path, PurePosixPath
+from dataclasses import dataclass
+from pathlib import Path
 from typing import cast
 
 from oracle_bench.config import RuntimeConfig, SourceConfig
@@ -20,100 +21,54 @@ from oracle_bench.results import InstanceRecord, SourceProvenance
 UPSTREAM_REVISION = "3947b299c121bb1f45f5094180c0f39fa0c599a0"
 
 
+@dataclass(frozen=True)
+class RepositoryLayout:
+    """Where one repository keeps its code and tests, and what its tests need."""
+
+    source_root: str
+    import_module: str
+    existing_tests: tuple[str, ...]
+    pythonpath: str | None = None
+    pytest_plugins: tuple[str, ...] = ()
+
+
 REPOSITORY_LAYOUTS = {
-    "astropy/astropy": ("astropy", "astropy", ["astropy/**/tests"]),
-    "django/django": ("django", "django", ["tests"]),
-    "matplotlib/matplotlib": ("lib/matplotlib", "matplotlib", ["lib/matplotlib/tests"]),
-    "mwaskom/seaborn": ("seaborn", "seaborn", ["tests"]),
-    "pallets/flask": ("src/flask", "flask", ["tests"]),
-    "psf/requests": ("requests", "requests", ["test_requests.py", "tests"]),
-    "pydata/xarray": ("xarray", "xarray", ["xarray/tests"]),
-    "pytest-dev/pytest": ("src/_pytest", "_pytest", ["testing"]),
-    "scikit-learn/scikit-learn": ("sklearn", "sklearn", ["sklearn/**/tests"]),
-    "sphinx-doc/sphinx": ("sphinx", "sphinx", ["tests"]),
-    "sympy/sympy": ("sympy", "sympy", ["sympy/**/tests"]),
+    "astropy/astropy": RepositoryLayout("astropy", "astropy", ("astropy/**/tests",)),
+    "matplotlib/matplotlib": RepositoryLayout(
+        "lib/matplotlib", "matplotlib", ("lib/matplotlib/tests",)
+    ),
+    "mwaskom/seaborn": RepositoryLayout("seaborn", "seaborn", ("tests",)),
+    "pallets/flask": RepositoryLayout("src/flask", "flask", ("tests",)),
+    "psf/requests": RepositoryLayout("requests", "requests", ("test_requests.py", "tests")),
+    "pydata/xarray": RepositoryLayout("xarray", "xarray", ("xarray/tests",)),
+    "pylint-dev/pylint": RepositoryLayout("pylint", "pylint", ("tests",)),
+    "pytest-dev/pytest": RepositoryLayout(
+        "src/_pytest",
+        "_pytest",
+        ("testing",),
+        # A src-layout project: its installed distribution may be a different
+        # version from the checked-out task revision.
+        pythonpath="/testbed/src",
+        # The repository enables pytester through addopts, which the benchmark
+        # clears. Keep this required plugin without the other repository options.
+        pytest_plugins=("pytester",),
+    ),
+    "scikit-learn/scikit-learn": RepositoryLayout("sklearn", "sklearn", ("sklearn/**/tests",)),
+    "sphinx-doc/sphinx": RepositoryLayout("sphinx", "sphinx", ("tests",)),
 }
 
-DIFF_FILE = re.compile(r"^\+\+\+ b/(.+)$")
-PYTHON_SCOPE = re.compile(r"^([ ]*)(?:async[ ]+def|def|class)[ ]+([A-Za-z_]\w*)")
-HUNK_HEADER = re.compile(r"^@@ .+ @@(?: (.*))?$")
+
+@dataclass(frozen=True)
+class TestTools:
+    pytest_version: str
+    coverage_version: str
 
 
-def localized_test_target(patch: str, source_roots: list[str]) -> str:
-    """Derive an agent-safe code location without exposing repair semantics.
-
-    Each changed line is attributed to the definition enclosing it in the hunk's
-    context or removed lines. Added lines only close scopes, so a name introduced
-    by the repair cannot leak. The hunk header, which names the nearest definition
-    above the hunk rather than the edited one, is only a fallback.
-    """
-    roots = tuple(PurePosixPath(root) for root in source_roots)
-    targets: dict[str, set[str]] = {}
-    current: str | None = None
-    header: str | None = None
-    header_is_class = False
-    scopes: list[tuple[int, str]] = []
-    scope_seen = False
-
-    for line in patch.splitlines():
-        match = DIFF_FILE.match(line)
-        if match:
-            candidate = PurePosixPath(match.group(1))
-            in_source = any(root == candidate or root in candidate.parents for root in roots)
-            current = str(candidate) if in_source else None
-            if current and not _is_test_path(candidate):
-                targets.setdefault(current, set())
-            else:
-                current = None
-            continue
-        hunk = HUNK_HEADER.match(line)
-        if hunk:
-            scope = PYTHON_SCOPE.match(hunk.group(1) or "")
-            header = scope.group(2) if scope else None
-            header_is_class = bool(scope) and scope.group(0).lstrip().startswith("class")
-            scopes = []
-            scope_seen = False
-            continue
-        if current is None or line.startswith(("+++", "---")) or line[:1] not in " +-":
-            continue
-        content = line[1:]
-        if not content.strip():
-            continue
-        indent = len(content) - len(content.lstrip(" "))
-        scope = PYTHON_SCOPE.match(content)
-        # A re-added definition, such as a changed signature, stays in the same scope.
-        same = bool(scope) and (indent, scope.group(2)) in scopes
-        # Any line closes the scopes it dedents past; only existing code opens one.
-        scopes = [
-            (depth, name) for depth, name in scopes if depth < indent or (same and depth == indent)
-        ]
-        if scope and not line.startswith("+") and not same:
-            scopes.append((indent, scope.group(2)))
-            scope_seen = True
-        if line.startswith(("+", "-")):
-            names = [name for _, name in scopes]
-            # An indented definition right below a class header is that class's member.
-            if names and header_is_class and scopes[0][0] > 0:
-                names.insert(0, header)
-            # The header lies above the hunk, so it no longer applies once the hunk
-            # shows its own definitions.
-            symbol = ".".join(names) if names else None if scope_seen else header
-            if symbol:
-                targets[current].add(symbol)
-
-    if not targets:
-        raise ValueError("Golden patch does not modify a Python production source path")
-    rendered = []
-    for path, symbols in targets.items():
-        if symbols:
-            rendered.append(f"{path} ({', '.join(sorted(symbols))})")
-        else:
-            rendered.append(path)
-    return ", ".join(rendered)
-
-
-def _is_test_path(path: PurePosixPath) -> bool:
-    return "tests" in path.parts or path.name.startswith(("test_", "tests_"))
+# Instances whose image cannot run the default pytest and coverage.
+OLDER_TEST_TOOLS = {
+    # This image uses Python 3.6.
+    "scikit-learn__scikit-learn-14710": TestTools(pytest_version="6.2.5", coverage_version="6.2"),
+}
 
 
 def image_for(instance_id: str, platform: str = "linux/amd64") -> str:
@@ -128,24 +83,17 @@ def runtime_for(record: dict) -> RuntimeConfig:
     repo = record["repo"]
     if repo not in REPOSITORY_LAYOUTS:
         raise ValueError(f"No tested SWE-bench runtime profile for repository {repo!r}")
-    source_root, import_module, existing_test_globs = REPOSITORY_LAYOUTS[repo]
-    uses_python_36 = record["instance_id"] == "scikit-learn__scikit-learn-14710"
+    layout = REPOSITORY_LAYOUTS[repo]
+    tools = OLDER_TEST_TOOLS.get(record["instance_id"])
     return RuntimeConfig(
         image=image_for(record["instance_id"]),
-        source_roots=[source_root],
-        import_modules=[import_module],
-        existing_test_globs=existing_test_globs,
-        # pytest is a src-layout project; its installed distribution may be a
-        # different version from the checked-out task revision.
-        pythonpath="/testbed/src" if repo == "pytest-dev/pytest" else None,
-        # The repository enables pytester through addopts, which the benchmark
-        # intentionally clears. Keep this required plugin without inheriting
-        # unrelated repository options or default test targets.
-        pytest_plugins=["pytester"] if repo == "pytest-dev/pytest" else [],
-        # This particular upstream image uses Python 3.6. The normal test
-        # toolchain requires a newer interpreter.
-        pytest_version="6.2.5" if uses_python_36 else None,
-        coverage_version="6.2" if uses_python_36 else None,
+        source_roots=[layout.source_root],
+        import_modules=[layout.import_module],
+        existing_test_globs=list(layout.existing_tests),
+        pythonpath=layout.pythonpath,
+        pytest_plugins=list(layout.pytest_plugins),
+        pytest_version=tools.pytest_version if tools else None,
+        coverage_version=tools.coverage_version if tools else None,
         # Official instance images already contain an installed checkout. Patches to
         # Python sources are visible through that editable install; rerunning a generic
         # pip build can require build-only dependencies absent from the final image.
@@ -167,7 +115,7 @@ def resolve(config: SourceConfig) -> tuple[InstanceRecord, RuntimeConfig]:
         # always gives rows we can loop over. The cast just tells the type checker.
         rows = cast(
             Iterable[dict],
-            load_dataset(config.dataset_name, split=config.split, revision=config.dataset_revision),
+            load_dataset(config.dataset_name, split=config.split, revision=config.revision),
         )
         matches = [row for row in rows if row["instance_id"] == config.instance]
         if len(matches) != 1:
@@ -197,12 +145,11 @@ def resolve(config: SourceConfig) -> tuple[InstanceRecord, RuntimeConfig]:
         golden_patch=record["patch"],
         reference_test_patch=record["test_patch"],
         reference_test_ids=fail_to_pass,
-        test_target=localized_test_target(record["patch"], runtime.source_roots),
         source=SourceProvenance(
             kind=config.kind,
             dataset=config.dataset,
             name=config.dataset_name,
-            revision=config.dataset_revision,
+            revision=config.revision,
             split=config.split,
             upstream_revision=UPSTREAM_REVISION,
             record_sha256=digest(json.dumps(record, sort_keys=True).encode()),

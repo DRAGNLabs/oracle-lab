@@ -1,18 +1,23 @@
+import json
 from pathlib import Path
 
 import pytest
 import yaml
+from fixtures import DOCKERFILES, RUN_CONFIG, run_config
 
+from oracle_bench.batch import load_batch_config
 from oracle_bench.config import (
     HARNESS_VERSIONS,
-    AgentConfig,
+    SWEBENCH_DATASET_REVISIONS,
+    HarnessConfig,
     RuntimeConfig,
     load_classification_config,
     load_config,
+    validate_prompt_scope,
     validate_resolved_config,
 )
 
-SAMPLE = Path(__file__).parents[1] / "configs" / "smoke.yaml"
+SAMPLE = RUN_CONFIG
 
 
 def config_file(tmp_path, section, key, value):
@@ -31,33 +36,48 @@ def test_test_visibility_is_explicit_and_paths_are_config_relative(tmp_path, vis
     assert config.output == str((tmp_path / "../runs").resolve())
 
 
-def test_sample_uses_repository_scope_with_existing_tests_hidden():
-    config = load_config(SAMPLE)
-
-    assert config.task.scope == "repository"
-    assert config.task.existing_tests == "hide_all"
-    assert config.task.hides_existing_tests
+PROMPTS = Path(__file__).parents[1] / "prompts" / "agent"
 
 
-def test_smoke_config_uses_five_minute_limits_for_generation_and_judging():
-    config = load_config(SAMPLE)
-    assert config.source.dataset == "verified"
-    assert config.source.revision == "c104f840cc67f8b6eec6f759ebc8b2693d585d4a"
-    assert config.agent.harness == "claude"
-    assert config.agent.provider == "openrouter"
-    assert config.agent.model == "anthropic/claude-haiku-4.5@preset/oracle-anthropic-first"
-    assert config.agent.credential_env == "OPENROUTER_API_KEY"
-    assert config.agent.limit.kind == "wall_seconds"
-    assert config.agent.limit.value == 300
-    assert config.agent.multi_agent is False
-    assert config.runtime is None
-    assert config.judge is not None
-    assert config.judge.harness == "claude"
-    assert config.judge.provider == "openrouter"
-    assert config.judge.model == "anthropic/claude-haiku-4.5@preset/oracle-anthropic-first"
-    assert config.judge.credential_env == "OPENROUTER_API_KEY"
-    assert config.judge.limit.kind == "wall_seconds"
-    assert config.judge.limit.value == 300
+@pytest.mark.parametrize(
+    "prompt,scope",
+    [
+        ("localized-tests.md", "localized"),
+        ("unit-tests.md", "repository"),
+        ("smoke-tests.md", "repository"),
+    ],
+)
+def test_each_prompt_matches_its_scope(prompt, scope):
+    validate_prompt_scope((PROMPTS / prompt).read_text(), scope)
+
+
+@pytest.mark.parametrize(
+    "prompt,scope",
+    [
+        ("localized-tests.md", "repository"),
+        ("unit-tests.md", "localized"),
+    ],
+)
+def test_prompt_and_scope_must_agree_on_showing_the_target(prompt, scope):
+    with pytest.raises(ValueError, match="test_target"):
+        validate_prompt_scope((PROMPTS / prompt).read_text(), scope)
+
+
+CONFIGS = Path(__file__).parents[1] / "configs"
+
+
+@pytest.mark.parametrize(
+    "path", sorted(CONFIGS.rglob("*.yaml")), ids=lambda path: str(path.relative_to(CONFIGS))
+)
+def test_every_sample_config_loads(path):
+    """Each sample is a run, classification, or batch config that validates as written."""
+    raw = yaml.safe_load(path.read_text())
+    if "jobs" in raw:
+        load_batch_config(path)
+    elif "classifier" in raw:
+        load_classification_config(path)
+    else:
+        load_config(path)
 
 
 def test_agent_limit_defaults_to_five_minutes(tmp_path):
@@ -210,7 +230,7 @@ def test_harness_version_is_not_selectable_per_run(tmp_path, section):
 def test_resolved_toolchain_records_every_harness_version():
     config = load_config(SAMPLE)
 
-    assert config.toolchain.installed_harnesses == HARNESS_VERSIONS
+    assert config.toolchain.harnesses == HARNESS_VERSIONS
 
 
 @pytest.mark.parametrize(
@@ -234,16 +254,6 @@ def test_resolved_toolchain_records_every_harness_version():
 def test_invalid_config_fails_before_starting_containers(tmp_path, section, key, value):
     with pytest.raises(ValueError):
         load_config(config_file(tmp_path, section, key, value))
-
-
-@pytest.mark.parametrize("old_section", ["dataset", "environment", "harness"])
-def test_verbose_schema_is_rejected(tmp_path, old_section):
-    raw = yaml.safe_load(SAMPLE.read_text())
-    raw[old_section] = {}
-    path = tmp_path / "config.yaml"
-    path.write_text(yaml.safe_dump(raw))
-    with pytest.raises(ValueError, match="Extra inputs are not permitted"):
-        load_config(path)
 
 
 @pytest.mark.parametrize("section", ["runtime", "toolchain"])
@@ -291,15 +301,11 @@ def test_each_swebench_dataset_resolves_its_own_pinned_revision(tmp_path):
 
 
 def test_resolved_run_lock_can_be_reloaded(tmp_path):
-    config = load_config(SAMPLE)
-    config.runtime = RuntimeConfig(
-        image="example/image:latest",
-        source_roots=["requests"],
-        import_modules=["requests"],
-        existing_test_globs=["test_requests.py", "tests"],
+    config = run_config(
+        "requests", image="example/image:latest", existing_test_globs=["test_requests.py", "tests"]
     )
     path = tmp_path / "config.resolved.yaml"
-    path.write_text(yaml.safe_dump(config.to_dict()))
+    path.write_text(yaml.safe_dump(config.model_dump()))
 
     reloaded = load_config(path, resolved=True)
 
@@ -310,7 +316,7 @@ def test_resolved_run_lock_can_be_reloaded(tmp_path):
 def test_resolved_configuration_contains_no_credential_value(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "secret-test-value")
     config = load_config(SAMPLE)
-    assert "secret-test-value" not in yaml.safe_dump(config.to_dict())
+    assert "secret-test-value" not in yaml.safe_dump(config.model_dump())
 
 
 @pytest.mark.parametrize(
@@ -338,6 +344,22 @@ def test_runtime_schema_checks_external_adapter_data(field, value):
 @pytest.mark.parametrize("harness", ["codex", "claude", "opencode"])
 def test_openrouter_is_the_default_provider(harness):
     """A config that names no provider routes through OpenRouter."""
-    config = AgentConfig(model="vendor/model", harness=harness)
+    config = HarnessConfig(model="vendor/model", harness=harness)
     assert config.provider == "openrouter"
     assert config.credential_env == "OPENROUTER_API_KEY"
+
+
+@pytest.mark.parametrize("dataset", ["lite", "verified"])
+def test_each_dataset_defaults_to_its_own_pinned_revision(tmp_path, dataset):
+    config = load_config(config_file(tmp_path, "source", "dataset", dataset))
+    assert config.source.revision == SWEBENCH_DATASET_REVISIONS[dataset]
+
+
+def test_an_explicit_dataset_revision_is_kept(tmp_path):
+    config = load_config(config_file(tmp_path, "source", "revision", "f" * 40))
+    assert config.source.revision == "f" * 40
+
+
+def test_harness_versions_are_the_pins_the_image_installs():
+    package = json.loads((DOCKERFILES / "package.json").read_text())["dependencies"]
+    assert sorted(HARNESS_VERSIONS.values()) == sorted(package.values())

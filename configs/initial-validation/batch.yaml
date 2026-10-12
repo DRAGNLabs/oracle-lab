@@ -6,7 +6,6 @@ jobs:
   - config: opencode-requests.yaml
 
 execution:
-  concurrency: 1
   continue_on_error: true
 
 output: ../../batches

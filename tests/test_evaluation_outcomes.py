@@ -10,7 +10,7 @@ from fixtures import HELPERS
 
 from oracle_bench.evaluation.outcomes import incomplete_result, pair_results
 from oracle_bench.io import read_json
-from oracle_bench.results import CoverageResult, VersionResult, read_version_result
+from oracle_bench.results import CoverageResult, MatrixCellName, VersionResult, read_version_result
 
 
 def execute(tmp_path, source, tests, *, modules=None, extra=None, source_roots=None):
@@ -126,6 +126,20 @@ def test_empty_and_collection_failures_are_not_binary(tmp_path, test_source, exp
     assert result.status == expected
     paired = pair_results(result, result)
     assert all(cell.count == 0 for cell in paired.matrix.values())
+
+
+def test_a_file_that_fails_to_collect_does_not_void_the_other_files(tmp_path):
+    broken = {"oracle_tests/test_broken.py": "import nonexistent_oracle_test_dependency\n"}
+    tests = "import subject\ndef test_finds_bug(): assert subject.answer() == 2\n"
+    buggy, _, _ = execute(tmp_path / "buggy", "def answer(): return 1\n", tests, extra=broken)
+    golden, _, _ = execute(tmp_path / "golden", "def answer(): return 2\n", tests, extra=broken)
+
+    assert buggy.status == golden.status == "completed"
+    assert [error["nodeid"] for error in buggy.collection_errors] == ["oracle_tests/test_broken.py"]
+    paired = pair_results(buggy, golden)
+    assert paired.matrix[MatrixCellName.FAIL_ON_BUGGY_PASS_ON_GOLDEN].test_ids == [
+        "oracle_tests/test_subject.py::test_finds_bug"
+    ]
 
 
 def test_skip_xfail_xpass_and_fixture_errors(tmp_path):

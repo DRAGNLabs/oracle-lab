@@ -1,28 +1,18 @@
 from pathlib import Path
 
-import yaml
 from fixtures import instance_record
 
+from oracle_bench.classification.contracts import latest_classification
 from oracle_bench.io import write_json
-from oracle_bench.paths import RunPaths
-from oracle_bench.repo_classification.contracts import latest_classification
-from oracle_bench.results import write_result
 
 
-def prepared_run(tmp_path: Path) -> tuple[RunPaths, Path]:
-    runs = tmp_path / "runs"
-    paths = RunPaths.create(runs / "run-1")
-    config = yaml.safe_load((Path(__file__).parents[1] / "configs/smoke.yaml").read_text())
-    config["output"] = str(runs)
-    config["runtime"] = {
-        "image": "example/image:latest",
-        "source_roots": ["package"],
-        "import_modules": ["package"],
-        "existing_test_globs": ["tests"],
-    }
-    paths.config.write_text(yaml.safe_dump(config))
-    write_result(paths.instance, instance_record())
-    return paths, tmp_path / "classifications" / "owner__project-1"
+def prepared_run(tmp_path: Path) -> tuple[Path, Path]:
+    classifications = tmp_path / "classifications"
+    return classifications, classifications / "owner__project-1"
+
+
+def latest(classifications: Path):
+    return latest_classification(classifications, instance_record())
 
 
 def classification(result=None, **identity):
@@ -50,7 +40,7 @@ def test_returns_newest_matching_attempt(tmp_path):
         classification(result={"status": "failed", "error": "model unavailable"}),
     )
 
-    result, attempt = latest_classification(paths)
+    result, attempt = latest(paths)
 
     assert result == {"status": "failed", "error": "model unavailable"}
     assert attempt.name == "20260201T000000Z-new"
@@ -63,7 +53,7 @@ def test_rejects_mismatched_provenance(tmp_path):
         classification(base_commit="b" * 40),
     )
 
-    result, _ = latest_classification(paths)
+    result, _ = latest(paths)
 
     assert result["status"] == "mismatched"
     assert "base_commit" in result["error"]
@@ -72,7 +62,7 @@ def test_rejects_mismatched_provenance(tmp_path):
 def test_missing_classification_is_explicit(tmp_path):
     paths, _ = prepared_run(tmp_path)
 
-    result, attempt = latest_classification(paths)
+    result, attempt = latest(paths)
 
     assert result == {"status": "missing"}
     assert attempt is None
@@ -86,7 +76,7 @@ def test_incomplete_latest_attempt_does_not_fall_back(tmp_path):
         {"stage": "build", "state": "failed", "error": "image build failed"},
     )
 
-    result, attempt = latest_classification(paths)
+    result, attempt = latest(paths)
 
     assert result == {"status": "invalid_artifact", "error": "image build failed"}
     assert attempt.name == "20260201T000000Z-new"
@@ -98,7 +88,7 @@ def test_corrupt_latest_artifact_is_explicit(tmp_path):
     artifact.parent.mkdir(parents=True)
     artifact.write_text("not JSON")
 
-    result, attempt = latest_classification(paths)
+    result, attempt = latest(paths)
 
     assert result["status"] == "invalid_artifact"
     assert result["error"]

@@ -2,9 +2,13 @@
 
 ## Quickstart
 
-Requires Python 3.11+, [uv](https://docs.astral.sh/uv/), Docker with a running
-Linux daemon, and a credential for the provider selected in the configuration.
-The host CLI currently runs on Unix (Linux/macOS) to enforce pull/build deadlines.
+Requirements:
+
+- Python 3.11 or later and [uv](https://docs.astral.sh/uv/).
+- Docker with a running Linux daemon.
+- A credential for the provider the configuration selects.
+- A Unix host (Linux or macOS). The CLI uses Unix signals to enforce pull and
+  build deadlines.
 
 Copy the local secrets file and add your API keys:
 
@@ -23,23 +27,31 @@ uv run oracle-bench run configs/smoke.yaml
 
 ## About
 
-Oracle Bench tests how well coding agents generate unit tests when the code they see already contains a bug. An agent receives a buggy repository and a request to write tests, without being given the issue description or fix. The benchmark then runs the same generated tests against buggy and fixed (golden) versions, collecting paired pass/fail outcomes and coverage.
+Oracle Bench measures how well coding agents write unit tests for code that
+already contains a bug. The agent gets a buggy repository and a request to write
+tests. It does not see the issue description or the fix. Oracle Bench then runs
+the same tests against the buggy version and the fixed (golden) version. It
+records the paired pass/fail outcomes and coverage.
 
-A separate one-time classification command annotates SWE-bench Verified problems by
-defect mechanism, test setup, oracle availability, scope, and benchmark quality.
-Benchmark reports automatically show the newest central classification for their
-instance when one is available.
+A separate `classify` command labels SWE-bench Verified problems. The labels
+cover defect mechanism, test setup, oracle availability, scope, and benchmark
+quality. A run's report shows the newest classification for its instance, if
+one exists.
 
 80% of this repo is just coordinating containers and managing data in and out of them.
 
 ## Architecture / pipeline
 
-The host orchestrates Docker containers, captures generated tests, and scores results. Each generation container includes the repository, its Python environment, and the selected agent harness. Evaluation uses fresh containers so both versions receive the same captured tests.
+The host starts Docker containers, captures the generated tests, and scores
+them. The generation container holds the repository, its Python environment, and
+the selected agent CLI. Evaluation uses fresh containers, so both versions run
+the same captured tests.
 
 ```mermaid
 flowchart TD
     Config["YAML config + prompt"] --> Prepare["Resolve dataset task and prepare cached runtime image"]
-    Prepare --> Reference["Verify developer regression test on buggy and golden code"]
+    Prepare --> Localize["Localized runs: name the code the golden repair changes"]
+    Localize --> Reference["Verify developer regression test on buggy and golden code"]
     Reference --> Agent["Generation container: agent writes tests in buggy repo"]
     Agent --> Capture["Capture new tests, hashes, and workspace changes"]
     Capture --> Buggy["Fresh container: tests against buggy code"]
@@ -74,7 +86,7 @@ uv run oracle-bench classify configs/classification/example.yaml
 # Compare saved human and LLM ratings and select a calibration sample.
 uv run oracle-bench agreement batches/<batch-id> --sample-per-stratum 8
 
-# Rebuild the report and readable session log from saved data.
+# Rebuild report.md from saved data. The session log is never regenerated.
 uv run oracle-bench report runs/<run-id>
 
 # Continue pending or failed jobs without repeating completed jobs.
@@ -129,20 +141,24 @@ setting, default, validation rule, and harness-specific behavior.
 | Artifact in `runs/<run-id>/` | Contents                                                  |
 | ---------------------------- | --------------------------------------------------------- |
 | `report.md`                  | Human-readable run summary and artifact links             |
-| `inputs/`                    | Frozen prompt, resolved config, and private instance      |
+| `status.json`                | The latest stage and its state, with any error            |
+| `cost.json`                  | What the run's model stages spent on the OpenRouter key   |
+| `inputs/`                    | Frozen prompt, resolved config, private instance, target  |
 | `image-build/`               | Runtime image, build inputs, provenance, and logs         |
 | `reference-check/`           | Private fail-on-buggy/pass-on-golden validation           |
 | `generation/`                | Agent command, transcript, raw events, and workspace diff |
 | `submission/`                | Captured generated tests, hashes, and violations          |
 | `evaluation/`                | Paired result plus buggy and golden executions            |
 | `judge/`                     | Judge workspace manifest, model evidence, and judgment    |
+| `ground-truth/`              | Private issue text and golden repair, for readers         |
 
 Standalone classifications are stored separately under
 `classifications/<instance-id>/<attempt-id>/`; they are not copied into run directories.
 
 See the [complete results and artifacts reference](docs/results.md) for the full
 directory layout, JSON fields, logs, evaluation artifacts, and reevaluation
-behavior.
+behavior. [Judging](docs/judging.md) covers the LLM judge, human ratings, and
+agreement analysis.
 
 For initial batch plots, run `uv sync --extra dataset --extra dev --extra analysis`
 and open [notebooks/initial-results.ipynb](notebooks/initial-results.ipynb) with
@@ -151,14 +167,21 @@ which saved batch to inspect.
 
 ### Development
 
-The package lives in `src/oracle_bench/` and is organized by pipeline stage:
-`instance/` resolves a task, `container/images.py` prepares the runtime image,
-`generation.py` runs the agent and freezes its submission, `evaluation/` executes
-that submission on both revisions, `judge/` annotates it, and `report.py` renders
-the result. `run.py` calls each stage once; `cli.py` and `config.py` define the
-interface, `container/` integrates the Docker Python SDK, `harnesses/` launches
-agent CLIs, and `repository.py` prepares checkouts. See
-[container development](docs/containers.md) for the API and standalone image builds.
+The package lives in `src/oracle_bench/`. It has one module or package per
+pipeline stage, and `run.py` calls each stage once:
+
+- `instance/` resolves a task.
+- `container/images.py` prepares the runtime image.
+- `localization/` names the code a localized run targets.
+- `generation.py` runs the agent and freezes its submission.
+- `evaluation/` runs that submission on both versions.
+- `judge/` rates it.
+- `report.py` renders the result.
+
+The rest supports them. `cli.py` and `config.py` define the interface.
+`container/` wraps the Docker Python SDK. `harnesses/` launches the agent CLIs.
+`repository.py` prepares checkouts. [Container development](docs/containers.md)
+covers the Docker API and building images on their own.
 
 ## Tests
 
@@ -174,15 +197,24 @@ uv run ruff format --check src tests
 ORACLE_BENCH_SMOKE_RUN=runs/<run-id> uv run pytest -q -m docker
 ```
 
-Local tests cover configuration, credentials, agent traces, artifacts, pytest outcomes, coverage, and reports. Docker checks use handwritten probes on the Requests task to exercise all four matrix cells and both test-visibility settings. They do not call a model.
+Local tests cover configuration, credentials, agent traces, artifacts, pytest
+outcomes, coverage, and reports. Docker checks run handwritten tests on the
+Requests task. They reach all four matrix cells and both test-visibility
+settings. They do not call a model.
 
-If Docker reports a socket permission error after you've joined the `docker` group, run `newgrp docker` in your terminal or log out and back in, then check `docker info` again.
+Docker may report a socket permission error after you join the `docker` group.
+Run `newgrp docker`, or log out and back in. Then check `docker info` again.
 
-## Misc notes:
+## Misc notes
 
 - The private regression check must pass before generation starts.
-- The agent runs as a non-root user with the selected credential; the host Docker socket and private run artifacts are not mounted.
-- Generation, reference, and evaluation containers have outbound network access so repository tests run under a consistent environment.
-- Generation agents receive a fresh one-commit Git repository containing only the
-  prepared buggy snapshot. Internet-use auditing is not implemented yet.
-- Only new tests and fixtures under `oracle_tests/` are evaluated. Changes outside that directory are recorded as violations and make the results diagnostic. Existing repository tests can remain visible or be hidden through configuration.
+- The agent runs as a non-root user with only the selected credential. The host
+  Docker socket and private run artifacts are not mounted.
+- Generation, reference, and evaluation containers all have outbound network
+  access, so repository tests run in the same environment each time.
+- The agent gets a fresh Git repository with one commit: the prepared buggy
+  snapshot. Internet use is not audited.
+- Only new tests and fixtures under `oracle_tests/` are evaluated. Changes
+  outside that directory are recorded as violations, and the results become
+  diagnostic only. Configuration decides whether existing repository tests stay
+  visible.

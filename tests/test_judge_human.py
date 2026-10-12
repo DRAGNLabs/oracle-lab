@@ -1,11 +1,10 @@
 import json
-from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from fixtures import detecting_result, instance_record
+from fixtures import context_of, detecting_result, instance_record, write_submission
 
 from oracle_bench.config import JudgeConfig, LimitsConfig, RuntimeConfig
 from oracle_bench.io import read_json, write_json
@@ -69,6 +68,7 @@ def prepared_paths(tmp_path: Path) -> RunPaths:
     write_json(paths.runtime, {"image": "example/runtime"})
     write_result(paths.instance, instance_record(instance_id="example"))
     write_json(paths.results, detecting_result())
+    write_submission(paths)
     write_json(paths.judge.workspace_spec, workspace_spec().model_dump(mode="json"))
     write_json(
         paths.judge.human.workspaces / "workspace.json",
@@ -98,9 +98,7 @@ def human_container(run_dir: Path, rater: str = "rater_1"):
 
 
 def install_client(monkeypatch, client):
-    @contextmanager
-    def client_context():
-        yield client
+    client_context = context_of(client)
 
     monkeypatch.setattr("oracle_bench.judge.human.docker_client", client_context)
     return client

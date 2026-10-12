@@ -15,12 +15,9 @@ def git(*args: str) -> None:
 
 
 def remove_existing_tests(root: Path, patterns: list) -> None:
-    """Remove tests without deleting runtime support kept in test packages.
+    """Remove matched files, and the pytest-collected modules inside matched directories.
 
-    A matched file is an explicit adapter declaration and is removed directly.
-    For a matched directory, remove Python modules pytest would collect by its
-    default naming rules.  Package initializers, runners, fixtures, helpers, and
-    test data can be part of a project's runtime import surface and must remain.
+    Everything else in a test directory stays, because the project may import it.
     """
     paths = {path for pattern in patterns for path in root.glob(pattern)}
     test_modules = set()

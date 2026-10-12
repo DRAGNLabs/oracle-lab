@@ -156,19 +156,21 @@ print(json.dumps(origins))
             cov = None
         os.environ.pop("PYTEST_ADDOPTS", None)
         # Run generated targets only; don't inherit a repository's default targets/addopts.
-        arguments = ["-o", "addopts=", "-q", "--tb=short"]
+        # One file that fails to collect must not stop the other files from running.
+        arguments = ["-o", "addopts=", "-q", "--tb=short", "--continue-on-collection-errors"]
         for plugin in settings.get("pytest_plugins", []):
             arguments.extend(["-p", plugin])
         arguments.extend(settings["targets"])
         write(output / "command.json", [sys.executable, "-m", "pytest", *arguments])
         exit_code = int(pytest.main(arguments, plugins=[recorder]))
         recorder.data["exit_code"] = exit_code
-        if recorder.data["collection_errors"]:
-            recorder.data["status"] = "collection_error"
-        elif exit_code == 5 or (exit_code in (0, 1) and not recorder.data["collected"]):
-            recorder.data["status"] = "no_tests"
-        elif exit_code in (0, 1):
+        # Collection errors stay recorded; they only decide the status when no test ran.
+        if exit_code in (0, 1) and recorder.data["collected"]:
             recorder.data["status"] = "completed"
+        elif recorder.data["collection_errors"]:
+            recorder.data["status"] = "collection_error"
+        elif exit_code in (0, 1, 5):
+            recorder.data["status"] = "no_tests"
         else:
             recorder.data["status"] = "runner_error"
     except BaseException:

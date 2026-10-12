@@ -11,16 +11,16 @@ from typing import Literal
 
 from oracle_bench.config import RunConfig, repo_path
 from oracle_bench.container.sandbox import Sandbox
-from oracle_bench.generation import verify_bundle
 from oracle_bench.io import digest, read_json, require_files, write_json
-from oracle_bench.judge.contracts import (
-    BundleManifest,
-    ExposedArtifact,
-    PreparedImage,
-    WorkspaceSpec,
-)
+from oracle_bench.judge.contracts import BundleManifest, PreparedImage, WorkspaceSpec
 from oracle_bench.paths import RunPaths
-from oracle_bench.results import EvaluationResult, InstanceRecord
+from oracle_bench.results import (
+    EvaluationResult,
+    ExposedArtifact,
+    InstanceRecord,
+    SubmissionManifest,
+    write_result,
+)
 
 JUDGE_ROOT = "/oracle-judge"
 HELPER = "/judge_workspace.py"
@@ -36,8 +36,8 @@ def build_judge_workspace(
     image: str,
     instance: InstanceRecord,
     evaluation: EvaluationResult,
+    manifest: SubmissionManifest,
     *,
-    manifest: dict | None = None,
     persist: bool = True,
 ) -> WorkspaceSpec:
     """Assemble /oracle-judge in the container: two repo checkouts plus the evidence.
@@ -49,8 +49,6 @@ def build_judge_workspace(
     config.require_judge()
     runtime = config.require_runtime()
     base_commit = instance.base_commit
-    # The caller may have verified already; re-hashing every file twice buys nothing.
-    manifest = verify_bundle(paths) if manifest is None else manifest
 
     artifacts: list[ExposedArtifact] = []
     with TemporaryDirectory(prefix="oracle-judge-bundle-") as temporary:
@@ -75,7 +73,7 @@ def build_judge_workspace(
                 "reference_test_ids": instance.reference_test_ids,
             },
         )
-        write_json(submission_manifest, manifest)
+        write_result(submission_manifest, manifest)
         instructions.write_text(_workspace_instructions(instance, manifest, evaluation))
 
         # 2. Every file the judge may read, and where it lands in the container.
@@ -142,13 +140,13 @@ def build_judge_workspace(
         #    tests against two versions of the code.
         for view in VIEWS:
             sandbox.upload(paths.submission / "files", view, contents=True)
-            for name, info in manifest["files"].items():
+            for name, info in manifest.files.items():
                 source = paths.submission / "files" / repo_path(name)
-                artifacts.append(_exposed(paths.root, source, f"{view}/{name}", info["sha256"]))
+                artifacts.append(_exposed(paths.root, source, f"{view}/{name}", info.sha256))
 
         # 7. Trust the container over our own copy: make it hash what it actually holds
         #    in both views, and refuse to judge if either disagrees with the manifest.
-        expected = {name: info["sha256"] for name, info in manifest["files"].items()}
+        expected = {name: info.sha256 for name, info in manifest.files.items()}
         settings = staging / "verify.json"
         request = "/tmp/oracle-judge-verify.json"
         response = "/tmp/oracle-judge-file-hashes.json"
@@ -226,7 +224,7 @@ def _patch_paths(patch: str) -> list[str]:
 
 
 def _workspace_instructions(
-    instance: InstanceRecord, manifest: dict, evaluation: EvaluationResult
+    instance: InstanceRecord, manifest: SubmissionManifest, evaluation: EvaluationResult
 ) -> str:
     """Fill the checked-in guide with task-specific paths and execution results."""
     outcome_rows = [
@@ -244,7 +242,7 @@ def _workspace_instructions(
         "reference_test_files": "\n".join(
             f"- `{path}`" for path in _patch_paths(instance.reference_test_patch)
         ),
-        "submission_files": "\n".join(f"- `{path}`" for path in sorted(manifest["files"])),
+        "submission_files": "\n".join(f"- `{path}`" for path in sorted(manifest.files)),
         "reference_test_ids": "\n".join(
             f"- `{test_id}`" for test_id in instance.reference_test_ids
         ),

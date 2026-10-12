@@ -9,15 +9,16 @@ from pathlib import Path
 import docker
 import pytest
 import yaml
-from fixtures import DOCKERFILES, HELPERS
+from fixtures import HELPERS, write_submission
 
 from oracle_bench.config import JudgeConfig, load_config
 from oracle_bench.container.images import build_image
 from oracle_bench.container.sandbox import Profile, open_sandbox
-from oracle_bench.evaluation import run_version
+from oracle_bench.evaluation import run_submission
 from oracle_bench.evaluation.outcomes import pair_results
+from oracle_bench.generation import verify_bundle
 from oracle_bench.instance import write_private_instance_artifacts
-from oracle_bench.io import digest, read_json, write_json
+from oracle_bench.io import read_json, write_json
 from oracle_bench.judge.human import (
     collect_human_judgment,
     create_human_workspace,
@@ -25,8 +26,14 @@ from oracle_bench.judge.human import (
 )
 from oracle_bench.judge.run import judge as run_judge
 from oracle_bench.judge.workspace import JUDGE_ROOT, build_judge_workspace
+from oracle_bench.localization import localize
 from oracle_bench.paths import RunPaths
-from oracle_bench.results import read_evaluation_result, read_instance_record, write_result
+from oracle_bench.results import (
+    read_evaluation_result,
+    read_instance_record,
+    read_localized_target,
+    write_result,
+)
 from oracle_bench.run import reevaluate
 
 pytestmark = pytest.mark.docker
@@ -43,7 +50,7 @@ def test_local_sdk_build_exec_and_copy(tmp_path):
     parent = read_json(saved_paths.runtime)["image"]
     context = tmp_path / "context"
     context.mkdir()
-    shutil.copyfile(DOCKERFILES / "smoke.Dockerfile", context / "smoke.Dockerfile")
+    shutil.copyfile(Path(__file__).parent / "docker/smoke.Dockerfile", context / "smoke.Dockerfile")
     shutil.copytree(
         HELPERS,
         context / "container_helpers",
@@ -136,7 +143,13 @@ def test_reconstruct_privileged_judge_workspace(tmp_path, request):
         client, image, config, Profile.JUDGE, paths.judge.root / "docker.log"
     ) as sandbox:
         spec = build_judge_workspace(
-            sandbox, config, paths, image, instance, read_evaluation_result(paths.results)
+            sandbox,
+            config,
+            paths,
+            image,
+            instance,
+            read_evaluation_result(paths.results),
+            verify_bundle(paths),
         )
         changed = next(
             line.split(" b/", 1)[1]
@@ -161,7 +174,7 @@ def test_reconstruct_privileged_judge_workspace(tmp_path, request):
     assert readable.exit_code == 0
 
     config.judge.rubric = str(paths.judge.rubric)
-    paths.config.write_text(yaml.safe_dump(config.to_dict(), sort_keys=False))
+    paths.config.write_text(yaml.safe_dump(config.model_dump(), sort_keys=False))
     write_json(paths.runtime, {"image": image})
     write_result(paths.instance, instance)
     monkeypatch = pytest.MonkeyPatch()
@@ -290,30 +303,12 @@ def test_real_requests_pair_and_artifact_copy(tmp_path, visibility, monkeypatch,
     client = docker.from_env()
     request.addfinalizer(client.close)
     paths = RunPaths.create(tmp_path)
-    path = paths.submission / "files" / config.task.generated_dir / "test_probes.py"
-    path.parent.mkdir(parents=True)
-    path.write_text(PROBES)
-    files = {
-        f"{config.task.generated_dir}/test_probes.py": {
-            "sha256": digest(path.read_bytes()),
-            "mode": 0o644,
-        }
-    }
-    write_json(
-        paths.submission / "manifest.json",
-        {
-            "files": files,
-            "sha256": digest(json.dumps(files, sort_keys=True).encode()),
-            "empty": False,
-            "compliant": True,
-            "forbidden_changes": [],
-        },
-    )
-    buggy = run_version(client, config, image, instance, paths, "buggy")
-    golden = run_version(client, config, image, instance, paths, "golden")
+    manifest = write_submission(paths, {f"{config.task.generated_dir}/test_probes.py": PROBES})
+    buggy = run_submission(client, config, image, instance, paths, "buggy", manifest)
+    golden = run_submission(client, config, image, instance, paths, "golden", manifest)
     result = pair_results(buggy, golden)
-    assert buggy["status"] == golden["status"] == "completed", (buggy, golden)
-    assert [cell["count"] for cell in result["matrix"].values()] == [1, 1, 1, 1]
+    assert buggy.status == golden.status == "completed", (buggy, golden)
+    assert [cell.count for cell in result.matrix.values()] == [1, 1, 1, 1]
     for version in ["buggy", "golden"]:
         coverage = read_json(paths.evaluation / version / "coverage.json")
         assert coverage["status"] == "available"
@@ -323,7 +318,7 @@ def test_real_requests_pair_and_artifact_copy(tmp_path, visibility, monkeypatch,
         # Replay a saved artifact through the public reevaluation path, with no credentials.
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.delenv("CODEX_API_KEY", raising=False)
-        paths.config.write_text(yaml.safe_dump(config.to_dict()))
+        paths.config.write_text(yaml.safe_dump(config.model_dump()))
         write_result(paths.instance, instance)
         write_json(paths.runtime, {"image": image})
         write_json(
@@ -339,3 +334,22 @@ def test_real_requests_pair_and_artifact_copy(tmp_path, visibility, monkeypatch,
         replay = read_json(paths.results)
         assert replay["matrix"] == result["matrix"]
         assert replay["artifact_sha256"] == read_json(paths.submission / "manifest.json")["sha256"]
+
+
+def test_localize_reads_the_saved_image_and_reproduces_the_saved_target(tmp_path, request):
+    saved = os.environ.get("ORACLE_BENCH_SMOKE_RUN")
+    if not saved:
+        pytest.skip("Set ORACLE_BENCH_SMOKE_RUN to a localized run")
+    saved_paths = RunPaths.open(Path(saved).resolve())
+    if not saved_paths.target.is_file():
+        pytest.skip("The saved run is not localized")
+    config = load_config(saved_paths.config, resolved=True)
+    instance = read_instance_record(saved_paths.instance)
+    image = read_json(saved_paths.runtime)["image"]
+    client = docker.from_env()
+    request.addfinalizer(client.close)
+    paths = RunPaths.create(tmp_path)
+
+    target = localize(client, config, image, instance, paths)
+
+    assert target == read_localized_target(saved_paths.target)

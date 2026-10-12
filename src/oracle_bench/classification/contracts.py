@@ -1,20 +1,23 @@
-"""Strict persisted contracts for repository-classification attempts."""
+"""Strict persisted contracts for task-classification attempts."""
 
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import Field, ValidationError, field_validator
 
-from oracle_bench.config import load_config
 from oracle_bench.io import read_json
-from oracle_bench.paths import RunPaths
-from oracle_bench.results import HarnessResult, read_instance_record
+from oracle_bench.results import (
+    ExposedArtifact,
+    InstanceRecord,
+    Rationale,
+    StrictModel,
+    UnsuccessfulTurn,
+    parse_json_object,
+)
 
-MAX_RATIONALE_LENGTH = 1_000
 CLASSIFICATION_LABELS = {
     "task_nature": "Task nature",
     "defect_mechanisms": "Defect mechanisms",
@@ -26,11 +29,7 @@ CLASSIFICATION_LABELS = {
 }
 
 
-class ClassificationModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-
-
-class InScopeClassification(ClassificationModel):
+class InScopeClassification(StrictModel):
     status: Literal["completed"] = "completed"
     task_nature: Literal["behavioral_bug", "performance_problem"]
     defect_mechanisms: Annotated[
@@ -97,7 +96,7 @@ class InScopeClassification(ClassificationModel):
         "solution_or_oracle_leakage",
         "not_reasonably_testable_from_code_only_context",
     ]
-    rationale: Annotated[str, Field(max_length=MAX_RATIONALE_LENGTH)]
+    rationale: Rationale
 
     @field_validator("defect_mechanisms")
     @classmethod
@@ -106,36 +105,17 @@ class InScopeClassification(ClassificationModel):
             raise ValueError("defect_mechanisms must not contain duplicates")
         return value
 
-    @field_validator("rationale")
-    @classmethod
-    def rationale_must_contain_text(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("rationale must not be blank")
-        return value
 
-
-class OutOfScopeClassification(ClassificationModel):
+class OutOfScopeClassification(StrictModel):
     status: Literal["completed"] = "completed"
     task_nature: Literal["out_of_scope"]
-    rationale: Annotated[str, Field(min_length=1, max_length=MAX_RATIONALE_LENGTH)]
-
-    @field_validator("rationale")
-    @classmethod
-    def rationale_must_contain_text(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("rationale must not be blank")
-        return value
+    rationale: Rationale
 
 
-class UnsuccessfulClassification(ClassificationModel):
-    status: Literal["invalid_output", "failed", "timed_out"]
-    error: Annotated[str, Field(min_length=1)]
+ClassificationResult = InScopeClassification | OutOfScopeClassification | UnsuccessfulTurn
 
 
-ClassificationResult = InScopeClassification | OutOfScopeClassification | UnsuccessfulClassification
-
-
-class SavedClassification(ClassificationModel):
+class SavedClassification(StrictModel):
     """A classification plus immutable identity used by later benchmark runs."""
 
     instance_id: str
@@ -145,62 +125,37 @@ class SavedClassification(ClassificationModel):
     result: ClassificationResult
 
 
-class ClassificationAttempt(HarnessResult):
-    harness: str
-    provider: str
-    model: str
-    harness_version: str
-    limit: dict
-
-
-class ExposedArtifact(ClassificationModel):
-    source: str
-    destination: str
-    sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
-
-
-class WorkspaceSpec(ClassificationModel):
+class WorkspaceSpec(StrictModel):
     image: str
     base_commit: Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
     artifacts: list[ExposedArtifact]
 
 
-_FENCED_JSON = re.compile(r"\A\s*```(?:json)?[ \t]*\r?\n(?P<body>.*?)\r?\n```\s*\Z", re.DOTALL)
-
-
 def parse_classification(raw: str) -> ClassificationResult:
     """Parse the rubric's bare or fenced object and add its persisted status."""
     try:
-        value = _extract_json(raw)
+        value = parse_json_object(raw)
         value["status"] = "completed"
         if value.get("task_nature") == "out_of_scope":
             return OutOfScopeClassification.model_validate(value)
         return InScopeClassification.model_validate(value)
     except (json.JSONDecodeError, ValidationError, ValueError) as error:
-        return UnsuccessfulClassification(status="invalid_output", error=str(error))
-
-
-def failed_classification(error: str, *, timed_out: bool = False) -> UnsuccessfulClassification:
-    return UnsuccessfulClassification(status="timed_out" if timed_out else "failed", error=error)
+        return UnsuccessfulTurn(status="invalid_output", error=str(error))
 
 
 def read_saved_classification(path: Path) -> SavedClassification:
     return SavedClassification.model_validate(read_json(path))
 
 
-def read_classification_attempt(path: Path) -> ClassificationAttempt:
-    return ClassificationAttempt.model_validate(read_json(path))
+def latest_classification(
+    classifications: Path, instance: InstanceRecord
+) -> tuple[dict, Path | None]:
+    """The newest attempt for this instance under `classifications`, or explicit absence.
 
-
-def latest_classification(paths: RunPaths) -> tuple[dict, Path | None]:
-    """Return the newest central attempt applicable to a run, or explicit absence."""
-    # Early or synthetic runs may not have frozen inputs. Classification is optional,
-    # so their reports remain renderable rather than turning absence into corruption.
-    if not paths.config.is_file() or not paths.instance.is_file():
-        return {"status": "missing"}, None
-    config = load_config(paths.config, resolved=True)
-    instance = read_instance_record(paths.instance)
-    root = Path(config.output).parent / "classifications" / instance.instance_id
+    The newest attempt is used even when it failed, so a failure never silently
+    falls back to an older answer. Its identity must match the instance.
+    """
+    root = classifications / instance.instance_id
     attempts = sorted((path for path in root.glob("*") if path.is_dir()), reverse=True)
     if not attempts:
         return {"status": "missing"}, None
@@ -229,16 +184,3 @@ def latest_classification(paths: RunPaths) -> tuple[dict, Path | None]:
             "error": "Classification provenance differs for: " + ", ".join(mismatches),
         }, attempt
     return saved.result.model_dump(mode="json"), attempt
-
-
-def _extract_json(raw: str) -> dict:
-    candidate = raw
-    if raw.lstrip().startswith("```"):
-        match = _FENCED_JSON.fullmatch(raw)
-        if match is None:
-            raise ValueError("Expected exactly one JSON object inside one Markdown fence")
-        candidate = match.group("body")
-    value = json.loads(candidate)
-    if not isinstance(value, dict):
-        raise ValueError("Classification output must be a JSON object")
-    return value

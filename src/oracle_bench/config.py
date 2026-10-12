@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
+from collections.abc import Callable
 from pathlib import Path, PurePosixPath
-from typing import Annotated, Literal
+from string import Template
+from typing import Annotated, Literal, TypeVar
 
 import yaml
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
@@ -33,13 +36,16 @@ SWEBENCH_DATASET_REVISIONS = {
     "lite": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
     "verified": "c104f840cc67f8b6eec6f759ebc8b2693d585d4a",
 }
-# Every runtime image installs all three CLIs from one lockfile, so these pins
-# must stay equal to docker/package.json. Nothing selects a version per run.
-HARNESS_VERSIONS = {
-    "codex": "0.153.4",
-    "claude": "2.1.280",
-    "opencode": "1.18.32",
+# Every runtime image installs all three CLIs from this one package, so its pins
+# are the versions. Nothing selects a version per run.
+_HARNESS_PACKAGE = Path(__file__).parent / "container/docker/package.json"
+_HARNESS_NPM_NAMES = {
+    "codex": "@openai/codex",
+    "claude": "@anthropic-ai/claude-code",
+    "opencode": "opencode-ai",
 }
+_PINNED = json.loads(_HARNESS_PACKAGE.read_text())["dependencies"]
+HARNESS_VERSIONS = {harness: _PINNED[name] for harness, name in _HARNESS_NPM_NAMES.items()}
 # First provider listed is the default. Everything goes through OpenRouter unless
 # a config asks for the other one.
 HARNESS_PROVIDERS = {
@@ -81,7 +87,8 @@ class SourceConfig(ConfigModel):
     instance: NonBlank
     kind: Literal["swebench"] = "swebench"
     dataset: Literal["lite", "verified"] = "verified"
-    revision: Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")] | None = None
+    # Defaults to the pinned revision of the chosen dataset.
+    revision: Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
     split: str = "test"
     record: str | None = None
 
@@ -89,17 +96,14 @@ class SourceConfig(ConfigModel):
     def dataset_name(self) -> str:
         return SWEBENCH_DATASETS[self.dataset]
 
-    @model_validator(mode="after")
-    def resolve_dataset_revision(self) -> SourceConfig:
-        self.revision = self.revision or SWEBENCH_DATASET_REVISIONS[self.dataset]
-        return self
-
-    @property
-    def dataset_revision(self) -> str:
-        """The immutable revision resolved during model validation."""
-        if self.revision is None:  # pragma: no cover - guarded by model validation
-            raise RuntimeError("Dataset revision was not resolved")
-        return self.revision
+    @model_validator(mode="before")
+    @classmethod
+    def pin_dataset_revision(cls, data: object) -> object:
+        if isinstance(data, dict) and data.get("revision") is None:
+            dataset = data.get("dataset", "verified")
+            if dataset in SWEBENCH_DATASET_REVISIONS:
+                data = {**data, "revision": SWEBENCH_DATASET_REVISIONS[dataset]}
+        return data
 
 
 class WallTimeLimit(ConfigModel):
@@ -147,10 +151,6 @@ class HarnessConfig(ConfigModel):
         return "OPENAI_API_KEY"
 
 
-class AgentConfig(HarnessConfig):
-    """Generation settings. Subagents are permitted; the judge's are not."""
-
-
 class JudgeConfig(HarnessConfig):
     """Settings for the optional, privileged generated-test judge."""
 
@@ -162,7 +162,7 @@ class JudgeConfig(HarnessConfig):
 
 
 class ClassifierConfig(HarnessConfig):
-    """Settings for one repository-classification turn."""
+    """Settings for one task-classification turn."""
 
     multi_agent: Literal[False] = False  # pyright: ignore[reportIncompatibleVariableOverride]
 
@@ -206,39 +206,36 @@ class ToolchainConfig(ConfigModel):
     """Oracle Bench implementation dependencies recorded with resolved runs."""
 
     node_image: ImageReference = NODE_IMAGE
-    codex_version: Version = HARNESS_VERSIONS["codex"]
-    claude_version: Version = HARNESS_VERSIONS["claude"]
-    opencode_version: Version = HARNESS_VERSIONS["opencode"]
+    # Every CLI the image installs, whichever one the run selects.
+    harnesses: dict[str, Version] = Field(default_factory=lambda: dict(HARNESS_VERSIONS))
     pytest_version: Version = PYTEST_VERSION
     coverage_version: Version = COVERAGE_VERSION
 
-    @property
-    def installed_harnesses(self) -> dict[str, str]:
-        """Return the complete CLI toolchain independently of the selected agent."""
-        return {
-            "codex": self.codex_version,
-            "claude": self.claude_version,
-            "opencode": self.opencode_version,
-        }
 
+class ResolvedConfig(ConfigModel):
+    """What a run and a classification share: an instance, its runtime, and limits.
 
-class RunConfig(ConfigModel):
+    `runtime` and `toolchain` are filled in by Oracle Bench, never by the user.
+    """
+
     source: SourceConfig
-    agent: AgentConfig
-    judge: JudgeConfig | None = None
-    task: TaskConfig
     limits: LimitsConfig = Field(default_factory=LimitsConfig)
-    output: str = "runs"
+    output: str
     runtime: RuntimeConfig | None = None
     toolchain: ToolchainConfig = Field(default_factory=ToolchainConfig)
-
-    def to_dict(self) -> dict:
-        return self.model_dump()
 
     def require_runtime(self) -> RuntimeConfig:
         if self.runtime is None:
             raise RuntimeError("The source adapter has not resolved the repository runtime")
         return self.runtime
+
+
+class RunConfig(ResolvedConfig):
+    # Subagents are permitted here; the judge and classifier forbid them.
+    agent: HarnessConfig
+    judge: JudgeConfig | None = None
+    task: TaskConfig
+    output: str = "runs"
 
     def require_judge(self) -> JudgeConfig:
         if self.judge is None:
@@ -246,24 +243,12 @@ class RunConfig(ConfigModel):
         return self.judge
 
 
-class ClassificationConfig(ConfigModel):
+class ClassificationConfig(ResolvedConfig):
     """Standalone settings for classifying one SWE-bench problem."""
 
-    source: SourceConfig
     classifier: ClassifierConfig
     rubric: NonBlank
-    limits: LimitsConfig = Field(default_factory=LimitsConfig)
     output: str = "classifications"
-    runtime: RuntimeConfig | None = None
-    toolchain: ToolchainConfig = Field(default_factory=ToolchainConfig)
-
-    def to_dict(self) -> dict:
-        return self.model_dump()
-
-    def require_runtime(self) -> RuntimeConfig:
-        if self.runtime is None:
-            raise RuntimeError("The source adapter has not resolved the repository runtime")
-        return self.runtime
 
 
 def validate_resolved_config(config: RunConfig) -> None:
@@ -276,6 +261,27 @@ def validate_resolved_config(config: RunConfig) -> None:
     for source in map(PurePosixPath, runtime.source_roots):
         if generated == source or generated in source.parents or source in generated.parents:
             raise ValueError("Generated tests must be outside production source roots")
+
+
+def validate_prompt_scope(template: str, scope: str) -> None:
+    """Make sure a localized run's prompt shows the target, and only a localized one."""
+    shows_target = "test_target" in Template(template).get_identifiers()
+    if shows_target != (scope == "localized"):
+        raise ValueError(
+            "task.scope localized requires ${test_target} in the prompt, and only localized "
+            f"may use it; scope is {scope!r}"
+        )
+
+
+def render_prompt(template: str, config: RunConfig, test_target: str | None) -> str:
+    """Fill in the prompt variables. A run without a target says "this repository"."""
+    runtime = config.require_runtime()
+    return Template(template).substitute(
+        generated_dir=config.task.generated_dir,
+        project_python=runtime.python,
+        workdir=runtime.workdir,
+        test_target=test_target or "this repository",
+    )
 
 
 def _read_settings(path: Path, resolved: bool) -> dict:
@@ -291,23 +297,36 @@ def _read_settings(path: Path, resolved: bool) -> dict:
     return raw
 
 
-def _resolve_paths(config: RunConfig, base: Path) -> None:
-    config.task.prompt = str((base / config.task.prompt).resolve())
-    if config.judge:
-        config.judge.rubric = str((base / config.judge.rubric).resolve())
-        config.judge.instructions = str((base / config.judge.instructions).resolve())
-    config.output = str((base / config.output).resolve())
+C = TypeVar("C", bound=ResolvedConfig)
+
+
+def _load(model: type[C], path: Path, resolved: bool) -> tuple[C, Callable[[str], str]]:
+    """Validate a config file and resolve the host paths every config has.
+
+    Returns the config and a resolver for the caller's own file paths, which are
+    relative to the config file's directory.
+    """
+    config = model.model_validate(_read_settings(path, resolved))
+    base = path.resolve().parent
+
+    def resolve(value: str) -> str:
+        return str((base / value).resolve())
+
+    config.output = resolve(config.output)
     if config.source.record:
-        config.source.record = str((base / config.source.record).resolve())
+        config.source.record = resolve(config.source.record)
+    if resolved and config.runtime is None:
+        raise ValueError("Resolved configuration is missing runtime")
+    return config, resolve
 
 
 def load_config(path: Path, *, resolved: bool = False) -> RunConfig:
     """Parse the schema once, resolve paths, then check the repository boundary."""
-    raw = _read_settings(path, resolved)
-    config = RunConfig.model_validate(raw)
-    _resolve_paths(config, path.resolve().parent)
-    if resolved and config.runtime is None:
-        raise ValueError("Resolved configuration is missing runtime")
+    config, resolve = _load(RunConfig, path, resolved)
+    config.task.prompt = resolve(config.task.prompt)
+    if config.judge:
+        config.judge.rubric = resolve(config.judge.rubric)
+        config.judge.instructions = resolve(config.judge.instructions)
     if config.runtime is not None:
         validate_resolved_config(config)
     return config
@@ -315,13 +334,6 @@ def load_config(path: Path, *, resolved: bool = False) -> RunConfig:
 
 def load_classification_config(path: Path, *, resolved: bool = False) -> ClassificationConfig:
     """Parse standalone classification settings and resolve their host paths."""
-    raw = _read_settings(path, resolved)
-    config = ClassificationConfig.model_validate(raw)
-    base = path.resolve().parent
-    config.rubric = str((base / config.rubric).resolve())
-    config.output = str((base / config.output).resolve())
-    if config.source.record:
-        config.source.record = str((base / config.source.record).resolve())
-    if resolved and config.runtime is None:
-        raise ValueError("Resolved classification configuration is missing runtime")
+    config, resolve = _load(ClassificationConfig, path, resolved)
+    config.rubric = resolve(config.rubric)
     return config

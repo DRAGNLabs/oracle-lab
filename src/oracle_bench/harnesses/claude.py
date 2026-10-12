@@ -2,33 +2,22 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import asdict
 from pathlib import Path
 
 from oracle_bench.container.sandbox import Sandbox
 from oracle_bench.harnesses.launch import (
     AgentTurnRequest,
+    read_trace,
     run_agent_turn,
+    turn_status,
 )
+from oracle_bench.results import Usage
 
 
 def parse_trace(path: Path) -> dict:
-    result = None
-    malformed = 0
-    if path.exists():
-        for line in path.read_text(errors="replace").splitlines():
-            if not line.strip():
-                continue
-            try:
-                event = json.loads(line)
-            except json.JSONDecodeError:
-                malformed += 1
-                continue
-            if not isinstance(event, dict):
-                malformed += 1
-            elif event.get("type") == "result":
-                result = event
+    events, malformed = read_trace(path)
+    result = next((event for event in reversed(events) if event.get("type") == "result"), None)
 
     completed = bool(result and result.get("subtype") == "success" and not result.get("is_error"))
     errors = []
@@ -43,11 +32,27 @@ def parse_trace(path: Path) -> dict:
     return {
         "turn_completed": completed,
         "turn_failed": bool(result and not completed),
-        "usage": result.get("usage") if result else None,
+        "usage": _usage(result.get("usage")) if result else None,
         "errors": errors,
         "unparsed_trace_lines": malformed,
         "final_text": result.get("result", "") if result else "",
     }
+
+
+def _usage(raw: dict | None) -> dict | None:
+    if not raw:
+        return None
+    # Claude's input_tokens leaves out the prompt tokens read from or written to cache.
+    cached = raw.get("cache_read_input_tokens", 0)
+    return Usage(
+        input_tokens=raw.get("input_tokens", 0)
+        + cached
+        + raw.get("cache_creation_input_tokens", 0),
+        cached_input_tokens=cached,
+        output_tokens=raw.get("output_tokens", 0),
+        reasoning_tokens=(raw.get("output_tokens_details") or {}).get("thinking_tokens"),
+        raw_usage=raw,
+    ).model_dump()
 
 
 def run_turn(sandbox: Sandbox, request: AgentTurnRequest) -> dict:
@@ -90,11 +95,5 @@ def run_turn(sandbox: Sandbox, request: AgentTurnRequest) -> dict:
 
     summary = {**asdict(outcome), **parse_trace(directory / "trace.jsonl")}
     (directory / "final.txt").write_text(summary.pop("final_text"))
-    summary["status"] = (
-        "timeout"
-        if outcome.timed_out
-        else "failed"
-        if outcome.exit_code or not summary["turn_completed"]
-        else "completed"
-    )
+    summary["status"] = turn_status(outcome, summary)
     return summary

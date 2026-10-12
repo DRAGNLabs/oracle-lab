@@ -2,22 +2,30 @@ import json
 import re
 
 import pytest
-from fixtures import judge_attempt
+from fixtures import instance_record, judge_attempt, localized_target, usage
 
 from oracle_bench.io import write_json
 from oracle_bench.paths import RunPaths
 from oracle_bench.report import report
-from oracle_bench.results import MATRIX_CELLS
+from oracle_bench.results import MATRIX_CELLS, write_result
 
 
 @pytest.mark.parametrize(
     ("scope", "target", "expected_scope"),
     [
         ("repository", None, "target: whole repository"),
+        ("localized", localized_target(), "target: `package/core.py`: `Client.send`;"),
         (
             "localized",
-            "package/module.py (function_name)",
-            "target: package/module.py (function_name)",
+            localized_target(
+                level="class",
+                files=[
+                    {"path": "a.py", "names": ["A"], "lines": 3},
+                    {"path": "b.py", "names": ["B", "C"], "lines": 9},
+                ],
+                text="- `a.py`: class `A`\n- `b.py`: classes `B`, `C`",
+            ),
+            "target: `a.py`: class `A`; `b.py`: classes `B`, `C`;",
         ),
     ],
 )
@@ -90,7 +98,7 @@ def report_results(**changes):
         "agent": {
             "status": "completed",
             "duration_seconds": 4,
-            "usage": {"input_tokens": 12},
+            "usage": usage(input_tokens=12),
         },
         "buggy_status": "completed",
         "golden_status": "completed",
@@ -141,7 +149,7 @@ def test_report_renders_completed_judge_with_provenance_and_supporting_files(tmp
             model="judge-model",
             harness_version="2.1.263",
             duration_seconds=3,
-            usage={"input_tokens": 20},
+            usage=usage(input_tokens=20),
         ),
     )
 
@@ -153,8 +161,8 @@ def test_report_renders_completed_judge_with_provenance_and_supporting_files(tmp
     )
     assert "| yes | correct_assertion | — | no |" in text
     assert "> The generated assertion reaches the issue" in text
-    assert "| Generate | 4 s | 12 | — |" in text
-    assert "| Judge | 3 s | 20 | — |" in text
+    assert "| Generate | 4 s | 12 | 0 | 20 |" in text
+    assert "| Judge | 3 s | 20 | 0 | 20 |" in text
     assert "[workspace](judge/workspace-spec.json)" in text
     for target in re.findall(r"\[[^]]+\]\(([^)]+)\)", text):
         assert (tmp_path / target).is_file(), target
@@ -271,6 +279,21 @@ def test_report_title_states_why_the_run_has_errors(tmp_path, changes, expected)
     assert "Limits of this exploratory run" not in text
 
 
+def test_report_names_files_that_failed_to_collect(tmp_path):
+    paths = RunPaths.create(tmp_path)
+    paths.results.write_text(json.dumps(report_results()))
+    error = {"nodeid": "oracle_tests/test_broken.py", "details": "ImportError"}
+    write_json(
+        paths.evaluation / "golden/tests.json",
+        {"status": "completed", "collection_errors": [error]},
+    )
+
+    text = report(paths).read_text()
+
+    assert "**completed**\n" in text
+    assert "Files that failed to collect: golden 1." in text
+
+
 def test_report_does_not_regenerate_the_generation_transcript(tmp_path):
     paths = RunPaths.create(tmp_path)
     paths.results.write_text(json.dumps(report_results()))
@@ -281,6 +304,41 @@ def test_report_does_not_regenerate_the_generation_transcript(tmp_path):
     report(paths)
 
     assert session.read_text() == "frozen generation transcript\n"
+
+
+def test_report_links_the_saved_target(tmp_path):
+    paths = RunPaths.create(tmp_path)
+    paths.results.write_text(json.dumps(report_results()))
+    write_json(paths.target, localized_target())
+
+    assert "[target](inputs/target.json)" in report(paths).read_text()
+
+
+def test_report_finds_the_classification_beside_the_runs_directory(tmp_path):
+    paths = RunPaths.create(tmp_path / "runs" / "run-1")
+    paths.results.write_text(json.dumps(report_results()))
+    instance = instance_record()
+    write_result(paths.instance, instance)
+    attempt = tmp_path / "classifications" / instance.instance_id / "20260101T000000Z-a"
+    write_json(
+        attempt / "classification.json",
+        {
+            "instance_id": instance.instance_id,
+            "base_commit": instance.base_commit,
+            "source_record_sha256": instance.source.record_sha256,
+            "rubric_sha256": "e" * 64,
+            "result": {
+                "status": "completed",
+                "task_nature": "out_of_scope",
+                "rationale": "A feature request.",
+            },
+        },
+    )
+
+    text = report(paths).read_text()
+
+    assert "Task nature: `out_of_scope`." in text
+    assert "classifications/owner__project-1/20260101T000000Z-a/classification.json" in text
 
 
 def test_report_renders_central_task_classification_and_provenance(tmp_path, monkeypatch):
@@ -301,7 +359,7 @@ def test_report_renders_central_task_classification_and_provenance(tmp_path, mon
         {
             "status": "completed",
             "duration_seconds": 2,
-            "usage": {"input_tokens": 10},
+            "usage": usage(input_tokens=10),
             "errors": [],
             "harness": "codex",
             "provider": "openrouter",
@@ -322,7 +380,7 @@ def test_report_renders_central_task_classification_and_provenance(tmp_path, mon
         "rationale": "A nearby implementation establishes the expected behavior.",
     }
     monkeypatch.setattr(
-        "oracle_bench.report.latest_classification", lambda run_paths: (classification, attempt)
+        "oracle_bench.report._classification", lambda run_paths: (classification, attempt)
     )
 
     text = report(paths).read_text()
@@ -360,7 +418,7 @@ def test_report_renders_out_of_scope_and_unsuccessful_classifications(
     paths = RunPaths.create(tmp_path)
     paths.results.write_text(json.dumps(report_results()))
     monkeypatch.setattr(
-        "oracle_bench.report.latest_classification", lambda run_paths: (classification, None)
+        "oracle_bench.report._classification", lambda run_paths: (classification, None)
     )
 
     text = report(paths).read_text()

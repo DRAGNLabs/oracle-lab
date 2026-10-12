@@ -7,11 +7,14 @@ validated here, where it reaches the host, rather than where it was produced.
 
 from __future__ import annotations
 
+import json
+import re
+from datetime import datetime, timezone
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
 from oracle_bench.io import read_json, write_json
 
@@ -79,9 +82,48 @@ class InstanceRecord(ArtifactModel):
     golden_patch: str
     reference_test_patch: str
     reference_test_ids: list[str]
-    test_target: str
     source: SourceProvenance
     original_record: dict
+
+
+class SubmissionFile(ArtifactModel):
+    sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    mode: int
+
+
+class SubmissionManifest(ArtifactModel):
+    """The frozen submission: new test files under the generated directory, and their hashes.
+
+    `sha256` hashes `files`, so the manifest and the bundle beside it can be
+    checked together before either version receives them.
+    """
+
+    files: dict[str, SubmissionFile]
+    forbidden_changes: list[str]  # edits outside the generated directory
+    compliant: bool
+    empty: bool
+    sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+
+
+class TargetFile(ArtifactModel):
+    """One file of a localized target, and what in it the agent is pointed at."""
+
+    path: str
+    # Qualified functions or classes, in file order; empty when the whole file is the target.
+    names: list[str]
+    lines: int  # buggy-file lines this entry spans
+
+
+class LocalizedTarget(ArtifactModel):
+    """The part of the buggy repository a localized run tells the agent to test.
+
+    It names the existing code the golden repair changes, so it is derived from
+    private data, but it contains no patch text or changed lines.
+    """
+
+    level: Literal["function", "class", "file"]
+    files: Annotated[list[TargetFile], Field(min_length=1)]
+    text: str  # exactly what replaces `${test_target}` in the prompt
 
 
 class TestCase(ArtifactModel):
@@ -129,6 +171,18 @@ class PairedOutcome(ArtifactModel):
     golden_failure: dict | None = None
 
 
+class Usage(ArtifactModel):
+    """Token counts with one meaning for every harness. `raw_usage` is the CLI's own."""
+
+    # Every prompt token, read from cache or not.
+    input_tokens: int
+    cached_input_tokens: int
+    # Every generated token, reasoning included.
+    output_tokens: int
+    reasoning_tokens: int | None
+    raw_usage: dict
+
+
 class HarnessResult(ArtifactModel):
     """A harness's own report. Adapters add their own trace fields."""
 
@@ -136,7 +190,7 @@ class HarnessResult(ArtifactModel):
 
     status: str
     duration_seconds: float | None = None
-    usage: dict | None = None
+    usage: Usage | None = None
     errors: list[dict] = Field(default_factory=list)
 
 
@@ -184,7 +238,7 @@ class EvaluationResult(PairedResult):
     submission_compliant: bool
     forbidden_changes: list[str]
     task_scope: str
-    test_target: str | None = None
+    test_target: LocalizedTarget | None = None  # what a localized run's agent was shown
     existing_tests: str
     agent: HarnessResult
     coverage: dict[str, CoverageResult]
@@ -200,12 +254,138 @@ class EvaluationResult(PairedResult):
         return (
             self.submission_compliant
             and self.both_completed
-            and self.matrix["fail_on_buggy_pass_on_golden"].count > 0
+            and self.has_fail_on_buggy_pass_on_golden
         )
+
+    @property
+    def completion_problems(self) -> list[str]:
+        """Why this run is not a clean completion; empty when it is."""
+        problems = []
+        if self.agent.status != "completed":
+            problems.append(f"generation {self.agent.status}")
+        if self.no_tests:
+            problems.append("no tests collected")
+        else:
+            problems += [
+                f"{version} evaluation {status}"
+                for version, status in (
+                    ("buggy", self.buggy_status),
+                    ("golden", self.golden_status),
+                )
+                if status != "completed"
+            ]
+        if self.diagnostic_only:
+            problems.append("diagnostic only: edits outside the generated directory")
+        return problems
+
+
+class AgentAttempt(HarnessResult):
+    """A judge or classifier turn's harness result, plus which agent ran it."""
+
+    harness: str
+    provider: str
+    model: str
+    harness_version: str
+    limit: dict
+
+
+# Contracts for what a model wrote. Unlike run artifacts, these refuse coercion too.
+
+
+class StrictModel(BaseModel):
+    """A model-written contract: rejects undeclared fields and coerced types."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+
+MAX_RATIONALE_LENGTH = 1_000
+
+
+def _require_text(value: str) -> str:
+    if not value.strip():
+        raise ValueError("rationale must not be blank")
+    return value
+
+
+Rationale = Annotated[str, Field(max_length=MAX_RATIONALE_LENGTH), AfterValidator(_require_text)]
+
+
+class UnsuccessfulTurn(StrictModel):
+    """A judge or classifier turn that produced no usable answer."""
+
+    status: Literal["invalid_output", "failed", "timed_out"]
+    error: Annotated[str, Field(min_length=1)]
+
+
+class ExposedArtifact(StrictModel):
+    """One file copied into a privileged workspace, and its hash."""
+
+    source: str
+    destination: str
+    sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+
+
+def failed_turn(error: str, *, timed_out: bool = False) -> UnsuccessfulTurn:
+    """A harness failure, without pretending the model gave an answer."""
+    return UnsuccessfulTurn(status="timed_out" if timed_out else "failed", error=error)
+
+
+_FENCED_JSON = re.compile(r"\A\s*```(?:json)?[ \t]*\r?\n(?P<body>.*?)\r?\n```\s*\Z", re.DOTALL)
+
+
+def parse_json_object(raw: str) -> dict:
+    """The one JSON object a model answered with, bare or inside one Markdown fence."""
+    candidate = raw
+    if raw.lstrip().startswith("```"):
+        match = _FENCED_JSON.fullmatch(raw)
+        if match is None:
+            raise ValueError("Expected exactly one JSON object inside one Markdown fence")
+        candidate = match.group("body")
+    value = json.loads(candidate)
+    if not isinstance(value, dict):
+        raise ValueError("Model output must be a JSON object")
+    return value
+
+
+def last_error_message(errors: list) -> str | None:
+    """The message of a harness's last error, which may be nested under `error`."""
+    if not errors:
+        return None
+    last = errors[-1]
+    if isinstance(last, dict):
+        nested = last.get("error")
+        message = last.get("message") or (
+            nested.get("message") if isinstance(nested, dict) else None
+        )
+        if message:
+            return str(message)
+    return str(last)
+
+
+def write_status(directory: Path, stage: str, state: str = "running", **details: Any) -> None:
+    """Record the latest lifecycle checkpoint in `status.json` and print it."""
+    write_json(
+        directory / "status.json",
+        {
+            "stage": stage,
+            "state": state,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            **details,
+        },
+    )
+    print(f"[{stage}] {state}: {directory}", flush=True)
+
+
+def read_agent_attempt(path: Path) -> AgentAttempt:
+    return AgentAttempt.model_validate(read_json(path))
 
 
 def read_instance_record(path: Path) -> InstanceRecord:
     return InstanceRecord.model_validate(read_json(path))
+
+
+def read_localized_target(path: Path) -> LocalizedTarget:
+    return LocalizedTarget.model_validate(read_json(path))
 
 
 def read_version_result(path: Path) -> VersionResult:

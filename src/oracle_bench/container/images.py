@@ -143,7 +143,7 @@ def prepare_image(
     """
     runtime = config.require_runtime()
     harness_context, runtime_context = prepare_contexts(build)
-    installed_harnesses = config.toolchain.installed_harnesses
+    installed_harnesses = config.toolchain.harnesses
     lock_sha256 = digest((harness_context / "package-lock.json").read_bytes())
     provenance = {
         "installed_harnesses": installed_harnesses,

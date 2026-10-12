@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from oracle_bench.repo_classification.contracts import parse_classification
+from oracle_bench.classification.contracts import parse_classification
 
 
 def valid_classification(**changes):

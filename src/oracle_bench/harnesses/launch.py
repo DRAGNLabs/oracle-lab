@@ -1,5 +1,6 @@
 """Shared execution and artifact policy for one coding-agent turn."""
 
+import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,9 +21,7 @@ def require_credential(harness: HarnessConfig) -> None:
 class AgentTurnRequest:
     """Where one bounded agent turn runs and where its evidence is written.
 
-    Harness adapters remain responsible for commands, limits, and trace
-    parsing, all of which they read from the harness configuration. Callers
-    describe only the task: which prompt to deliver and where artifacts belong.
+    Callers describe the task; the adapter decides how to run it.
     """
 
     harness: HarnessConfig
@@ -30,6 +29,34 @@ class AgentTurnRequest:
     prompt: Path
     working_directory: str
     artifact_directory: Path
+
+
+def read_trace(path: Path) -> tuple[list[dict], int]:
+    """A JSON Lines trace's events, and how many non-blank lines were not JSON objects."""
+    events, malformed = [], 0
+    if path.exists():
+        for line in path.read_text(errors="replace").splitlines():
+            if not line.strip():
+                continue
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                malformed += 1
+                continue
+            if isinstance(event, dict):
+                events.append(event)
+            else:
+                malformed += 1
+    return events, malformed
+
+
+def turn_status(outcome: CommandResult, parsed: dict) -> str:
+    """One rule for every harness: a timeout, a failure, or a completed turn."""
+    if outcome.timed_out:
+        return "timeout"
+    if outcome.exit_code or parsed["turn_failed"] or not parsed["turn_completed"]:
+        return "failed"
+    return "completed"
 
 
 def run_agent_turn(

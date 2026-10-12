@@ -17,7 +17,7 @@ from requests.exceptions import RequestException
 from oracle_bench.config import ClassificationConfig, RunConfig, RuntimeConfig
 from oracle_bench.container import files
 from oracle_bench.container.files import RedactedOutput
-from oracle_bench.container.lifecycle import execution_watchdog
+from oracle_bench.container.lifecycle import execution_watchdog, preserve_failure
 from oracle_bench.io import read_json
 
 HELPER_DIR = "/opt/oracle-bench/container-helpers"
@@ -189,23 +189,16 @@ def open_sandbox(
 ) -> Iterator[Sandbox]:
     """Create explicitly before starting, so failed starts are cleaned up too."""
     container = create_sandbox_container(client, image, config, profile)
-    failure = None
     try:
         container.start()
-        sandbox = Sandbox(container, config.require_runtime(), log)
-        yield sandbox
-    except BaseException as exc:
-        failure = exc
-        raise
+        yield Sandbox(container, config.require_runtime(), log)
     finally:
-        try:
-            container.remove(force=True)
-        except DockerException as exc:
-            if failure is None:
+        note = "Container cleanup also failed; inspect Docker for leftover containers."
+        with preserve_failure(note):
+            try:
+                container.remove(force=True)
+            except DockerException as exc:
                 raise RuntimeError("Could not remove benchmark container") from exc
-            failure.add_note(
-                "Container cleanup also failed; inspect Docker for leftover containers."
-            )
 
 
 def create_sandbox_container(

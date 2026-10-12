@@ -101,8 +101,6 @@ def write_summary(batch_dir: Path, name: str, jobs: list[dict]) -> dict:
         "completed_with_results": completed,
         "completed_evaluations": completed_evaluations,
         "detected": detected,
-        # Match SWE-bench's resolved/submitted denominator while naming our distinct metric.
-        "detection_rate_attempted": detected / attempted if attempted else None,
         "matrix_detection_rate": (
             detected / completed_evaluations if completed_evaluations else None
         ),
@@ -206,11 +204,11 @@ def _headline_lines(summary: dict) -> list[str]:
         "",
         f"Matrix detections: **{summary['detected']}** of "
         f"**{summary['completed_evaluations']}** completed paired evaluations "
-        f"(**{_percent(summary['matrix_detection_rate'])}**). The rate over all attempted "
-        f"instances is **{_percent(summary['detection_rate_attempted'])}**.",
+        f"(**{_percent(summary['matrix_detection_rate'])}**).",
         "",
         "An instance is detected when a compliant submission has at least one test that fails "
-        "on buggy and passes on golden. Incomplete and diagnostic-only runs never count as "
+        "on buggy and passes on golden. The rate counts only runs whose buggy and golden "
+        "evaluations both completed; a non-compliant submission among them counts as not "
         "detected.",
         "",
         f"Judge says tests attempt the issue: **{summary['judge']['tests_issue_yes']}** of "

@@ -1,6 +1,9 @@
 import subprocess
 import sys
 
+import pytest
+
+import oracle_bench.container.helpers.prepare as prepare_module
 from oracle_bench.container.helpers.prepare import remove_existing_tests, replace_git_history
 
 
@@ -90,3 +93,84 @@ def test_replace_git_history_removes_original_commits_and_objects(tmp_path):
     assert git("rev-list", "--count", "HEAD").stdout.strip() == "1"
     assert git("cat-file", "-e", original_commit, check=False).returncode != 0
     assert git("show", "HEAD^:test_hidden.py", check=False).returncode != 0
+
+
+@pytest.fixture
+def checkout(tmp_path, monkeypatch):
+    """A repository with two commits, isolated from the user's Git configuration."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "gitconfig"))
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    root = tmp_path / "repo"
+    (root / "package" / "tests").mkdir(parents=True)
+    git = ["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run([*git[:3], "init", "--quiet"], check=True)
+    (root / "package" / "core.py").write_text("VALUE = 1\n")
+    (root / "package" / "tests" / "test_core.py").write_text("def test_core(): pass\n")
+    subprocess.run([*git, "add", "-A"], check=True)
+    subprocess.run([*git, "commit", "--quiet", "-m", "first"], check=True)
+    (root / "package" / "core.py").write_text("VALUE = 2\n")
+    subprocess.run([*git, "commit", "--quiet", "-am", "second"], check=True)
+    # Only root can hand files to the agent's user; record the request instead.
+    chowns = []
+    run = subprocess.run
+
+    def run_except_chown(argv, **kwargs):
+        if argv[0] == "chown":
+            chowns.append(argv)
+            return subprocess.CompletedProcess(argv, 0)
+        return run(argv, **kwargs)
+
+    monkeypatch.setattr(prepare_module.subprocess, "run", run_except_chown)
+    monkeypatch.chdir(tmp_path)
+    return root, chowns
+
+
+def settings(root, *, hide: bool, sanitize_history: bool) -> dict:
+    return {
+        "workdir": str(root),
+        "generated_dir": "oracle_tests",
+        "hide": hide,
+        "sanitize_history": sanitize_history,
+        "existing_test_globs": ["package/tests"],
+    }
+
+
+def commits(root) -> list[str]:
+    log = subprocess.run(
+        ["git", "-C", str(root), "log", "--format=%s"], check=True, capture_output=True, text=True
+    )
+    return log.stdout.splitlines()
+
+
+def test_the_generation_workspace_has_no_history_no_hidden_tests_and_an_empty_test_dir(checkout):
+    root, chowns = checkout
+
+    prepare_module.prepare(settings(root, hide=True, sanitize_history=True))
+
+    assert commits(root) == ["Oracle Bench workspace"]
+    assert not (root / "package" / "tests" / "test_core.py").exists()
+    assert (root / "package" / "core.py").read_text() == "VALUE = 2\n"
+    assert list((root / "oracle_tests").iterdir()) == []
+    status = subprocess.run(
+        ["git", "-C", str(root), "status", "--porcelain"], capture_output=True, text=True
+    )
+    assert status.stdout == ""
+    assert chowns == [["chown", "-R", "10001:10001", str(root)]]
+
+
+def test_a_reference_workspace_keeps_existing_tests_and_history(checkout):
+    root, _ = checkout
+
+    prepare_module.prepare(settings(root, hide=False, sanitize_history=False))
+
+    assert (root / "package" / "tests" / "test_core.py").exists()
+    assert commits(root) == ["Oracle Bench workspace", "second", "first"]
+
+
+def test_an_existing_generated_directory_is_refused(checkout):
+    root, _ = checkout
+    (root / "oracle_tests").mkdir()
+
+    with pytest.raises(FileExistsError):
+        prepare_module.prepare(settings(root, hide=True, sanitize_history=True))

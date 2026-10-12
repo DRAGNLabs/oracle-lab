@@ -18,7 +18,6 @@ jobs:
   - config: sklearn-14710-opencode.yaml
 
 execution:
-  concurrency: 1
   continue_on_error: true
 
 output: ../../batches

@@ -50,7 +50,7 @@ def turn_request(
     """Build a turn request for the selected harness at the pinned toolchain version."""
     return AgentTurnRequest(
         harness=harness,
-        harness_version=config.toolchain.installed_harnesses[harness.harness],
+        harness_version=config.toolchain.harnesses[harness.harness],
         prompt=prompt,
         working_directory=working_directory,
         artifact_directory=artifact_directory,

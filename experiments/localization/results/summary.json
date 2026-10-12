@@ -1,0 +1,134 @@
+{
+  "dataset": "princeton-nlp/SWE-bench_Verified",
+  "dataset_revision": "c104f840cc67f8b6eec6f759ebc8b2693d585d4a",
+  "supported": {
+    "instances": 194,
+    "scored": 192,
+    "unscored": [
+      "matplotlib__matplotlib-23314",
+      "matplotlib__matplotlib-26291"
+    ],
+    "errors": 0,
+    "offset_hunk_instances": 8,
+    "levels": {
+      "function": 185,
+      "class": 6,
+      "file": 1
+    },
+    "crosscheck_agreement": 0.974,
+    "crosscheck_disagreements": [
+      "astropy__astropy-13398",
+      "pylint-dev__pylint-4551",
+      "pylint-dev__pylint-6528",
+      "scikit-learn__scikit-learn-14629",
+      "sphinx-doc__sphinx-7590"
+    ],
+    "old": {
+      "exact": 0.7396,
+      "names": 349,
+      "precision": 0.7994,
+      "recall": 0.9253,
+      "instances_with_a_wrong_name": 50,
+      "instances_missing_a_target_name": 22
+    },
+    "size": {
+      "names_per_function_target": {
+        "median": 1,
+        "p75": 2,
+        "p90": 3,
+        "max": 12
+      },
+      "function_target_lines": {
+        "median": 51,
+        "p75": 109,
+        "p90": 164,
+        "max": 959
+      },
+      "class_target_lines": {
+        "median": 91.0,
+        "p75": 220,
+        "p90": 534,
+        "max": 534
+      },
+      "any_target_lines": {
+        "median": 54.0,
+        "p75": 110,
+        "p90": 172,
+        "max": 959
+      },
+      "changed_file_lines": {
+        "median": 1144.0,
+        "p75": 2061,
+        "p90": 3528,
+        "max": 11965
+      }
+    }
+  },
+  "all": {
+    "instances": 500,
+    "scored": 498,
+    "unscored": [
+      "matplotlib__matplotlib-23314",
+      "matplotlib__matplotlib-26291"
+    ],
+    "errors": 0,
+    "offset_hunk_instances": 11,
+    "levels": {
+      "function": 455,
+      "class": 32,
+      "file": 11
+    },
+    "crosscheck_agreement": 0.9819,
+    "crosscheck_disagreements": [
+      "astropy__astropy-13398",
+      "django__django-13794",
+      "django__django-15128",
+      "pylint-dev__pylint-4551",
+      "pylint-dev__pylint-6528",
+      "scikit-learn__scikit-learn-14629",
+      "sphinx-doc__sphinx-7590",
+      "sympy__sympy-13878",
+      "sympy__sympy-20916"
+    ],
+    "old": {
+      "exact": 0.7329,
+      "names": 940,
+      "precision": 0.8021,
+      "recall": 0.9057,
+      "instances_with_a_wrong_name": 133,
+      "instances_missing_a_target_name": 70
+    },
+    "size": {
+      "names_per_function_target": {
+        "median": 1,
+        "p75": 2,
+        "p90": 3,
+        "max": 56
+      },
+      "function_target_lines": {
+        "median": 44,
+        "p75": 93,
+        "p90": 164,
+        "max": 959
+      },
+      "class_target_lines": {
+        "median": 49.5,
+        "p75": 94,
+        "p90": 406,
+        "max": 4103
+      },
+      "any_target_lines": {
+        "median": 47.5,
+        "p75": 99,
+        "p90": 185,
+        "max": 4103
+      },
+      "changed_file_lines": {
+        "median": 971.0,
+        "p75": 1955,
+        "p90": 2835,
+        "max": 27594
+      }
+    }
+  }
+}

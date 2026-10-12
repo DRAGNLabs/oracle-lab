@@ -1,0 +1,84 @@
+{
+  "about": "Manual verdicts on every disagreement between the AST localizer and the line-attribution cross-check, and on a random audit sample. Reviewed by Claude (claude-opus-5-5) on 2026-10-12 by reading each patch against the buggy file.",
+  "disagreements": [
+    {
+      "instance_id": "astropy__astropy-13398",
+      "supported": true,
+      "crosscheck_extra": ["astropy/coordinates/builtin_frames/intermediate_rotation_transforms.py::tete_to_itrs_mat"],
+      "cause": "Only a comment changes inside the function (siderial -> sidereal).",
+      "verdict": "localizer correct"
+    },
+    {
+      "instance_id": "pylint-dev__pylint-4551",
+      "supported": true,
+      "crosscheck_extra": ["pylint/pyreverse/utils.py::LocalsVisitor.visit"],
+      "cause": "New functions with multi-line signatures are added below the method. The closing `) -> ...:` line ends the cross-check's new-definition tracking, so it credits the new bodies to the method above.",
+      "verdict": "localizer correct; cross-check defect"
+    },
+    {
+      "instance_id": "pylint-dev__pylint-6528",
+      "supported": true,
+      "crosscheck_extra": ["pylint/lint/expand_modules.py::_is_in_ignore_list_re"],
+      "cause": "Same multi-line signature defect as pylint-dev__pylint-4551, for the new function `_is_ignored_file`.",
+      "verdict": "localizer correct; cross-check defect"
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-14629",
+      "supported": true,
+      "crosscheck_extra": ["sklearn/multioutput.py::_BaseChain.fit"],
+      "cause": "A `raise` statement is re-indented from 16 to 12 spaces; the block structure, and so the syntax tree, is identical.",
+      "verdict": "localizer correct"
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-7590",
+      "supported": true,
+      "crosscheck_extra": ["sphinx/domains/cpp.py::ASTCharLiteral.get_id", "sphinx/domains/cpp.py::ASTNumberLiteral.get_id"],
+      "cause": "Only `# TODO` comment lines are added inside the methods.",
+      "verdict": "localizer correct"
+    },
+    {
+      "instance_id": "django__django-13794",
+      "supported": false,
+      "crosscheck_missing": ["django/utils/functional.py::lazy"],
+      "cause": "The repair adds `__add__` and `__radd__` to the `__proxy__` class defined inside `lazy`. The cross-check skips new definitions; the localizer sees that `lazy`'s syntax tree changed.",
+      "verdict": "localizer correct"
+    },
+    {
+      "instance_id": "django__django-15128",
+      "supported": false,
+      "crosscheck_extra": ["django/db/models/sql/query.py::Query.change_aliases"],
+      "cause": "Only comment lines are added inside the method.",
+      "verdict": "localizer correct"
+    },
+    {
+      "instance_id": "sympy__sympy-13878",
+      "supported": false,
+      "crosscheck_extra": [
+        "sympy/stats/crv_types.py::ChiSquaredDistribution._cdf",
+        "sympy/stats/crv_types.py::ExponentialDistribution._cdf",
+        "sympy/stats/crv_types.py::LogNormalDistribution._cdf"
+      ],
+      "cause": "Whitespace only: `x>=0` becomes `x >= 0`, and `x>0` becomes `x > 0`.",
+      "verdict": "localizer correct"
+    },
+    {
+      "instance_id": "sympy__sympy-20916",
+      "supported": false,
+      "crosscheck_extra": ["sympy/printing/conventions.py::split_super_sub"],
+      "cause": "Only a comment's capitalization changes.",
+      "verdict": "localizer correct"
+    }
+  ],
+  "audit": {
+    "sample": "results/audit_sample.json",
+    "method": "25 supported instances drawn with random.Random(20261012).sample from the 192 scored supported instances. Each target was checked against the patch hunks and, where a hunk header named a different function, against the buggy file's function line spans.",
+    "correct": 25,
+    "incorrect": 0,
+    "notes": [
+      "astropy__astropy-14508 and pytest-dev__pytest-7490: the hunk header names a different function from the one changed; the localizer names the changed one.",
+      "sphinx-doc__sphinx-8475 and astropy__astropy-7336: a change inside a nested function is credited to the enclosing function.",
+      "pytest-dev__pytest-5262 and scikit-learn__scikit-learn-14629: the repair only adds a method, so the target is the class.",
+      "Import-only and module-level changes (for example astropy__astropy-14369's parser table) are left out when a function changes."
+    ]
+  }
+}

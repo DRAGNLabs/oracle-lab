@@ -6,7 +6,7 @@ and three answers are recorded:
 
 - `target`: the AST localizer, the proposed method (`localize.py`);
 - `crosscheck`: an independent line-attribution implementation (`crosscheck.py`);
-- `old`: Oracle Bench's current diff-text heuristic.
+- `old`: Oracle Bench's old diff-text heuristic, frozen in `old_heuristic.py`.
 
 Writes `results/instances.jsonl` and `results/summary.json`.
 """
@@ -23,14 +23,11 @@ from pathlib import Path, PurePosixPath
 from crosscheck import attribute_lines
 from datasets import load_dataset
 from localize import compare, localize
+from old_heuristic import _is_test_path, localized_test_target
 from patches import apply_patch, locate_hunks, parse_patch
 
 from oracle_bench.config import SWEBENCH_DATASET_REVISIONS, SWEBENCH_DATASETS
-from oracle_bench.instance.swebench import (
-    REPOSITORY_LAYOUTS,
-    _is_test_path,
-    localized_test_target,
-)
+from oracle_bench.instance.swebench import REPOSITORY_LAYOUTS
 
 HERE = Path(__file__).parent
 CACHE = HERE / ".cache" / "files"

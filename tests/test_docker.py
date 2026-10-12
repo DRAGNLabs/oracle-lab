@@ -25,8 +25,14 @@ from oracle_bench.judge.human import (
 )
 from oracle_bench.judge.run import judge as run_judge
 from oracle_bench.judge.workspace import JUDGE_ROOT, build_judge_workspace
+from oracle_bench.localization import localize
 from oracle_bench.paths import RunPaths
-from oracle_bench.results import read_evaluation_result, read_instance_record, write_result
+from oracle_bench.results import (
+    read_evaluation_result,
+    read_instance_record,
+    read_localized_target,
+    write_result,
+)
 from oracle_bench.run import reevaluate
 
 pytestmark = pytest.mark.docker
@@ -339,3 +345,22 @@ def test_real_requests_pair_and_artifact_copy(tmp_path, visibility, monkeypatch,
         replay = read_json(paths.results)
         assert replay["matrix"] == result["matrix"]
         assert replay["artifact_sha256"] == read_json(paths.submission / "manifest.json")["sha256"]
+
+
+def test_localize_reads_the_saved_image_and_reproduces_the_saved_target(tmp_path, request):
+    saved = os.environ.get("ORACLE_BENCH_SMOKE_RUN")
+    if not saved:
+        pytest.skip("Set ORACLE_BENCH_SMOKE_RUN to a localized run")
+    saved_paths = RunPaths.open(Path(saved).resolve())
+    if not saved_paths.target.is_file():
+        pytest.skip("The saved run is not localized")
+    config = load_config(saved_paths.config, resolved=True)
+    instance = read_instance_record(saved_paths.instance)
+    image = read_json(saved_paths.runtime)["image"]
+    client = docker.from_env()
+    request.addfinalizer(client.close)
+    paths = RunPaths.create(tmp_path)
+
+    target = localize(client, config, image, instance, paths)
+
+    assert target == read_localized_target(saved_paths.target)

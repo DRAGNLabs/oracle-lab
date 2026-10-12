@@ -1,7 +1,12 @@
 # Localization prototype
 
-A standalone prototype of a new way to choose the localized test target. It is
-not used by Oracle Bench yet.
+The prototype and validation for how Oracle Bench chooses a localized run's test
+target. The method now ships as `src/oracle_bench/localization/`, which is the
+source of truth. This directory keeps the evidence: the evaluation over SWE-bench
+Verified, the independent cross-check, the coverage and stage checks, and their
+results. `localize.py` and `patches.py` here are the prototype copies the results
+were produced with; `results/stage_check.json` confirms the shipped stage gives
+the same targets.
 
 The target is the existing functions whose syntax tree differs between the buggy
 file and the repaired file. When no existing function changes, it falls back to
@@ -13,10 +18,13 @@ the classes whose own body changed, then to the changed files.
 - `patches.py`: reads a unified diff and applies it to the buggy file.
 - `crosscheck.py`: an independent check that maps diff line numbers onto
   function spans. It shares only the patch parser with `localize.py`.
-- `evaluate.py`: runs the method, the cross-check, and Oracle Bench's current
+- `evaluate.py`: runs the method, the cross-check, and Oracle Bench's old
   heuristic over SWE-bench Verified.
+- `old_heuristic.py`: the old diff-text heuristic, frozen from before its removal.
 - `coverage_check.py`: reads saved Oracle Bench reference-check coverage and
   checks that the failing reference tests run the target on the buggy version.
+- `check_stage.py`: runs Oracle Bench's real `localize` stage against freshly
+  built runtime images and compares it with the prototype. Needs Docker.
 - `test_localize.py`: the method's rules on small hand-written sources.
 - `results/`: per-instance results, the summary, and manual verdicts.
 

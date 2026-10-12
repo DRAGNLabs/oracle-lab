@@ -21,8 +21,9 @@ Read these references before changing related behavior:
 The host orchestrator resolves an instance, prepares a runtime image, names the
 code a localized run targets, performs a private reference-pair check, launches
 the agent in a buggy generation container, captures new tests, and evaluates the
-same frozen artifact in fresh buggy and golden containers. A configured run then judges that submission in a separate
-privileged container that may see the private evidence.
+same frozen artifact in fresh buggy and golden containers. A configured run then
+judges that submission in a separate privileged container that may see the
+private evidence.
 
 Preserve these boundaries:
 

@@ -48,7 +48,8 @@ runs/<run-id>/
 │   ├── config.resolved.yaml
 │   ├── instance.json
 │   ├── prompt.txt
-│   └── target.json (localized runs only)
+│   ├── target.json (localized runs only)
+│   └── target.log (localized runs only)
 ├── image-build/
 │   ├── runtime.json
 │   ├── harnesses/{harnesses.Dockerfile,package.json,package-lock.json}
@@ -382,6 +383,10 @@ The level is chosen across all changed production files. Changed existing
 functions win. Classes whose own body changed are used only when no function
 changed, and whole files only when neither did. Comment and formatting edits, and
 definitions the repair adds, never enter the target.
+
+`inputs/target.log` is the container output from reading the buggy files. The
+stage resets the checkout to `base_commit` first, as the agent's workspace is
+reset, so it reads the code the agent sees.
 
 ### `image-build/runtime.json`
 

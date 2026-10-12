@@ -1,9 +1,16 @@
 import difflib
+from contextlib import contextmanager
+from pathlib import Path
 
 import pytest
+from fixtures import instance_record
 
+import oracle_bench.localization as localization
+from oracle_bench.config import RuntimeConfig, load_config
+from oracle_bench.localization import production_diffs
 from oracle_bench.localization.patches import apply_patch, parse_patch
 from oracle_bench.localization.target import choose_target, compare
+from oracle_bench.paths import RunPaths
 from oracle_bench.results import LocalizedTarget, TargetFile, read_localized_target, write_result
 
 BASE = """\
@@ -196,3 +203,96 @@ def test_the_target_artifact_round_trips_and_rejects_an_empty_target(tmp_path):
     assert read_localized_target(tmp_path / "target.json") == target
     with pytest.raises(ValueError):
         LocalizedTarget(level="file", files=[], text="")
+
+
+# The stage: read buggy files from the image, then compare.
+
+SAMPLE = Path(__file__).parents[1] / "configs" / "smoke.yaml"
+
+
+class FileSandbox:
+    """Serves the buggy checkout from a dict and records every command."""
+
+    def __init__(self, files: dict[str, str]):
+        self.files = files
+        self.commands = []
+        self.downloads = []
+
+    def run(self, argv, **kwargs):
+        self.commands.append(argv)
+
+    def download(self, source, destination):
+        self.downloads.append(source)
+        if source not in self.files:
+            raise FileNotFoundError(source)
+        destination.write_text(self.files[source])
+
+
+def run_stage(monkeypatch, tmp_path, patch: str, files: dict[str, str]):
+    config = load_config(SAMPLE)
+    config.runtime = RuntimeConfig(
+        image="example/runtime",
+        source_roots=["package"],
+        import_modules=["package"],
+        existing_test_globs=["tests"],
+    )
+    sandbox = FileSandbox({f"/testbed/{path}": text for path, text in files.items()})
+    opened = []
+
+    @contextmanager
+    def fake_open_sandbox(client, image, config, profile, log):
+        opened.append((image, profile))
+        yield sandbox
+
+    monkeypatch.setattr(localization, "open_sandbox", fake_open_sandbox)
+    paths = RunPaths.create(tmp_path / "run")
+    instance = instance_record(golden_patch=patch)
+    target = localization.localize(object(), config, "sha256:image", instance, paths)
+    return target, sandbox, opened, paths
+
+
+def test_the_stage_reads_the_reset_checkout_and_saves_the_target(monkeypatch, tmp_path):
+    after = change("self.records = []", "self.records = None")
+    target, sandbox, opened, paths = run_stage(
+        monkeypatch, tmp_path, diff(BASE, after, "package/core.py"), {"package/core.py": BASE}
+    )
+
+    assert [profile.value for _, profile in opened] == ["reference"]
+    assert sandbox.commands == [["git", "reset", "--hard", "a" * 40]]
+    assert sandbox.downloads == ["/testbed/package/core.py"]
+    assert target.files == [TargetFile(path="package/core.py", names=["Handler.reset"], lines=2)]
+    assert read_localized_target(paths.target) == target
+
+
+def test_the_stage_skips_created_and_test_files_and_compares_a_deleted_file(monkeypatch, tmp_path):
+    patch = (
+        diff("", "X = 1\n", "package/new.py").replace("--- a/package/new.py", "--- /dev/null")
+        + diff(BASE, change("level = 1", "level = 2"), "package/tests/test_core.py")
+        + diff(BASE, "", "package/old.py").replace("+++ b/package/old.py", "+++ /dev/null")
+    )
+    target, sandbox, _, _ = run_stage(monkeypatch, tmp_path, patch, {"package/old.py": BASE})
+
+    assert sandbox.downloads == ["/testbed/package/old.py"]
+    assert target.files[0].names == ["Handler.reset", "Handler.name", "helper", "check"]
+
+
+def test_a_patch_that_does_not_match_the_image_stops_the_stage(monkeypatch, tmp_path):
+    patch = diff(BASE, change("level = 1", "level = 2"), "package/core.py")
+    with pytest.raises(ValueError, match="matches nowhere"):
+        run_stage(
+            monkeypatch, tmp_path, patch, {"package/core.py": change("level = 1", "level = 3")}
+        )
+    assert not (tmp_path / "run/inputs/target.json").exists()
+
+
+def test_production_files_are_python_files_under_a_source_root_outside_tests():
+    patch = "".join(
+        diff("A = 1\n", "A = 2\n", path)
+        for path in [
+            "package/core.py",
+            "package/tests/helpers.py",
+            "docs/conf.py",
+            "package/data.txt",
+        ]
+    )
+    assert [path for path, _ in production_diffs(patch, ["package"])] == ["package/core.py"]

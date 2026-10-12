@@ -14,6 +14,7 @@ from typing import cast
 
 from oracle_bench.config import RuntimeConfig, SourceConfig
 from oracle_bench.io import digest
+from oracle_bench.localization import is_test_path
 from oracle_bench.results import InstanceRecord, SourceProvenance
 
 # Image naming/environment conventions are checked against this upstream revision.
@@ -60,7 +61,7 @@ def localized_test_target(patch: str, source_roots: list[str]) -> str:
             candidate = PurePosixPath(match.group(1))
             in_source = any(root == candidate or root in candidate.parents for root in roots)
             current = str(candidate) if in_source else None
-            if current and not _is_test_path(candidate):
+            if current and not is_test_path(candidate):
                 targets.setdefault(current, set())
             else:
                 current = None
@@ -109,10 +110,6 @@ def localized_test_target(patch: str, source_roots: list[str]) -> str:
         else:
             rendered.append(path)
     return ", ".join(rendered)
-
-
-def _is_test_path(path: PurePosixPath) -> bool:
-    return "tests" in path.parts or path.name.startswith(("test_", "tests_"))
 
 
 def image_for(instance_id: str, platform: str = "linux/amd64") -> str:

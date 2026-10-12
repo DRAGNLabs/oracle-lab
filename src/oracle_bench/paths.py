@@ -73,6 +73,10 @@ class RunPaths:
         return self.inputs / "target.json"
 
     @property
+    def target_log(self) -> Path:
+        return self.inputs / "target.log"
+
+    @property
     def runtime(self) -> Path:
         return self.build / "runtime.json"
 

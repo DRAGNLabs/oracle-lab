@@ -9,11 +9,10 @@ import pytest
 from fixtures import HELPERS
 
 from oracle_bench.evaluation.outcomes import incomplete_result, pair_results
-from oracle_bench.io import read_json
-from oracle_bench.results import CoverageResult, MatrixCellName, VersionResult, read_version_result
+from oracle_bench.results import MatrixCellName, VersionResult, read_version_result
 
 
-def execute(tmp_path, source, tests, *, modules=None, extra=None, source_roots=None):
+def execute(tmp_path, source, tests, *, modules=None, extra=None):
     root = tmp_path / "repo"
     root.mkdir(parents=True)
     (root / "subject.py").write_text(source)
@@ -28,7 +27,6 @@ def execute(tmp_path, source, tests, *, modules=None, extra=None, source_roots=N
         "workdir": str(root),
         "output": str(output),
         "targets": ["oracle_tests"],
-        "source_roots": source_roots or ["subject.py"],
         "import_modules": modules or [],
     }
     settings = tmp_path / "runner.json"
@@ -41,9 +39,7 @@ def execute(tmp_path, source, tests, *, modules=None, extra=None, source_roots=N
         env={**os.environ, "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"},
     )
     assert (output / "tests.json").exists(), proc.stderr
-    # Validating here also asserts that real runner output matches the host contract.
-    coverage = CoverageResult.model_validate(read_json(output / "coverage.json"))
-    return read_version_result(output / "tests.json"), coverage, output
+    return read_version_result(output / "tests.json"), output
 
 
 def test_four_cells_come_from_real_test_executions(tmp_path):
@@ -53,15 +49,12 @@ def test_finds_bug(): assert subject.answer() == 2
 def test_buggy_oracle(): assert subject.answer() == 1
 def test_both_fail(): assert subject.answer() == 3
 """
-    buggy, bcov, _ = execute(tmp_path / "buggy", "def answer(): return 1\n", tests)
-    golden, gcov, _ = execute(tmp_path / "golden", "def answer(): return 2\n", tests)
+    buggy, _ = execute(tmp_path / "buggy", "def answer(): return 1\n", tests)
+    golden, _ = execute(tmp_path / "golden", "def answer(): return 2\n", tests)
     paired = pair_results(buggy, golden)
     assert [cell.count for cell in paired.matrix.values()] == [1, 1, 1, 1]
     assert paired.has_fail_on_buggy_pass_on_golden
     assert "has_fail_on_buggy_pass_on_golden" not in paired.model_dump()
-    for coverage in [bcov, gcov]:
-        assert coverage.status == "available"
-        assert coverage.covered_lines == coverage.executable_lines == 1
     finds_bug = buggy.tests["oracle_tests/test_subject.py::test_finds_bug"]
     assert finds_bug.phases[1]["phase"] == "call"
     assert finds_bug.failure["kind"] == "assertion"
@@ -72,32 +65,11 @@ def test_both_fail(): assert subject.answer() == 3
     }
 
 
-def test_coverage_omits_unparseable_files_without_discarding_valid_results(tmp_path):
-    result, coverage, output = execute(
-        tmp_path,
-        "x = 1\n",
-        "import package\ndef test_value(): assert package.VALUE == 1\n",
-        modules=["package"],
-        source_roots=["package"],
-        extra={
-            "package/__init__.py": "VALUE = 1\n",
-            "package/platform_only.py": r'BROKEN = "\u"' + "\n",
-        },
-    )
-
-    assert result.status == "completed"
-    assert coverage.status == "available"
-    assert coverage.covered_lines == coverage.executable_lines == 1
-    assert any(name.endswith("package/__init__.py") for name in coverage.files)
-    assert not any(name.endswith("platform_only.py") for name in coverage.files)
-    assert (output / "coverage.raw.json").is_file()
-
-
 def test_call_exceptions_are_distinguished_from_assertion_failures(tmp_path):
     tests = """def test_assertion(): assert False, 'wrong value'
 def test_exception(): raise ValueError('changed ground')
 """
-    result, _, _ = execute(tmp_path, "x = 1\n", tests)
+    result, _ = execute(tmp_path, "x = 1\n", tests)
 
     assertion = result.tests["oracle_tests/test_subject.py::test_assertion"].failure
     exception = result.tests["oracle_tests/test_subject.py::test_exception"].failure
@@ -122,7 +94,7 @@ def test_exception(): raise ValueError('changed ground')
     ],
 )
 def test_empty_and_collection_failures_are_not_binary(tmp_path, test_source, expected):
-    result, _, _ = execute(tmp_path, "x = 1\n", test_source)
+    result, _ = execute(tmp_path, "x = 1\n", test_source)
     assert result.status == expected
     paired = pair_results(result, result)
     assert all(cell.count == 0 for cell in paired.matrix.values())
@@ -131,8 +103,8 @@ def test_empty_and_collection_failures_are_not_binary(tmp_path, test_source, exp
 def test_a_file_that_fails_to_collect_does_not_void_the_other_files(tmp_path):
     broken = {"oracle_tests/test_broken.py": "import nonexistent_oracle_test_dependency\n"}
     tests = "import subject\ndef test_finds_bug(): assert subject.answer() == 2\n"
-    buggy, _, _ = execute(tmp_path / "buggy", "def answer(): return 1\n", tests, extra=broken)
-    golden, _, _ = execute(tmp_path / "golden", "def answer(): return 2\n", tests, extra=broken)
+    buggy, _ = execute(tmp_path / "buggy", "def answer(): return 1\n", tests, extra=broken)
+    golden, _ = execute(tmp_path / "golden", "def answer(): return 2\n", tests, extra=broken)
 
     assert buggy.status == golden.status == "completed"
     assert [error["nodeid"] for error in buggy.collection_errors] == ["oracle_tests/test_broken.py"]
@@ -161,7 +133,7 @@ def broken_teardown():
     raise RuntimeError('teardown broke')
 def test_teardown(broken_teardown): pass
 """
-    result, _, _ = execute(tmp_path, "x = 1\n", tests)
+    result, _ = execute(tmp_path, "x = 1\n", tests)
     outcomes = {key.split("::")[-1]: case.outcome for key, case in result.tests.items()}
     assert outcomes == {
         "test_skip": "skip",
@@ -175,7 +147,7 @@ def test_teardown(broken_teardown): pass
 
 
 def test_existing_tests_and_default_addopts_are_not_executed(tmp_path):
-    result, _, _ = execute(
+    result, _ = execute(
         tmp_path,
         "x = 1\n",
         "def test_generated(): pass\n",
@@ -189,13 +161,13 @@ def test_existing_tests_and_default_addopts_are_not_executed(tmp_path):
 
 
 def test_wrong_import_path_is_reported(tmp_path):
-    result, _, _ = execute(tmp_path, "x = 1\n", "def test_pass(): pass\n", modules=["json"])
+    result, _ = execute(tmp_path, "x = 1\n", "def test_pass(): pass\n", modules=["json"])
     assert result.status == "runner_error"
     assert "outside checkout" in result.error
 
 
 def test_incomplete_run_cannot_earn_bug_detection(tmp_path):
-    buggy, _, directory = execute(tmp_path, "x = 1\n", "def test_fail(): assert False\n")
+    buggy, directory = execute(tmp_path, "x = 1\n", "def test_fail(): assert False\n")
     golden = VersionResult(
         status=buggy.status, tests={key: {"outcome": "pass"} for key in buggy.tests}
     )

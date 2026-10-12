@@ -18,15 +18,12 @@ from oracle_bench.container.sandbox import Profile, Sandbox, open_sandbox
 from oracle_bench.evaluation.outcomes import (
     incomplete_result,
     pair_results,
-    record_unavailable_coverage,
 )
 from oracle_bench.generation import verify_bundle
 from oracle_bench.io import archive_files, read_json, write_json
 from oracle_bench.paths import RunPaths
 from oracle_bench.repository import Repository
 from oracle_bench.results import (
-    VERSIONS,
-    CoverageResult,
     EvaluationResult,
     HarnessResult,
     InstanceRecord,
@@ -82,7 +79,6 @@ def run_tests(
         return incomplete_result(directory, "runner_error", f"Unreadable runner output: {error}")
     if execution.exit_code and result.status == "completed":
         return incomplete_result(directory, "runner_error", "Runner exited unsuccessfully")
-    record_unavailable_coverage(directory, "Runner did not produce coverage output")
     return result
 
 
@@ -213,12 +209,6 @@ def evaluate(
         else None,
         existing_tests=config.task.existing_tests,
         agent=HarnessResult.model_validate(read_json(paths.generation / "result.json")),
-        coverage={
-            version: CoverageResult.model_validate(
-                read_json(paths.evaluation / version / "coverage.json")
-            )
-            for version in VERSIONS
-        },
     )
     write_result(paths.results, result)
     return result

@@ -31,7 +31,7 @@ Oracle Bench measures how well coding agents write unit tests for code that
 already contains a bug. The agent gets a buggy repository and a request to write
 tests. It does not see the issue description or the fix. Oracle Bench then runs
 the same tests against the buggy version and the fixed (golden) version. It
-records the paired pass/fail outcomes and coverage.
+records the paired pass/fail outcomes.
 
 A separate `classify` command labels SWE-bench Verified problems. The labels
 cover defect mechanism, test setup, oracle availability, scope, and benchmark
@@ -56,7 +56,7 @@ flowchart TD
     Agent --> Capture["Capture new tests, hashes, and workspace changes"]
     Capture --> Buggy["Fresh container: tests against buggy code"]
     Capture --> Golden["Fresh container: tests against golden code"]
-    Buggy --> Results["Paired outcomes + coverage + session log"]
+    Buggy --> Results["Paired outcomes + session log"]
     Golden --> Results
     Results --> JudgeEnabled{"Judge configured?"}
     JudgeEnabled -- Yes --> Judge["Privileged judge container: assess generated tests against the issue"]
@@ -198,7 +198,7 @@ ORACLE_BENCH_SMOKE_RUN=runs/<run-id> uv run pytest -q -m docker
 ```
 
 Local tests cover configuration, credentials, agent traces, artifacts, pytest
-outcomes, coverage, and reports. Docker checks run handwritten tests on the
+outcomes, and reports. Docker checks run handwritten tests on the
 Requests task. They reach all four matrix cells and both test-visibility
 settings. They do not call a model.
 

@@ -8,8 +8,8 @@ dependencies, and the configured Python interpreter. Image preparation then:
 
 1. builds one toolchain image with the pinned Codex, Claude Code, and OpenCode
    CLIs;
-2. extends the project image with those CLIs, pytest, coverage, and Oracle
-   Bench's container helpers.
+2. extends the project image with those CLIs, pytest, and Oracle Bench's
+   container helpers.
 
 Every container a run starts uses the result: generation, reference, evaluation,
 the judge, and the human-judge workspace. Each run records the image inputs and

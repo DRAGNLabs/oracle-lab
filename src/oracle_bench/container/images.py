@@ -127,7 +127,6 @@ def runtime_arguments(
         "PROJECT_PYTHON": runtime.python,
         "PROJECT_PYTHON_DIR": str(Path(runtime.python).parent),
         "PYTEST_VERSION": runtime.pytest_version or config.toolchain.pytest_version,
-        "COVERAGE_VERSION": runtime.coverage_version or config.toolchain.coverage_version,
     }
 
 
@@ -196,8 +195,7 @@ def prepare_image(
             record("harnesses", harnesses, image_id(harnesses))
 
         # 4. Build the image the run actually uses: the project image from step 1,
-        #    plus the CLIs from step 3, the in-container scripts, and pinned
-        #    pytest and coverage.
+        #    plus the CLIs from step 3, the in-container scripts, and pinned pytest.
         with setup_deadline(config.limits.setup_seconds):
             prepared = build_image(
                 client,

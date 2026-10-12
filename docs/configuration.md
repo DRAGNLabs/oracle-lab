@@ -363,16 +363,16 @@ fills them in from the SWE-bench instance and its own pinned versions. An input
 file that sets either is rejected.
 
 - `runtime`: the source image, platform, workdir, Python, optional source import
-  path, rebuild command, coverage roots, import probes, required pytest plugins,
+  path, rebuild command, source roots, import probes, required pytest plugins,
   the repository's existing-test globs, and any test-tool versions that image
   needs.
 - `toolchain`: the Node image, `harnesses` (the pinned Codex, Claude Code, and
-  OpenCode versions), and the pytest and coverage versions.
+  OpenCode versions), and the pytest version.
 
 A run cannot pin its own CLI versions. They are read from
 `src/oracle_bench/container/docker/package.json`, so upgrading a CLI means
-changing that file and its lockfile. The SWE-bench adapter overrides pytest and
-coverage when the project's Python cannot run the defaults.
+changing that file and its lockfile. The SWE-bench adapter overrides pytest when
+the project's Python cannot run the default.
 
 The resolved file also spells out every default. `oracle-bench evaluate` reads
 it. Edit the small input file for new runs. Treat the resolved file as a record

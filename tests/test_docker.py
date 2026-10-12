@@ -309,11 +309,6 @@ def test_real_requests_pair_and_artifact_copy(tmp_path, visibility, monkeypatch,
     result = pair_results(buggy, golden)
     assert buggy.status == golden.status == "completed", (buggy, golden)
     assert [cell.count for cell in result.matrix.values()] == [1, 1, 1, 1]
-    for version in ["buggy", "golden"]:
-        coverage = read_json(paths.evaluation / version / "coverage.json")
-        assert coverage["status"] == "available"
-        assert coverage["covered_lines"] > 0
-        assert coverage["executable_lines"] >= coverage["covered_lines"]
     if visibility == "keep":
         # Replay a saved artifact through the public reevaluation path, with no credentials.
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)

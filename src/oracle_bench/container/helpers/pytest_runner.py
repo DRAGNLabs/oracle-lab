@@ -106,12 +106,8 @@ def run(settings: dict) -> int:
     recorder.save()
     os.chdir(settings["workdir"])
     sys.path.insert(0, settings["workdir"])
-    coverage_result = {"status": "unavailable", "reason": "Coverage did not finish"}
-    cov = None
-    source_files = []
     try:
         # Ensure editable installs/import paths reference the selected checkout.
-        # Probe in a separate interpreter so imports by the tests remain measurable.
         probe = """import importlib, json, pathlib, sys
 origins = {}
 for name in sys.argv[1:]:
@@ -132,28 +128,6 @@ print(json.dumps(origins))
             raise RuntimeError(checked.stderr)
         origins = json.loads(checked.stdout)
         write(output / "imports.json", origins)
-        try:
-            import coverage
-
-            roots = [Path(p).resolve() for p in settings["source_roots"]]
-            if any(not p.exists() for p in roots):
-                raise ValueError("A configured coverage source root does not exist")
-            source_files = sorted(
-                {
-                    str(file)
-                    for root in roots
-                    for file in (root.rglob("*.py") if root.is_dir() else [root])
-                }
-            )
-            cov = coverage.Coverage(
-                data_file=str(output / ".coverage"),
-                source=sorted({str(p if p.is_dir() else p.parent) for p in roots}),
-                config_file=False,
-            )
-            cov.start()
-        except Exception as exc:
-            coverage_result = {"status": "unavailable", "reason": str(exc)}
-            cov = None
         os.environ.pop("PYTEST_ADDOPTS", None)
         # Run generated targets only; don't inherit a repository's default targets/addopts.
         # One file that fails to collect must not stop the other files from running.
@@ -177,31 +151,6 @@ print(json.dumps(origins))
         recorder.data["status"] = "runner_error"
         recorder.data["error"] = traceback.format_exc()
     finally:
-        if cov is not None:
-            try:
-                cov.stop()
-                cov.save()
-                # Legacy repositories can contain platform-specific or vendored
-                # Python files that the selected interpreter cannot parse. They
-                # should not erase coverage for the valid production sources.
-                cov.json_report(
-                    morfs=source_files,
-                    outfile=str(output / "coverage.raw.json"),
-                    ignore_errors=True,
-                )
-                raw = json.loads((output / "coverage.raw.json").read_text())
-                totals = raw["totals"]
-                coverage_result = {
-                    "status": "available",
-                    "kind": "line",
-                    "covered_lines": totals["covered_lines"],
-                    "executable_lines": totals["num_statements"],
-                    "percent": totals["percent_covered"],
-                    "files": raw["files"],
-                }
-            except Exception as exc:
-                coverage_result = {"status": "unavailable", "reason": str(exc)}
-        write(output / "coverage.json", coverage_result)
         recorder.save()
     return 0 if recorder.data["status"] in {"completed", "no_tests", "collection_error"} else 2
 

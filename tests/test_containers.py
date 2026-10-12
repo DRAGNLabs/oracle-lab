@@ -34,14 +34,12 @@ def config():
 
 def test_runtime_image_uses_source_specific_test_toolchain(config):
     config.runtime.pytest_version = "6.2.5"
-    config.runtime.coverage_version = "6.2"
     source = Mock(id="sha256:source")
     harnesses = Mock(id="sha256:harnesses")
 
     arguments = runtime_arguments(config, source, harnesses)
 
     assert arguments["PYTEST_VERSION"] == "6.2.5"
-    assert arguments["COVERAGE_VERSION"] == "6.2"
 
 
 def archive_bytes(entries):

@@ -73,7 +73,6 @@ def test_python_36_instance_uses_compatible_evaluation_tools():
         }
     )
     assert runtime.pytest_version == "6.2.5"
-    assert runtime.coverage_version == "6.2"
 
 
 def resolve_record(tmp_path, *, instance="psf__requests-2148", **changes):

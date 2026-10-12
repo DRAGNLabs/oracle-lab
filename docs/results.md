@@ -171,8 +171,8 @@ The human-readable summary, in this order:
 - Pipeline: one row per stage (resolve, build, reference, generate, evaluate,
   judge) with its parameters and result, then the run's cost. Generation and
   judge rows name the harness, version, model, provider, and limit.
-- Test outcomes: the paired matrix plus other outcomes, then coverage and failure
-  causes per version.
+- Test outcomes: the paired matrix plus other outcomes, then failure causes per
+  version.
 - Judgment: the labels and rationale, or the judge's non-completed state.
 - Task classification: the central classification for the problem.
 - Usage: wall time and input, cached input, and output tokens for generation
@@ -211,7 +211,6 @@ is never half-read.
 | `tests` | One paired row per test ID |
 | `other_outcomes` | Tests excluded from the binary matrix |
 | `failure_kinds` | Assertion, other-exception, and unknown failure counts for each version |
-| `coverage` | Normalized coverage summaries for both versions |
 
 Two values are computed, not stored. A run is diagnostic-only when
 `submission_compliant` is false. It detected the bug when it is compliant, both
@@ -565,19 +564,6 @@ listed in `collection_errors`, and the other files still run. The status is
 left no test to run. The report names the versions with files that failed to
 collect.
 
-### Coverage files
-
-| File | Contents |
-|---|---|
-| `coverage.json` | The normalized status, totals, percentage, and per-file data Oracle Bench uses |
-| `coverage.raw.json` | The unmodified JSON report from the configured coverage.py version |
-| `.coverage` | coverage.py's binary data file; reading it needs a compatible coverage version |
-
-When coverage is unavailable, `coverage.json` has `status: unavailable` and a
-reason. A coverage failure never discards test results. A source file the
-project's Python cannot parse is left out of coverage. The rest of the source
-tree is still measured.
-
 ### Other execution files
 
 | File | Contents |
@@ -586,7 +572,7 @@ tree is still measured.
 | `runner.json` | The in-container runner's inputs: workdir, output, targets, source roots, and imports |
 | `command.json` | The pytest command (not the agent command) |
 | `execution.json` | The runner's exit code, duration, and timeout flag |
-| `output.log` | Output from workspace setup, patching, pytest, coverage, and Docker |
+| `output.log` | Output from workspace setup, patching, pytest, and Docker |
 | `repair.patch` | The exact golden source patch; golden executions only |
 | `reference.patch` | The private test patch; reference executions only |
 
@@ -632,7 +618,6 @@ Some files are normally empty or absent:
 - `image-build/output.log` may be short or absent when the runtime was cached.
 - `generation/final.txt` may be empty after an agent failure.
 - `submission/files/` is empty for an empty submission.
-- The raw and binary coverage files may be absent when coverage fails.
 - `evaluation/results.json` and `report.md` are absent when the pipeline stops
   before final evaluation.
 
@@ -646,7 +631,7 @@ resolved job list with its checksums, the batch status, `summary.json`, and
 `report.md`.
 
 The summary keeps each job's state, run-directory link, paired matrix counts,
-coverage, and generation measurements. A job whose run has judge files also
+and generation measurements. A job whose run has judge files also
 records the judge's status, answer, conditional fields, model, token usage, and
 duration. A run without a judge is recorded as `disabled`. A run with a judge
 but no result is `missing`. Invalid, failed, timed-out, and stale judgments are

@@ -43,10 +43,6 @@ def summarize_job(job: dict) -> dict:
         matrix={key: cell.count for key, cell in result.matrix.items()},
         buggy_status=result.buggy_status,
         golden_status=result.golden_status,
-        coverage_percent={
-            version: coverage.percent if coverage.status == "available" else None
-            for version, coverage in result.coverage.items()
-        },
         generation_duration_seconds=result.agent.duration_seconds,
         judge=_summarize_judge(paths),
     )

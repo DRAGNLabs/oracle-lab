@@ -310,7 +310,7 @@ def test_resolved_run_lock_can_be_reloaded(tmp_path):
     reloaded = load_config(path, resolved=True)
 
     assert reloaded.require_runtime().image == "example/image:latest"
-    assert reloaded.toolchain.coverage_version
+    assert reloaded.toolchain.pytest_version
 
 
 def test_resolved_configuration_contains_no_credential_value(monkeypatch):

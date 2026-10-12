@@ -22,16 +22,15 @@ UPSTREAM_REVISION = "3947b299c121bb1f45f5094180c0f39fa0c599a0"
 
 REPOSITORY_LAYOUTS = {
     "astropy/astropy": ("astropy", "astropy", ["astropy/**/tests"]),
-    "django/django": ("django", "django", ["tests"]),
     "matplotlib/matplotlib": ("lib/matplotlib", "matplotlib", ["lib/matplotlib/tests"]),
     "mwaskom/seaborn": ("seaborn", "seaborn", ["tests"]),
     "pallets/flask": ("src/flask", "flask", ["tests"]),
     "psf/requests": ("requests", "requests", ["test_requests.py", "tests"]),
     "pydata/xarray": ("xarray", "xarray", ["xarray/tests"]),
+    "pylint-dev/pylint": ("pylint", "pylint", ["tests"]),
     "pytest-dev/pytest": ("src/_pytest", "_pytest", ["testing"]),
     "scikit-learn/scikit-learn": ("sklearn", "sklearn", ["sklearn/**/tests"]),
     "sphinx-doc/sphinx": ("sphinx", "sphinx", ["tests"]),
-    "sympy/sympy": ("sympy", "sympy", ["sympy/**/tests"]),
 }
 
 DIFF_FILE = re.compile(r"^\+\+\+ b/(.+)$")

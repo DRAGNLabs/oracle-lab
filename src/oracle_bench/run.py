@@ -14,7 +14,7 @@ from typing import Any
 
 import yaml
 
-from oracle_bench.config import RunConfig, validate_resolved_config
+from oracle_bench.config import RunConfig, validate_prompt_scope, validate_resolved_config
 from oracle_bench.container.images import prepare_image, require_saved_image
 from oracle_bench.container.sandbox import docker_client
 from oracle_bench.evaluation import check_reference, evaluate
@@ -56,6 +56,7 @@ def completion_state(result: EvaluationResult) -> str:
 def run(config: RunConfig) -> Path:
     require_credentials(config)
     prompt_template = Path(config.task.prompt).read_text()
+    validate_prompt_scope(prompt_template, config.task.scope)
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]
     run_dir = Path(config.output) / run_id
     run_dir.mkdir(parents=True)

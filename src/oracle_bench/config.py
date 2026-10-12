@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path, PurePosixPath
+from string import Template
 from typing import Annotated, Literal
 
 import yaml
@@ -276,6 +277,16 @@ def validate_resolved_config(config: RunConfig) -> None:
     for source in map(PurePosixPath, runtime.source_roots):
         if generated == source or generated in source.parents or source in generated.parents:
             raise ValueError("Generated tests must be outside production source roots")
+
+
+def validate_prompt_scope(template: str, scope: str) -> None:
+    """Make sure a localized run's prompt shows the target, and only a localized one."""
+    shows_target = "test_target" in Template(template).get_identifiers()
+    if shows_target != (scope == "localized"):
+        raise ValueError(
+            "task.scope localized requires ${test_target} in the prompt, and only localized "
+            f"may use it; scope is {scope!r}"
+        )
 
 
 def _read_settings(path: Path, resolved: bool) -> dict:

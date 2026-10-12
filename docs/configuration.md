@@ -309,6 +309,10 @@ reference tests, and expected behavior remain private. `repository` supplies no
 issue-derived location and is intended for small projects where repository-wide
 test generation is meaningful.
 
+The scope and the prompt must agree. A `localized` run's prompt must contain
+`${test_target}`, and any other run's prompt must not. A run with a mismatch stops
+before it creates a run directory.
+
 ### `task.existing_tests`
 
 - **Type:** `keep` or `hide_all`

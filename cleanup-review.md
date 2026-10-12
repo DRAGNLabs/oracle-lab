@@ -1,6 +1,6 @@
 # Oracle Bench cleanup review
 
-2026-09-30, branch `cleanup` at `1d6ff8f`. E4, E6, E7 and E8 are done and removed;
+2026-09-30, branch `cleanup` at `1d6ff8f`. E4, E5, E6, E7 and E8 are done and removed;
 the remaining IDs keep their original numbers.
 
 Findings have IDs so we can work through them one at a time:
@@ -88,19 +88,6 @@ target. It leaves E2 and E3 as they are.
 I recommend the AST route. It is about as much code as the current state machine,
 and it can be tested locally with small source fixtures.
 
-### E5. Nothing checks that the scope and the prompt agree
-
-`task.scope` and `task.prompt` are set independently.
-
-- `scope: localized` with `unit-tests.md`, which has no `${test_target}`: the run
-  is saved as localized, with `task_scope` and `test_target` in `results.json`,
-  but the agent never saw the target. The data is mislabeled.
-- `scope: repository` with `localized-tests.md`: the prompt reads "the following
-  area of this repository: `this repository`" (`run.py:105`).
-
-**Fix:** at resolve, require `${test_target}` in the template exactly when scope is
-`localized`. That is a few lines plus one test.
-
 ---
 
 ## T. Tests
@@ -184,12 +171,10 @@ detected, either in `results.json` or in the batch summary.
 **Fix:** once E1–E3 are decided, add a table test over about 15 real Verified
 patches with hand-checked expected targets, stored as small fixtures.
 
-### T7. Two cheap guards are missing
+### T7. A cheap guard is missing
 
-- **Rubric labels.** The label names in both rubrics match the parsers'
-  `Literal` values today; I checked. Nothing keeps them matched. A test that
-  reads both rubrics would.
-- **Scope and prompt.** The check from E5.
+The label names in both rubrics match the parsers' `Literal` values today; I
+checked. Nothing keeps them matched. A test that reads both rubrics would.
 
 ### T8. Tests that check the wrong things, or duplicate each other
 
@@ -445,9 +430,8 @@ Cut it down to what a user actually sets.
 
 ## Suggested order
 
-1. **Small fix that prevents bad runs:** E5.
-2. **Safety-net tests on current behavior,** before any refactor: T1–T5.
-3. **Target rewrite:** E1–E3, together with T6.
-4. **Deduplication:** C1–C6. Then C7–C10.
-5. **Docs last,** once the code settles. The D1 corrections can go in at any
+1. **Safety-net tests on current behavior,** before any refactor: T1–T5.
+2. **Target rewrite:** E1–E3, together with T6.
+3. **Deduplication:** C1–C6. Then C7–C10.
+4. **Docs last,** once the code settles. The D1 corrections can go in at any
    time.

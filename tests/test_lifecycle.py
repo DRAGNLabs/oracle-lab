@@ -208,10 +208,18 @@ def test_run_fills_the_agent_prompt_environment(tmp_path, monkeypatch):
     )
 
 
-@pytest.mark.parametrize("name", ["unit-tests.md", "localized-tests.md", "smoke-tests.md"])
-def test_run_renders_each_bundled_agent_prompt(tmp_path, monkeypatch, name):
+@pytest.mark.parametrize(
+    "name,scope",
+    [
+        ("unit-tests.md", "repository"),
+        ("localized-tests.md", "localized"),
+        ("smoke-tests.md", "repository"),
+    ],
+)
+def test_run_renders_each_bundled_agent_prompt(tmp_path, monkeypatch, name, scope):
     config, runtime, instance = configured_pipeline(tmp_path, False)
     config.task.prompt = str(Path(__file__).parents[1] / "prompts/agent" / name)
+    config.task.scope = scope
     install_pipeline_fakes(monkeypatch, runtime, instance)
 
     run_dir = run_module.run(config)
@@ -219,6 +227,16 @@ def test_run_renders_each_bundled_agent_prompt(tmp_path, monkeypatch, name):
 
     assert "oracle_tests" in prompt
     assert runtime.python in prompt
+
+
+def test_run_refuses_a_localized_scope_whose_prompt_hides_the_target(tmp_path, monkeypatch):
+    config, runtime, instance = configured_pipeline(tmp_path, False)
+    config.task.scope = "localized"
+    install_pipeline_fakes(monkeypatch, runtime, instance)
+
+    with pytest.raises(ValueError, match="test_target"):
+        run_module.run(config)
+    assert not Path(config.output).exists()
 
 
 def test_saved_config_points_at_the_run_s_own_rubric_copy(tmp_path, monkeypatch):

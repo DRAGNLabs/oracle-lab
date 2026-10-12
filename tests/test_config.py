@@ -9,6 +9,7 @@ from oracle_bench.config import (
     RuntimeConfig,
     load_classification_config,
     load_config,
+    validate_prompt_scope,
     validate_resolved_config,
 )
 
@@ -29,6 +30,33 @@ def test_test_visibility_is_explicit_and_paths_are_config_relative(tmp_path, vis
     assert config.task.existing_tests == visibility
     assert config.task.prompt == str((tmp_path / "../prompts/agent/smoke-tests.md").resolve())
     assert config.output == str((tmp_path / "../runs").resolve())
+
+
+PROMPTS = Path(__file__).parents[1] / "prompts" / "agent"
+
+
+@pytest.mark.parametrize(
+    "prompt,scope",
+    [
+        ("localized-tests.md", "localized"),
+        ("unit-tests.md", "repository"),
+        ("smoke-tests.md", "repository"),
+    ],
+)
+def test_each_prompt_matches_its_scope(prompt, scope):
+    validate_prompt_scope((PROMPTS / prompt).read_text(), scope)
+
+
+@pytest.mark.parametrize(
+    "prompt,scope",
+    [
+        ("localized-tests.md", "repository"),
+        ("unit-tests.md", "localized"),
+    ],
+)
+def test_prompt_and_scope_must_agree_on_showing_the_target(prompt, scope):
+    with pytest.raises(ValueError, match="test_target"):
+        validate_prompt_scope((PROMPTS / prompt).read_text(), scope)
 
 
 def test_sample_uses_repository_scope_with_existing_tests_hidden():

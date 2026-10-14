@@ -24,6 +24,9 @@ COPY --from=harnesses /opt/oracle-agent /opt/oracle-agent
 COPY container_helpers/ /opt/oracle-bench/container-helpers/
 
 ENV PATH="${PROJECT_PYTHON_DIR}:/opt/oracle-node:/opt/oracle-agent/node_modules/.bin:${PATH}"
+# SWE-rebench V2 images point these at a root-owned /workspace. Tools treat an
+# empty value as unset, so they use the running user's home, as in SWE-bench images.
+ENV XDG_CACHE_HOME= XDG_CONFIG_HOME= XDG_DATA_HOME= PIP_CACHE_DIR= PYTHONPYCACHEPREFIX=
 
 RUN "${PROJECT_PYTHON}" -m pip install "pytest==${PYTEST_VERSION}"
 RUN useradd --create-home --uid 10001 oracle

@@ -9,7 +9,7 @@ from pathlib import Path
 import docker
 import pytest
 import yaml
-from fixtures import HELPERS, write_submission
+from fixtures import DOCKERFILES, HELPERS, write_submission
 
 from oracle_bench.config import JudgeConfig, load_config
 from oracle_bench.container.images import build_image
@@ -348,3 +348,51 @@ def test_localize_reads_the_saved_image_and_reproduces_the_saved_target(tmp_path
     target = localize(client, config, image, instance, paths)
 
     assert target == read_localized_target(saved_paths.target)
+
+
+def record_removal_step() -> str:
+    """The runtime recipe's instruction that removes a SWE-rebench V2 task record."""
+    lines = (DOCKERFILES / "runtime.Dockerfile").read_text().splitlines()
+    start = next(
+        i
+        for i, line in enumerate(lines)
+        if line.startswith("RUN") and "swebench_matterhorn" in line
+    )
+    end = start
+    while lines[end].endswith("\\"):
+        end += 1
+    return "\n".join(lines[start : end + 1])
+
+
+@pytest.mark.parametrize("planted,builds", [("/swebench_matterhorn", True), ("/elsewhere", False)])
+def test_runtime_build_removes_or_refuses_a_task_record(tmp_path, planted, builds):
+    saved = os.environ.get("ORACLE_BENCH_SMOKE_RUN")
+    if not saved:
+        pytest.skip("Set ORACLE_BENCH_SMOKE_RUN to use a local prepared runtime")
+    saved_paths = RunPaths.open(Path(saved).resolve())
+    platform = load_config(saved_paths.config, resolved=True).require_runtime().platform
+    context = tmp_path / "context"
+    context.mkdir()
+    (context / "record.Dockerfile").write_text(
+        f"FROM {read_json(saved_paths.runtime)['image']}\n"
+        "USER root\n"
+        f"RUN mkdir -p {planted} && echo '{{}}' > {planted}/swebench_instance.json\n"
+        f"{record_removal_step()}\n"
+    )
+    client = docker.from_env()
+    with (tmp_path / "build.log").open("w") as log:
+        if not builds:
+            with pytest.raises(RuntimeError, match="Image build failed"):
+                build_image(client, context, "record.Dockerfile", {}, platform, log)
+            return
+        image = build_image(client, context, "record.Dockerfile", {}, platform, log)
+    try:
+        output = client.containers.run(
+            image.id,
+            ["sh", "-c", "test -e /swebench_matterhorn && echo present || echo absent"],
+            network_disabled=True,
+            remove=True,
+        )
+        assert output.decode().strip() == "absent"
+    finally:
+        client.images.remove(image.id, force=True)

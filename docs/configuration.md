@@ -104,7 +104,9 @@ ID.
 Selects the source adapter. `swebench` reads SWE-bench Lite or Verified.
 `swerebench_v2` reads
 [SWE-rebench V2](https://huggingface.co/datasets/nebius/SWE-rebench-V2), whose
-records name their own prepared image.
+records name their own prepared image. It reads the record from the dataset's one
+data file, which Hugging Face downloads once and caches.
+`configs/swerebench-v2/wtforms-809.yaml` is an example.
 
 ### `source.dataset`
 

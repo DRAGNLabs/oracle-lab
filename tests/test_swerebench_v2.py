@@ -3,22 +3,13 @@ from pathlib import Path
 
 import pytest
 import yaml
+from fixtures import swerebench_v2_record
 
 from oracle_bench.config import load_config
 from oracle_bench.instance import resolve_source, swerebench_v2
 from oracle_bench.instance.swerebench_v2 import runtime_for
 
-RECORD = {
-    "instance_id": "wtforms__wtforms-614",
-    "repo": "wtforms/wtforms",
-    "base_commit": "a" * 40,
-    "language": "python",
-    "image_name": "docker.io/swerebenchv2/wtforms-wtforms:614-aaaaaaa",
-    "patch": "diff --git a/src/wtforms/validators.py b/src/wtforms/validators.py\n",
-    "test_patch": "diff --git a/tests/test_fields.py b/tests/test_fields.py\n",
-    "FAIL_TO_PASS": ["tests/test_fields.py::TestFlags::test_existing_values"],
-    "PASS_TO_PASS": [],
-}
+RECORD = swerebench_v2_record()
 
 
 def load(tmp_path, record=RECORD, instance=RECORD["instance_id"]):
@@ -78,3 +69,34 @@ def test_v2_record_for_another_instance_is_refused(tmp_path):
 def test_v2_runtime_needs_a_known_python_repository_and_an_image(changes, message):
     with pytest.raises(ValueError, match=message):
         runtime_for({**RECORD, **changes})
+
+
+def test_v2_record_with_a_truncated_test_id_is_refused(tmp_path):
+    record = swerebench_v2_record(
+        FAIL_TO_PASS=["tests/test_a.py::test_ok", "tests/test_a.py::test_length[a-longer"]
+    )
+    with pytest.raises(ValueError, match=r"truncated test IDs: \['tests/test_a.py::test_length"):
+        resolve_source(load(tmp_path, record=record))
+
+
+def test_v2_record_is_read_from_the_pinned_dataset_file(tmp_path, monkeypatch):
+    pa = pytest.importorskip("pyarrow")
+    pq = pytest.importorskip("pyarrow.parquet")
+    huggingface_hub = pytest.importorskip("huggingface_hub")
+    other = swerebench_v2_record(instance_id="wtforms__wtforms-615")
+    data = tmp_path / "train.parquet"
+    pq.write_table(pa.Table.from_pylist([other, RECORD]), data)
+    downloads = []
+
+    def download(repo, filename, *, repo_type, revision):
+        downloads.append((repo, filename, repo_type, revision))
+        return str(data)
+
+    monkeypatch.setattr(huggingface_hub, "hf_hub_download", download)
+    source = load(tmp_path)
+    source.record = None
+
+    assert swerebench_v2.load_record(source) == RECORD
+    assert downloads == [
+        ("nebius/SWE-rebench-V2", swerebench_v2.DATA_FILE, "dataset", source.revision)
+    ]

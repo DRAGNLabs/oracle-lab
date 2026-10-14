@@ -8,7 +8,7 @@ from fixtures import DOCKERFILES, RUN_CONFIG, run_config
 from oracle_bench.batch import load_batch_config
 from oracle_bench.config import (
     HARNESS_VERSIONS,
-    SWEBENCH_DATASET_REVISIONS,
+    SOURCE_DATASETS,
     HarnessConfig,
     RuntimeConfig,
     load_classification_config,
@@ -352,7 +352,24 @@ def test_openrouter_is_the_default_provider(harness):
 @pytest.mark.parametrize("dataset", ["lite", "verified"])
 def test_each_dataset_defaults_to_its_own_pinned_revision(tmp_path, dataset):
     config = load_config(config_file(tmp_path, "source", "dataset", dataset))
-    assert config.source.revision == SWEBENCH_DATASET_REVISIONS[dataset]
+    assert config.source.revision == SOURCE_DATASETS[dataset].revision
+
+
+def test_swerebench_v2_kind_pins_its_dataset_revision_and_split(tmp_path):
+    config = load_config(config_file(tmp_path, "source", "kind", "swerebench_v2"))
+    assert config.source.dataset == "swerebench_v2"
+    assert config.source.dataset_name == "nebius/SWE-rebench-V2"
+    assert config.source.revision == "10483de0f50fe5da545942705a76c6150171af7f"
+    assert config.source.split == "train"
+
+
+def test_a_dataset_from_another_source_kind_is_refused(tmp_path):
+    path = config_file(tmp_path, "source", "kind", "swerebench_v2")
+    raw = yaml.safe_load(path.read_text())
+    raw["source"]["dataset"] = "verified"
+    path.write_text(yaml.safe_dump(raw))
+    with pytest.raises(ValueError, match="not a 'swerebench_v2' source"):
+        load_config(path)
 
 
 def test_an_explicit_dataset_revision_is_kept(tmp_path):

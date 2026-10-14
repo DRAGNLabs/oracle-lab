@@ -84,30 +84,40 @@ written for an earlier revision fails to load; it is never half-read.
 
 ## `source`
 
-The source selects one SWE-bench Verified record by default.
+The source selects one SWE-bench Verified record by default. It can instead
+select a SWE-rebench V2 record.
 
 ### `source.instance`
 
 - **Type:** string
 - **Required:** yes
 
-The SWE-bench `instance_id`, such as `psf__requests-1142`. Exactly one record
-must match. The official prepared image name is derived from this ID.
+The record's `instance_id`, such as `psf__requests-1142`. Exactly one record
+must match. For SWE-bench, the official prepared image name is derived from this
+ID.
 
 ### `source.kind`
 
-- **Type:** `swebench`
+- **Type:** `swebench` or `swerebench_v2`
 - **Default:** `swebench`
 
-Selects the source adapter. SWE-bench is the only one.
+Selects the source adapter. `swebench` reads SWE-bench Lite or Verified.
+`swerebench_v2` reads
+[SWE-rebench V2](https://huggingface.co/datasets/nebius/SWE-rebench-V2), whose
+records name their own prepared image.
 
 ### `source.dataset`
 
 - **Type:** dataset alias
-- **Default:** `verified`
+- **Default:** `verified` for `swebench`; `swerebench_v2` for `swerebench_v2`
 
-`lite` resolves to `princeton-nlp/SWE-bench_Lite`; `verified` resolves to
-`princeton-nlp/SWE-bench_Verified`.
+| Alias | Kind | Dataset | Split |
+|---|---|---|---|
+| `lite` | `swebench` | `princeton-nlp/SWE-bench_Lite` | `test` |
+| `verified` | `swebench` | `princeton-nlp/SWE-bench_Verified` | `test` |
+| `swerebench_v2` | `swerebench_v2` | `nebius/SWE-rebench-V2` | `train` |
+
+The alias must belong to `source.kind`; a mismatch fails to load.
 
 ### `source.revision`
 
@@ -122,10 +132,10 @@ checksum.
 ### `source.split`
 
 - **Type:** string
-- **Default:** `test`
+- **Default:** the selected dataset's split from the table above
 
-The dataset split searched for `source.instance`. SWE-bench Verified runs use
-the default.
+The dataset split searched for `source.instance`. Leave it unset unless you
+need a different split.
 
 ### `source.record`
 

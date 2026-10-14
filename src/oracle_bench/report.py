@@ -92,7 +92,7 @@ def _pipeline_lines(
     rows = []
     if config:
         source = config.source
-        rows.append(("Resolve", f"SWE-bench {source.dataset}, {source.split} split", "ok"))
+        rows.append(("Resolve", f"`{source.dataset_name}`, {source.split} split", "ok"))
     if paths.runtime.is_file():
         image = read_json(paths.runtime)["image"].removeprefix("sha256:")[:12]
         rows.append(("Build", f"image `{image}`", "ok"))

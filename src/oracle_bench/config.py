@@ -6,7 +6,7 @@ import json
 from collections.abc import Callable
 from pathlib import Path, PurePosixPath
 from string import Template
-from typing import Annotated, Literal, TypeVar
+from typing import Annotated, Literal, NamedTuple, TypeVar
 
 import yaml
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
@@ -28,14 +28,36 @@ Version = Annotated[str, Field(strict=True, pattern=r"^\d+\.\d+(?:\.\d+)?(?:[a-z
 ImageReference = Annotated[str, Field(strict=True, pattern=r"^[A-Za-z0-9_./:@-]+$")]
 NonBlank = Annotated[str, Field(strict=True, pattern=r"\S")]
 
-SWEBENCH_DATASETS = {
-    "lite": "princeton-nlp/SWE-bench_Lite",
-    "verified": "princeton-nlp/SWE-bench_Verified",
+
+class SourceDataset(NamedTuple):
+    kind: str
+    name: str
+    revision: str
+    split: str
+
+
+SOURCE_DATASETS = {
+    "lite": SourceDataset(
+        "swebench",
+        "princeton-nlp/SWE-bench_Lite",
+        "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+        "test",
+    ),
+    "verified": SourceDataset(
+        "swebench",
+        "princeton-nlp/SWE-bench_Verified",
+        "c104f840cc67f8b6eec6f759ebc8b2693d585d4a",
+        "test",
+    ),
+    "swerebench_v2": SourceDataset(
+        "swerebench_v2",
+        "nebius/SWE-rebench-V2",
+        "10483de0f50fe5da545942705a76c6150171af7f",
+        "train",
+    ),
 }
-SWEBENCH_DATASET_REVISIONS = {
-    "lite": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
-    "verified": "c104f840cc67f8b6eec6f759ebc8b2693d585d4a",
-}
+# The dataset a source kind uses when the config names none.
+DEFAULT_DATASETS = {"swebench": "verified", "swerebench_v2": "swerebench_v2"}
 # Every runtime image installs all three CLIs from this one package, so its pins
 # are the versions. Nothing selects a version per run.
 _HARNESS_PACKAGE = Path(__file__).parent / "container/docker/package.json"
@@ -84,25 +106,39 @@ ContainerPath = Annotated[str, AfterValidator(container_path)]
 
 class SourceConfig(ConfigModel):
     instance: NonBlank
-    kind: Literal["swebench"] = "swebench"
-    dataset: Literal["lite", "verified"] = "verified"
-    # Defaults to the pinned revision of the chosen dataset.
+    kind: Literal["swebench", "swerebench_v2"] = "swebench"
+    # The dataset, revision, and split default to the pinned values for the kind.
+    dataset: Literal["lite", "verified", "swerebench_v2"]
     revision: Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
-    split: str = "test"
+    split: str
     record: str | None = None
 
     @property
     def dataset_name(self) -> str:
-        return SWEBENCH_DATASETS[self.dataset]
+        return SOURCE_DATASETS[self.dataset].name
 
     @model_validator(mode="before")
     @classmethod
-    def pin_dataset_revision(cls, data: object) -> object:
-        if isinstance(data, dict) and data.get("revision") is None:
-            dataset = data.get("dataset", "verified")
-            if dataset in SWEBENCH_DATASET_REVISIONS:
-                data = {**data, "revision": SWEBENCH_DATASET_REVISIONS[dataset]}
-        return data
+    def pin_dataset(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        kind = data.get("kind", "swebench")
+        dataset = data.get("dataset") or DEFAULT_DATASETS.get(kind)
+        if dataset not in SOURCE_DATASETS:
+            return data
+        pinned = SOURCE_DATASETS[dataset]
+        return {
+            **data,
+            "dataset": dataset,
+            "revision": data.get("revision") or pinned.revision,
+            "split": data.get("split") or pinned.split,
+        }
+
+    @model_validator(mode="after")
+    def check_dataset_kind(self) -> SourceConfig:
+        if SOURCE_DATASETS[self.dataset].kind != self.kind:
+            raise ValueError(f"Dataset {self.dataset!r} is not a {self.kind!r} source")
+        return self
 
 
 class WallTimeLimit(ConfigModel):

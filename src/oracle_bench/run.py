@@ -2,8 +2,7 @@
 
 Every stage records itself in `status.json` before it starts, so an interrupted or
 failed run names the stage it stopped in rather than leaving a silent directory.
-`preflight` runs the stages before generation, plus an environment check, and
-calls no model.
+`prepare` holds the stages before generation, which `preflight` also runs.
 """
 
 from __future__ import annotations
@@ -23,7 +22,7 @@ from oracle_bench.config import (
 )
 from oracle_bench.container.images import prepare_image, require_saved_image
 from oracle_bench.container.sandbox import docker_client
-from oracle_bench.evaluation import check_environment, check_reference, evaluate
+from oracle_bench.evaluation import check_reference, evaluate
 from oracle_bench.generation import generate_submission, verify_bundle
 from oracle_bench.harnesses import require_credentials
 from oracle_bench.instance import resolve_source, write_private_instance_artifacts
@@ -67,7 +66,7 @@ def run(config: RunConfig) -> Path:
     require_credentials(config)
     prompt_template = Path(config.task.prompt).read_text()
     validate_prompt_scope(prompt_template, config.task.scope)
-    run_dir = _create_run_dir(Path(config.output))
+    run_dir = create_run_dir(Path(config.output))
 
     # Setup the run results directory from the given root.
     paths = RunPaths.create(run_dir)
@@ -75,7 +74,7 @@ def run(config: RunConfig) -> Path:
     stages = Stages(run_dir)
     try:
         with docker_client() as client:
-            instance, image = _prepare(client, config, paths, stages, prompt_template)
+            instance, image = prepare(client, config, paths, stages, prompt_template)
 
             # Only generation and the judge call a model, so spend is measured around them.
             harnesses = [config.agent] + ([config.judge] if config.judge else [])
@@ -115,42 +114,14 @@ def run(config: RunConfig) -> Path:
     return run_dir
 
 
-def preflight(config: RunConfig) -> Path:
-    """Check one instance end to end without an agent. Calls no model.
-
-    Runs every stage before generation, then runs one fixed test the way an
-    agent's tests run. The built image is cached, so a later `run` of the same
-    configuration reuses it.
-    """
-    prompt_template = Path(config.task.prompt).read_text()
-    validate_prompt_scope(prompt_template, config.task.scope)
-    run_dir = _create_run_dir(Path(config.output) / "preflight")
-    paths = RunPaths.create(run_dir)
-
-    stages = Stages(run_dir)
-    try:
-        with docker_client() as client:
-            instance, image = _prepare(client, config, paths, stages, prompt_template)
-            stages.start("environment")
-            check_environment(client, config, image, instance, paths)
-        write_status(run_dir, "finished", "passed")
-    except KeyboardInterrupt:
-        write_status(run_dir, stages.current, "interrupted")
-        raise
-    except Exception as exc:
-        write_status(run_dir, stages.current, "failed", error=str(exc))
-        raise
-    return run_dir
-
-
-def _create_run_dir(output: Path) -> Path:
+def create_run_dir(output: Path) -> Path:
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]
     run_dir = output / run_id
     run_dir.mkdir(parents=True)
     return run_dir
 
 
-def _prepare(
+def prepare(
     client: DockerClient,
     config: RunConfig,
     paths: RunPaths,

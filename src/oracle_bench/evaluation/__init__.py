@@ -2,7 +2,6 @@
 
 Covers two run stages: the private reference check that proves an instance can
 distinguish its revisions, and the paired evaluation of the agent's submission.
-Preflight adds a third check: that a generated test can run at all.
 """
 
 from __future__ import annotations
@@ -100,7 +99,7 @@ def run_reference(
         return instance.reference_test_ids
 
     directory = paths.reference / version
-    return _run_version(
+    return run_version(
         client, config, image, instance, version, directory, Profile.REFERENCE, setup
     )
 
@@ -125,12 +124,12 @@ def run_submission(
         sandbox.upload(paths.submission / "files", workdir, contents=True)
         return [config.task.generated_dir]
 
-    return _run_version(
+    return run_version(
         client, config, image, instance, version, directory, Profile.EVALUATION, setup
     )
 
 
-def _run_version(
+def run_version(
     client: DockerClient,
     config: RunConfig,
     image: str,
@@ -173,47 +172,6 @@ def check_reference(
         raise RuntimeError(
             "Reference pair check did not reproduce a fail/pass test; "
             "inspect reference-check/ before spending on generation"
-        )
-
-
-# Stands in for an agent's submission during preflight. It cannot fail, so any
-# failure comes from the environment.
-ENVIRONMENT_TEST = '''"""Written by Oracle Bench preflight, not by an agent."""
-
-
-def test_generated_tests_can_run():
-    pass
-'''
-
-
-def check_environment(
-    client: DockerClient,
-    config: RunConfig,
-    image: str,
-    instance: InstanceRecord,
-    paths: RunPaths,
-) -> None:
-    """Run one fixed test the way generated tests run, and require it to pass on both."""
-    files = paths.environment / "files"
-    test = files / config.task.generated_dir / "test_oracle_bench_preflight.py"
-    test.parent.mkdir(parents=True, exist_ok=True)
-    test.write_text(ENVIRONMENT_TEST)
-
-    def setup(sandbox: Sandbox, workspace: Repository, directory: Path) -> list[str]:
-        sandbox.upload(files, config.require_runtime().workdir, contents=True)
-        return [config.task.generated_dir]
-
-    def run(version: str) -> VersionResult:
-        directory = paths.environment / version
-        return _run_version(
-            client, config, image, instance, version, directory, Profile.EVALUATION, setup
-        )
-
-    paired = pair_results(run("buggy"), run("golden"))
-    write_result(paths.environment / "results.json", paired)
-    if not (paired.both_completed and paired.matrix["pass_on_both"].count == 1):
-        raise RuntimeError(
-            "Environment check test did not pass on both versions; inspect environment-check/"
         )
 
 

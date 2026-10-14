@@ -78,8 +78,9 @@ Supporting these:
 
 - `src/oracle_bench/cli.py`: `run`, `preflight`, `batch`, `evaluate`, `judge`, `classify`,
   `judge-workspace`, `agreement`, and `report` command interface.
-- `src/oracle_bench/run.py`: the stage sequence and run status, and `preflight`,
-  which runs the stages before generation plus an environment check.
+- `src/oracle_bench/run.py`: the stage sequence and run status.
+- `src/oracle_bench/preflight.py`: `preflight`, which runs the stages before
+  generation plus an environment check, without calling a model.
 - `src/oracle_bench/batch/`: sequential batch execution and its summary.
 - `src/oracle_bench/classification/`: standalone task classification, run with
   `classify` outside the run stages. Reports read the newest matching attempt.

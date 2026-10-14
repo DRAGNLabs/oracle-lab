@@ -18,8 +18,9 @@ from oracle_bench.judge.human import (
 )
 from oracle_bench.judge.run import judge
 from oracle_bench.paths import RunPaths
+from oracle_bench.preflight import preflight
 from oracle_bench.report import report
-from oracle_bench.run import preflight, reevaluate, run
+from oracle_bench.run import reevaluate, run
 
 
 def main(argv: list[str] | None = None) -> int:

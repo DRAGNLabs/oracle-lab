@@ -17,6 +17,7 @@ from oracle_bench.config import RuntimeConfig, load_config
 from oracle_bench.container.sandbox import CommandResult
 from oracle_bench.io import read_json, write_json
 from oracle_bench.paths import RunPaths
+from oracle_bench.preflight import check_environment
 from oracle_bench.results import read_paired_result
 
 RUNNER = "/pytest_runner.py"
@@ -211,7 +212,7 @@ def test_the_environment_check_runs_its_test_like_a_submission_on_both_versions(
     for version in outcomes:
         outcomes[version][PREFLIGHT_TEST] = "pass"
 
-    evaluation.check_environment(Mock(), config, "image", instance, paths)
+    check_environment(Mock(), config, "image", instance, paths)
 
     assert [(version, profile) for version, profile, _ in sandboxes] == [
         ("buggy", "evaluation"),
@@ -230,5 +231,5 @@ def test_an_environment_check_that_does_not_pass_on_both_versions_fails(setup):
     outcomes["golden"][PREFLIGHT_TEST] = "fail"
 
     with pytest.raises(RuntimeError, match="did not pass on both versions"):
-        evaluation.check_environment(Mock(), config, "image", instance, paths)
+        check_environment(Mock(), config, "image", instance, paths)
     assert (paths.environment / "results.json").is_file()

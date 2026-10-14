@@ -9,19 +9,17 @@ uv run oracle-bench run configs/smoke.yaml
 A batch manifest runs several independent configurations:
 
 ```yaml
-name: initial-nex
+name: validation
 jobs:
-  - config: ../initial-nex/astropy.yaml
-  - config: ../initial-nex/flask.yaml
+  - config: pytest-10051-claude.yaml
+  - config: pytest-10051-codex.yaml
 execution:
   continue_on_error: true
 output: ../../batches
 ```
 
 Run it with `oracle-bench batch <manifest>`. Paths are relative to the manifest.
-`configs/batches/initial-nex.yaml` runs one localized task from each of the ten
-supported repositories. It uses OpenCode with the free
-`nex-agi/nex-n2.5-pro:free` OpenRouter model.
+`configs/validation/batch.yaml` is an example.
 
 How a batch runs:
 
@@ -106,7 +104,7 @@ Selects the source adapter. `swebench` reads SWE-bench Lite or Verified.
 [SWE-rebench V2](https://huggingface.co/datasets/nebius/SWE-rebench-V2), whose
 records name their own prepared image. It reads the record from the dataset's one
 data file, which Hugging Face downloads once and caches.
-`configs/swerebench-v2/wtforms-809.yaml` is an example.
+`configs/validation/wtforms-809-claude.yaml` is an example.
 
 ### `source.dataset`
 
@@ -422,6 +420,9 @@ are not accepted as input.
 
 - [`configs/smoke.yaml`](../configs/smoke.yaml): Claude Code generation and
   judging with Haiku through OpenRouter. Both stages have five-minute limits.
-- [`configs/batches/smoke-validation.yaml`](../configs/batches/smoke-validation.yaml):
-  one localized Requests task each for Claude 3 Haiku/Claude Code, GPT-5
-  Mini/Codex, and Gemini 2.5 Flash Lite/OpenCode, all routed through OpenRouter.
+- [`configs/validation/batch.yaml`](../configs/validation/batch.yaml): one
+  localized task from SWE-bench Verified (`pytest-dev__pytest-10051`) and one
+  from SWE-rebench V2 (`wtforms__wtforms-809`), each run with Claude Opus
+  5.5/Claude Code, GPT-6 Sol/Codex, and DeepSeek V4 Pro/OpenCode, all routed
+  through OpenRouter. Generation has a 15-minute limit; a Gemini 3.8 Flash judge
+  runs under Codex.

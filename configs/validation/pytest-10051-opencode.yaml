@@ -1,10 +1,10 @@
 source:
-  instance: matplotlib__matplotlib-24627
+  instance: pytest-dev__pytest-10051
 
 agent:
-  harness: codex
+  harness: opencode
   provider: openrouter
-  model: openai/gpt-6-sol@preset/oracle-openai-first
+  model: deepseek/deepseek-v4-pro-0813
   multi_agent: false
   limit:
     kind: wall_seconds

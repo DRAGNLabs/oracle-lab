@@ -1,10 +1,11 @@
 source:
-  instance: pydata__xarray-6744
+  kind: swerebench_v2
+  instance: wtforms__wtforms-809
 
 agent:
-  harness: codex
+  harness: opencode
   provider: openrouter
-  model: openai/gpt-6-sol@preset/oracle-openai-first
+  model: deepseek/deepseek-v4-pro-0813
   multi_agent: false
   limit:
     kind: wall_seconds

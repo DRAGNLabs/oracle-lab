@@ -25,7 +25,7 @@ from oracle_bench.paths import RunPaths
 
 HERE = Path(__file__).parent
 # A localized sample config; only its source instance changes.
-CONFIG = HERE.parents[1] / "configs/initial-nex/requests.yaml"
+CONFIG = HERE.parents[1] / "configs/validation/pytest-10051-claude.yaml"
 
 
 def prototype(instance_id: str) -> dict:

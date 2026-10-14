@@ -1,10 +1,11 @@
 source:
-  instance: psf__requests-1142
+  kind: swerebench_v2
+  instance: wtforms__wtforms-809
 
 agent:
-  harness: opencode
+  harness: claude
   provider: openrouter
-  model: qwen/qwen3.8-max-0902
+  model: anthropic/claude-opus-5.5@preset/oracle-anthropic-first
   multi_agent: false
   limit:
     kind: wall_seconds

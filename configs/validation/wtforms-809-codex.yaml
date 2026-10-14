@@ -1,5 +1,6 @@
 source:
-  instance: psf__requests-1142
+  kind: swerebench_v2
+  instance: wtforms__wtforms-809
 
 agent:
   harness: codex

@@ -94,7 +94,7 @@ class InScopeClassification(StrictModel):
         "reference_test_or_repair_misaligned",
         "unreliable_environment_or_execution",
         "solution_or_oracle_leakage",
-        "not_reasonably_testable_from_code_only_context",
+        "unfair_without_issue",
     ]
     rationale: Rationale
 

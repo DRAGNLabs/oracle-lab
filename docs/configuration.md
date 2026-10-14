@@ -153,7 +153,9 @@ must have:
 - a `FAIL_TO_PASS` that is a list of test IDs, or a JSON-encoded list.
 
 A SWE-rebench V2 record must also have `language: python` and a nonempty
-`image_name`.
+`image_name`. It must be labeled as a bug fix only: every label in
+`meta.llm_metadata.pr_categories`, which the dataset's own model assigned, must
+end in `_bug`. Feature, enhancement, mixed, and unlabeled records are refused.
 
 The resolved record, golden repair, and reference tests are saved privately in
 `instance.json`. The generation agent never sees them.

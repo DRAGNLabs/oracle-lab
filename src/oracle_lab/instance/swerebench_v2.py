@@ -28,6 +28,11 @@ def resolve(config: SourceConfig) -> tuple[InstanceRecord, RuntimeConfig]:
     truncated = [i for i in instance.reference_test_ids if i.count("[") != i.count("]")]
     if truncated:
         raise ValueError(f"SWE-rebench V2 record has truncated test IDs: {truncated}")
+    # The dataset's model-generated labels. A feature's reference test fails on the
+    # old code only because the feature did not exist yet, so keep bug fixes only.
+    categories = record.get("meta", {}).get("llm_metadata", {}).get("pr_categories") or []
+    if not categories or not all(c.endswith("_bug") for c in categories):
+        raise ValueError(f"SWE-rebench V2 record is not labeled as a bug fix only: {categories}")
     return instance, runtime_for(record)
 
 

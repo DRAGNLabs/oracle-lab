@@ -79,6 +79,16 @@ def test_v2_record_with_a_truncated_test_id_is_refused(tmp_path):
         resolve_source(load(tmp_path, record=record))
 
 
+@pytest.mark.parametrize(
+    "categories",
+    [["core_feat"], ["minor_bug", "core_feat"], ["major_bug", "documentation_enh"], []],
+)
+def test_v2_record_not_labeled_as_only_a_bug_fix_is_refused(tmp_path, categories):
+    record = swerebench_v2_record(meta={"llm_metadata": {"pr_categories": categories}})
+    with pytest.raises(ValueError, match="not labeled as a bug fix only"):
+        resolve_source(load(tmp_path, record=record))
+
+
 def test_v2_record_is_read_from_the_pinned_dataset_file(tmp_path, monkeypatch):
     pa = pytest.importorskip("pyarrow")
     pq = pytest.importorskip("pyarrow.parquet")

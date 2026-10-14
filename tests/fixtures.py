@@ -59,6 +59,7 @@ def swerebench_v2_record(**changes) -> dict:
         "test_patch": "diff --git a/tests/test_fields.py b/tests/test_fields.py\n",
         "FAIL_TO_PASS": ["tests/test_fields.py::TestFlags::test_existing_values"],
         "PASS_TO_PASS": [],
+        "meta": {"llm_metadata": {"pr_categories": ["regression_bug", "edge_case_bug"]}},
     }
     record.update(changes)
     return record

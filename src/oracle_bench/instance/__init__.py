@@ -5,7 +5,7 @@ record; the private evidence it writes never reaches the generation agent.
 """
 
 from oracle_bench.config import RuntimeConfig, SourceConfig
-from oracle_bench.instance import swebench
+from oracle_bench.instance import swebench, swerebench_v2
 from oracle_bench.paths import RunPaths
 from oracle_bench.results import InstanceRecord
 
@@ -13,6 +13,8 @@ from oracle_bench.results import InstanceRecord
 def resolve_source(config: SourceConfig) -> tuple[InstanceRecord, RuntimeConfig]:
     if config.kind == "swebench":
         return swebench.resolve(config)
+    if config.kind == "swerebench_v2":
+        return swerebench_v2.resolve(config)
     raise ValueError(f"Unsupported source adapter {config.kind!r}")
 
 

@@ -142,14 +142,18 @@ need a different split.
 - **Type:** host path or null
 - **Default:** null
 
-A local SWE-bench JSON record, for offline runs and fixtures. When it is set,
-Oracle Bench does not contact Hugging Face. The record must have:
+A local JSON record in the selected dataset's format, for offline runs and
+fixtures. When it is set, Oracle Bench does not contact Hugging Face. The record
+must have:
 
 - nonempty `instance_id`, `repo`, `base_commit`, `patch`, and `test_patch`
   strings;
 - an `instance_id` equal to `source.instance`;
 - a `base_commit` that is a full commit SHA;
 - a `FAIL_TO_PASS` that is a list of test IDs, or a JSON-encoded list.
+
+A SWE-rebench V2 record must also have `language: python` and a nonempty
+`image_name`.
 
 The resolved record, golden repair, and reference tests are saved privately in
 `instance.json`. The generation agent never sees them.

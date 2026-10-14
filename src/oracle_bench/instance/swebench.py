@@ -94,26 +94,33 @@ def runtime_for(record: dict) -> RuntimeConfig:
 
 
 def resolve(config: SourceConfig) -> tuple[InstanceRecord, RuntimeConfig]:
-    # Declared up front so the type checker knows both branches give a dict.
-    record: dict
-    if config.record:
-        record = json.loads(Path(config.record).read_text())
-    else:
-        try:
-            from datasets import load_dataset
-        except ImportError as exc:
-            raise RuntimeError("Install oracle-bench[dataset] or set dataset.record") from exc
-        # `load_dataset` can return several shapes, but asking for one named split
-        # always gives rows we can loop over. The cast just tells the type checker.
-        rows = cast(
-            Iterable[dict],
-            load_dataset(config.dataset_name, split=config.split, revision=config.revision),
-        )
-        matches = [row for row in rows if row["instance_id"] == config.instance]
-        if len(matches) != 1:
-            raise ValueError(f"Expected one record for {config.instance}, found {len(matches)}")
-        record = matches[0]
+    record = load_record(config)
+    instance = instance_from(record, config, UPSTREAM_REVISION)
+    return instance, runtime_for(record)
 
+
+def load_record(config: SourceConfig) -> dict:
+    """Read the configured record from a local file, or else from the dataset."""
+    if config.record:
+        return json.loads(Path(config.record).read_text())
+    try:
+        from datasets import load_dataset
+    except ImportError as exc:
+        raise RuntimeError("Install oracle-bench[dataset] or set dataset.record") from exc
+    # `load_dataset` can return several shapes, but asking for one named split
+    # always gives rows we can loop over. The cast just tells the type checker.
+    rows = cast(
+        Iterable[dict],
+        load_dataset(config.dataset_name, split=config.split, revision=config.revision),
+    )
+    matches = [row for row in rows if row["instance_id"] == config.instance]
+    if len(matches) != 1:
+        raise ValueError(f"Expected one record for {config.instance}, found {len(matches)}")
+    return matches[0]
+
+
+def instance_from(record: dict, config: SourceConfig, upstream_revision: str) -> InstanceRecord:
+    """Check a SWE-bench-format record and turn it into an instance."""
     for key in ["instance_id", "repo", "base_commit", "patch", "test_patch"]:
         if not isinstance(record.get(key), str) or not record[key]:
             raise ValueError(f"SWE-bench record is missing {key}")
@@ -129,8 +136,7 @@ def resolve(config: SourceConfig) -> tuple[InstanceRecord, RuntimeConfig]:
     if not isinstance(fail_to_pass, list) or not all(isinstance(v, str) for v in fail_to_pass):
         raise ValueError("FAIL_TO_PASS must be a list of test IDs")
 
-    runtime = runtime_for(record)
-    instance = InstanceRecord(
+    return InstanceRecord(
         instance_id=record["instance_id"],
         repo=record["repo"],
         base_commit=record["base_commit"],
@@ -143,9 +149,8 @@ def resolve(config: SourceConfig) -> tuple[InstanceRecord, RuntimeConfig]:
             name=config.dataset_name,
             revision=config.revision,
             split=config.split,
-            upstream_revision=UPSTREAM_REVISION,
+            upstream_revision=upstream_revision,
             record_sha256=digest(json.dumps(record, sort_keys=True).encode()),
         ),
         original_record=record,
     )
-    return instance, runtime

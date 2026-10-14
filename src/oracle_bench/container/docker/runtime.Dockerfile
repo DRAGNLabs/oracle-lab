@@ -12,7 +12,12 @@ RUN rm -rf /swebench_matterhorn \
 
 ARG PROJECT_PYTHON
 ARG PROJECT_PYTHON_DIR
+ARG PROJECT_WORKDIR
 ARG PYTEST_VERSION
+
+# The source adapter infers both paths; stop here if the image disagrees.
+RUN test -x "${PROJECT_PYTHON}" || { echo "No Python at ${PROJECT_PYTHON}" >&2; exit 1; }
+RUN test -d "${PROJECT_WORKDIR}" || { echo "No repository at ${PROJECT_WORKDIR}" >&2; exit 1; }
 
 COPY --from=harnesses /usr/local/bin/node /opt/oracle-node/node
 COPY --from=harnesses /opt/oracle-agent /opt/oracle-agent

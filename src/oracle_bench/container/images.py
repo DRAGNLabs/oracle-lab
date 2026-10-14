@@ -126,6 +126,7 @@ def runtime_arguments(
         "PROJECT_IMAGE": image_id(source),
         "PROJECT_PYTHON": runtime.python,
         "PROJECT_PYTHON_DIR": str(Path(runtime.python).parent),
+        "PROJECT_WORKDIR": runtime.workdir,
         "PYTEST_VERSION": runtime.pytest_version or config.toolchain.pytest_version,
     }
 

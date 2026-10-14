@@ -12,7 +12,6 @@ agent:
 
 judge:
   rubric: ../../prompts/judge/generated-test-evaluation-rubric.md
-  instructions: ../../prompts/judge/generated-test-instructions.md
   harness: codex
   provider: openrouter
   model: google/gemini-3.8-flash

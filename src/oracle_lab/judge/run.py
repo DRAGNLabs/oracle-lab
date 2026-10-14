@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime, timezone
-from string import Template
 
 from docker import DockerClient
 from docker.errors import DockerException
@@ -43,7 +42,6 @@ def judge(config: RunConfig, paths: RunPaths) -> JudgmentResult:
             paths.instance,
             paths.results,
             paths.judge.rubric,
-            paths.judge.instructions,
         ],
         "Judge inputs",
     )
@@ -86,7 +84,6 @@ def judge_stage(
         human = paths.judge.human
         preserved = {
             paths.judge.rubric.name,
-            paths.judge.instructions.name,
             human.judgments.name,
             human.history.name,
             human.workspaces.name,
@@ -94,11 +91,8 @@ def judge_stage(
         previous = [path for path in paths.judge.root.iterdir() if path.name not in preserved]
         archive_files(previous, paths.judge.history)
 
-        # The instructions name the workspace; the rubric follows them verbatim.
-        instructions = Template(paths.judge.instructions.read_text())
-        paths.judge.prompt.write_text(
-            instructions.substitute(root=JUDGE_ROOT) + paths.judge.rubric.read_text()
-        )
+        # The rubric is the whole prompt.
+        paths.judge.prompt.write_text(paths.judge.rubric.read_text())
 
         def attempt(will_retry: Callable[[dict], bool]) -> tuple[dict, None]:
             with open_sandbox(client, image, config, Profile.JUDGE, paths.judge.log) as sandbox:

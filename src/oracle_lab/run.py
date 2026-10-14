@@ -161,10 +161,8 @@ def _resolve(config: RunConfig, paths: RunPaths) -> InstanceRecord:
     config.task.prompt = str(paths.prompt)
     if config.judge:
         paths.judge.rubric.write_bytes(Path(config.judge.rubric).read_bytes())
-        paths.judge.instructions.write_bytes(Path(config.judge.instructions).read_bytes())
         # Absolute, because reloading a config joins its paths to the run directory.
         config.judge.rubric = str(paths.judge.rubric.resolve())
-        config.judge.instructions = str(paths.judge.instructions.resolve())
 
     # `evaluate`, `judge`, and `agreement` read this saved config, not the user's.
     paths.config.write_text(yaml.safe_dump(config.model_dump(), sort_keys=False))

@@ -190,7 +190,6 @@ class JudgeConfig(HarnessConfig):
     """Settings for the optional, privileged generated-test judge."""
 
     rubric: NonBlank
-    instructions: NonBlank
     # The judge never spawns subagents. The type checker complains because this
     # narrows an inherited field, which is exactly what we want here.
     multi_agent: Literal[False] = False  # pyright: ignore[reportIncompatibleVariableOverride]
@@ -359,7 +358,6 @@ def load_config(path: Path, *, resolved: bool = False) -> RunConfig:
     config.task.prompt = resolve(config.task.prompt)
     if config.judge:
         config.judge.rubric = resolve(config.judge.rubric)
-        config.judge.instructions = resolve(config.judge.instructions)
     if config.runtime is not None:
         validate_resolved_config(config)
     return config

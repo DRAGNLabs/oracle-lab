@@ -41,7 +41,6 @@ def saved_run(tmp_path):
     config = run_config("package", image="example/runtime")
     config.judge = JudgeConfig(
         rubric=str(paths.judge.rubric),
-        instructions=str(paths.judge.instructions),
         harness="claude",
         # Set on purpose. The default is openrouter, and these tests want to
         # exercise the anthropic credential path.
@@ -51,7 +50,6 @@ def saved_run(tmp_path):
     )
     paths.config.write_text(yaml.safe_dump(config.model_dump(), sort_keys=False))
     paths.judge.rubric.write_text("# Frozen rubric\n\nChoose labels.\n")
-    paths.judge.instructions.write_text("Inspect $root/buggy/ and $root/golden/.\n\n")
     write_json(paths.runtime, {"image": "example/runtime"})
     write_json(paths.status, {"stage": "finished", "state": "completed", "judge_status": "missing"})
     write_result(paths.instance, instance_record())
@@ -106,8 +104,7 @@ def test_standalone_judge_saves_prompt_raw_output_provenance_and_labels(tmp_path
     assert result["model"] == "judge-model"
     assert result["harness"] == "claude"
     prompt = paths.judge.prompt.read_text()
-    assert "/oracle-judge/buggy/" in prompt
-    assert prompt.endswith(paths.judge.rubric.read_text())
+    assert prompt == paths.judge.rubric.read_text()
     assert read_json(paths.status)["judge_status"] == "completed"
 
 

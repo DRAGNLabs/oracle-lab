@@ -35,7 +35,6 @@ def run_config():
     runtime = runtime_config()
     judge = JudgeConfig(
         rubric="rubric.md",
-        instructions="instructions.md",
         harness="codex",
         model="judge-model",
         limit={"kind": "wall_seconds", "value": 60.0},

@@ -96,7 +96,6 @@ def test_claude_judge_accepts_wall_time_limit(tmp_path):
     raw = yaml.safe_load(SAMPLE.read_text())
     raw["judge"] = {
         "rubric": "rubric.md",
-        "instructions": "instructions.md",
         "harness": "claude",
         "model": "judge-model",
         "limit": {"kind": "wall_seconds", "value": 30},
@@ -115,7 +114,6 @@ def test_judge_rejects_removed_limit_kinds(tmp_path, kind):
     raw = yaml.safe_load(SAMPLE.read_text())
     raw["judge"] = {
         "rubric": "rubric.md",
-        "instructions": "instructions.md",
         "harness": "claude",
         "model": "judge-model",
         "limit": {"kind": kind, "value": 1},
@@ -140,7 +138,6 @@ def test_judge_rejects_invalid_stopping_policy(tmp_path, limit):
     raw = yaml.safe_load(SAMPLE.read_text())
     raw["judge"] = {
         "rubric": "rubric.md",
-        "instructions": "instructions.md",
         "harness": "claude",
         "model": "judge-model",
         "limit": limit,
@@ -165,7 +162,6 @@ def test_judge_rejects_unknown_or_incompatible_harness_settings(tmp_path, change
     raw = yaml.safe_load(SAMPLE.read_text())
     judge = {
         "rubric": "rubric.md",
-        "instructions": "instructions.md",
         "harness": "claude",
         "model": "judge-model",
         "limit": {"kind": "wall_seconds", "value": 30},
@@ -217,7 +213,7 @@ def test_harness_version_is_not_selectable_per_run(tmp_path, section):
     raw = yaml.safe_load(SAMPLE.read_text())
     raw.setdefault(
         "judge",
-        {"model": "judge-model", "harness": "claude", "rubric": "r.md", "instructions": "i.md"},
+        {"model": "judge-model", "harness": "claude", "rubric": "r.md"},
     )
     raw[section]["version"] = HARNESS_VERSIONS["codex"]
     path = tmp_path / "config.yaml"

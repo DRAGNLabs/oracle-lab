@@ -170,7 +170,6 @@ def test_agent_turn_uses_caller_supplied_paths_and_working_directory(tmp_path, m
 def test_claude_judge_uses_wall_time_and_disables_subagents(tmp_path, monkeypatch):
     judge = JudgeConfig(
         rubric="rubric.md",
-        instructions="instructions.md",
         harness="claude",
         model="judge-model",
         limit={"kind": "wall_seconds", "value": 45},
@@ -206,7 +205,6 @@ def test_codex_judge_turn_collects_its_own_last_message_file(tmp_path, monkeypat
     """The caller never names a harness-specific container path."""
     judge = JudgeConfig(
         rubric="rubric.md",
-        instructions="instructions.md",
         harness="codex",
         model="judge-model",
         limit={"kind": "wall_seconds", "value": 45},

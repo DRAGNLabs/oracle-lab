@@ -114,9 +114,6 @@ def test_reconstruct_privileged_judge_workspace(tmp_path, request):
     config = load_config(saved_paths.config, resolved=True)
     config.judge = JudgeConfig(
         rubric=str(Path(__file__).parents[1] / "prompts/judge/generated-test-evaluation-rubric.md"),
-        instructions=str(
-            Path(__file__).parents[1] / "prompts/judge/generated-test-instructions.md"
-        ),
         harness="claude",
         model="judge-fixture",
         limit={"kind": "wall_seconds", "value": 300},

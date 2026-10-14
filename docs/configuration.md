@@ -240,7 +240,6 @@ Without this section, a run makes no judge model call.
 ```yaml
 judge:
   rubric: ../prompts/judge/generated-test-evaluation-rubric.md
-  instructions: ../prompts/judge/generated-test-instructions.md
   harness: claude
   provider: anthropic
   model: haiku
@@ -253,15 +252,11 @@ judge:
 A run with a judge checks for the judge credential before generation starts. A
 missing credential fails the run before it spends anything.
 
-`judge.rubric` and `judge.instructions` are both required. Their paths are
-relative to the configuration file. A run copies both files to `judge/rubric.md`
-and `judge/instructions.md` when it starts. A later `oracle-lab judge` then
-uses the same text.
-
-The instructions tell the judge what the workspace holds and what to return.
-`$root` in them becomes the workspace path inside the container. The rubric
-defines the labels. The two are joined, instructions first, into
-`judge/prompt.md`, the exact text sent to the model.
+`judge.rubric` is required. Its path is relative to the configuration file. The
+rubric is the whole judge prompt: it says what the workspace holds, defines the
+labels, and says what to return. A run copies it to `judge/rubric.md` when it
+starts, so a later `oracle-lab judge` uses the same text. `judge/prompt.md`
+records the exact text sent to the model.
 
 Every other field works as it does under `agent`, except `multi_agent`, which is
 always `false`.

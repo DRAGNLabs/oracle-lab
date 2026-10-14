@@ -85,11 +85,8 @@ def configured_pipeline(tmp_path, with_judge):
     if with_judge:
         rubric = tmp_path / "rubric.md"
         rubric.write_text("# Rubric\n")
-        instructions = tmp_path / "instructions.md"
-        instructions.write_text("Judge the submission in $root.\n")
         config.judge = JudgeConfig(
             rubric=str(rubric),
-            instructions=str(instructions),
             harness="claude",
             model="judge-model",
             limit={"kind": "wall_seconds", "value": 300},
@@ -419,8 +416,6 @@ def test_reevaluation_marks_existing_judgment_stale_without_calling_a_model(tmp_
     paths = RunPaths.create(run_dir)
     config.judge.rubric = str(paths.judge.rubric)
     paths.judge.rubric.write_text("# Rubric\n")
-    config.judge.instructions = str(paths.judge.instructions)
-    paths.judge.instructions.write_text("Judge the submission in $root.\n")
     paths.config.write_text(yaml.safe_dump(config.model_dump(), sort_keys=False))
     write_json(paths.runtime, {"image": "example/runtime"})
     write_result(paths.instance, instance)

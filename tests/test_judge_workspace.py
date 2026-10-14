@@ -19,7 +19,6 @@ def prepared_run(tmp_path):
     config = run_config("package", image="example/runtime")
     config.judge = JudgeConfig(
         rubric="rubric.md",
-        instructions="instructions.md",
         harness="claude",
         model="judge-model",
         limit={"kind": "wall_seconds", "value": 300},

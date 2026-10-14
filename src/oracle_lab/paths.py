@@ -156,10 +156,6 @@ class JudgePaths:
         return self.root / "rubric.md"
 
     @property
-    def instructions(self) -> Path:
-        return self.root / "instructions.md"
-
-    @property
     def prompt(self) -> Path:
         return self.root / "prompt.md"
 

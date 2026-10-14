@@ -118,34 +118,10 @@ class RunPaths:
 
 
 @dataclass(frozen=True)
-class HumanJudgePaths:
-    """Blinded human ratings, kept beside the automated attempt they replicate."""
-
-    judge_root: Path
-
-    @property
-    def judgments(self) -> Path:
-        return self.judge_root / "human"
-
-    @property
-    def history(self) -> Path:
-        return self.judge_root / "human-history"
-
-    @property
-    def workspaces(self) -> Path:
-        return self.judge_root / "human-workspaces"
-
-    @property
-    def log(self) -> Path:
-        return self.judge_root / "human-workspace.log"
-
-
-@dataclass(frozen=True)
 class JudgePaths:
     """The optional judge stage's artifact tree.
 
-    ``root`` holds the current attempt; ``history`` holds archived ones. Human
-    ratings live under ``human`` and survive automated reruns.
+    ``root`` holds the current attempt; ``history`` holds archived ones.
     """
 
     root: Path
@@ -194,7 +170,3 @@ class JudgePaths:
     @property
     def final(self) -> Path:
         return self.agent / "final.txt"
-
-    @property
-    def human(self) -> HumanJudgePaths:
-        return HumanJudgePaths(self.root)

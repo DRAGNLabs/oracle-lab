@@ -14,12 +14,6 @@ execution evidence without assigning rubric labels.
 4. Read `evidence/agent-session.log` when answering the cheating question.
 5. Open the detailed JSON or raw logs when the summary is insufficient.
 
-## Human judgment
-
-Fill `output/judgment.json` using the labels in `rubric.md`, then save it. Use
-JSON `null` for the branch that does not apply. The host validates and collects
-the saved file; do not edit the read-only evidence.
-
 ## Workspace folders
 
 - `instance/`: the private SWE-bench issue, golden repair, reference-test patch,
@@ -27,7 +21,6 @@ the saved file; do not edit the read-only evidence.
 - `evidence/`: saved generation and test-execution evidence explained below.
 - `buggy/`: the buggy repository checkout with the captured generated tests added.
 - `golden/`: the repaired repository checkout with the exact same generated tests added.
-- `output/`: the editable human judgment file.
 
 ## Evidence files
 

@@ -420,8 +420,6 @@ def test_reevaluation_marks_existing_judgment_stale_without_calling_a_model(tmp_
     write_json(paths.runtime, {"image": "example/runtime"})
     write_result(paths.instance, instance)
     write_json(paths.judge.judgment, completed_judgment())
-    human_judgment = paths.judge.human.judgments / "rater_1/judgment.json"
-    write_json(human_judgment, read_json(paths.judge.judgment))
     client = Mock()
 
     client_context = context_of(client)
@@ -438,7 +436,6 @@ def test_reevaluation_marks_existing_judgment_stale_without_calling_a_model(tmp_
     judgment = read_json(paths.judge.judgment)
     assert judgment["status"] == "stale"
     assert judgment["previous_judgment"]["tests_issue"] == "yes"
-    assert read_json(human_judgment)["status"] == "stale"
     assert read_json(run_dir / "status.json")["judge_status"] == "stale"
     judge_call.assert_not_called()
 

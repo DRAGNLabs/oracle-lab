@@ -14,7 +14,7 @@ Read these references before changing related behavior:
 - `README.md` for the user workflow and CLI overview.
 - `docs/configuration.md` for the complete YAML interface.
 - `docs/results.md` for the run artifact contracts.
-- `docs/judging.md` for the LLM judge, human ratings, and agreement.
+- `docs/judging.md` for the LLM judge.
 - `docs/containers.md` for Docker transport and image builds.
 
 ## Architecture and trust boundaries
@@ -69,15 +69,13 @@ The pipeline stages run in this order, and each is one module or package that
   checkout, then capture and freeze the submission.
 - `src/oracle_lab/judge/`: judge — `contracts.py` (every persisted judge
   contract, plus judgment parsing and saved state), `workspace.py` (building the
-  privileged `/oracle-judge` bundle), `run.py`
-  (the LLM judge stage), `human.py` (blinded rater workspaces), `agreement.py`
-  and `agreement_report.py` (offline analysis).
+  privileged `/oracle-judge` bundle), and `run.py` (the LLM judge stage).
 - `src/oracle_lab/report.py`: report — Markdown rendering from saved artifacts.
 
 Supporting these:
 
 - `src/oracle_lab/cli.py`: `run`, `preflight`, `batch`, `evaluate`, `judge`, `classify`,
-  `judge-workspace`, `agreement`, and `report` command interface.
+  and `report` command interface.
 - `src/oracle_lab/run.py`: the stage sequence and run status.
 - `src/oracle_lab/preflight.py`: `preflight`, which runs the stages before
   generation plus an environment check, without calling a model.

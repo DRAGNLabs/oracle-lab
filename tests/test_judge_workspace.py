@@ -126,8 +126,6 @@ def test_workspace_exposes_complete_hashed_bundle_and_identical_tests(tmp_path):
     ]
     instructions = sandbox.uploaded[JUDGE_ROOT + "/instructions.md"].decode()
     assert "## Reading order" in instructions
-    assert "## Human judgment" in instructions
-    assert "Fill `output/judgment.json`" in instructions
     assert "`evidence/agent-session.log`" in instructions
     assert "package/core.py" in instructions
     assert "tests/test_core.py::test_fixed" in instructions

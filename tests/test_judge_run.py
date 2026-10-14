@@ -209,9 +209,6 @@ def test_rerun_archives_complete_previous_attempt(tmp_path, monkeypatch):
     paths.judge.judgment.write_text('{"old": true}\n')
     paths.judge.agent.mkdir()
     (paths.judge.agent / "trace.jsonl").write_text("old trace\n")
-    human = paths.judge.human.judgments / "rater_1/judgment.json"
-    human.parent.mkdir(parents=True)
-    human.write_text('{"human": true}\n')
     monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "credential-fixture")
     install_fakes(monkeypatch)
 
@@ -221,8 +218,6 @@ def test_rerun_archives_complete_previous_attempt(tmp_path, monkeypatch):
     assert len(archives) == 1
     assert read_json(archives[0] / "judgment.json") == {"old": True}
     assert (archives[0] / "agent/trace.jsonl").read_text() == "old trace\n"
-    assert read_json(human) == {"human": True}
-    assert not (archives[0] / "human").exists()
     assert paths.judge.rubric.read_text() == "# Frozen rubric\n\nChoose labels.\n"
 
 

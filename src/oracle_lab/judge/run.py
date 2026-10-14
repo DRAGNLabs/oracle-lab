@@ -80,15 +80,8 @@ def judge_stage(
         config, config.require_judge(), paths.judge.prompt, JUDGE_ROOT, paths.judge.agent
     )
     try:
-        # Move a previous automated attempt aside. Human ratings stay put.
-        human = paths.judge.human
-        preserved = {
-            paths.judge.rubric.name,
-            human.judgments.name,
-            human.history.name,
-            human.workspaces.name,
-        }
-        previous = [path for path in paths.judge.root.iterdir() if path.name not in preserved]
+        # Move a previous attempt aside. The frozen rubric stays put.
+        previous = [path for path in paths.judge.root.iterdir() if path != paths.judge.rubric]
         archive_files(previous, paths.judge.history)
 
         # The rubric is the whole prompt.

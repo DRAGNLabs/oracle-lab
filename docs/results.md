@@ -66,10 +66,6 @@ runs/<run-id>/
 │   ├── prompt.md
 │   ├── judgment.raw.txt
 │   ├── judgment.json
-│   ├── human/<opaque-rater-id>/{judgment.raw.json,judgment.json,provenance.json}
-│   ├── human-history/<opaque-rater-id>/<archived rating>/
-│   ├── human-workspaces/<workspace metadata and VS Code files>
-│   ├── human-workspace.log
 │   └── agent/{command.json,version.txt,trace.jsonl,stderr.log,final.txt,result.json}
 ├── judge-history/<archived judge attempts>/
 ├── generation-history/<archived interrupted generation attempts>/
@@ -192,7 +188,7 @@ generated file again inside both views. The repository views are not copied back
 to the host. The saved run files and the workspace specification are enough to
 rebuild them.
 
-[Judging](judging.md) covers running the judge and collecting human ratings.
+[Judging](judging.md) covers running the judge.
 
 ## Primary results
 
@@ -642,8 +638,8 @@ unchanged. Every earlier evaluation stays available for comparison.
 `generation/session.log` belongs to generation, so it is not archived.
 
 Reevaluation marks an existing `judge/judgment.json` as `stale`, because the
-evidence it rated has been replaced. Human judgments become stale for the same
-reason. Each stale record keeps the previous judgment inside it. Reevaluation
+evidence it rated has been replaced. The stale record keeps the previous
+judgment inside it. Reevaluation
 never calls the judge model. Run `oracle-lab judge` to get a new LLM judgment.
 
 ## Empty, optional, and absent files
@@ -709,37 +705,3 @@ when no job has a cost.
 The Markdown report shows a short per-run comparison and the label count tables.
 The full cross-tabulations are only in `summary.json`.
 
-## Agreement artifacts
-
-`oracle-lab agreement` writes `agreement/report.md`, `agreement/summary.json`,
-and `agreement/calibration-sample.json` inside the batch directory.
-
-Agreement is reported separately for each label (`tests_issue`,
-`attempt_detail`, `no_attempt_reason`, and `cheating`). Within each label,
-human–human and human–LLM agreement are also separate. Each result has:
-
-- the number of observations;
-- raw agreement;
-- Cohen's kappa (agreement corrected for chance) for each rater pair, and their
-  mean weighted by observations;
-- a pooled confusion matrix;
-- each disagreement.
-
-Each rater pair also keeps its own expected agreement. A pair counts only when
-both ratings are valid and complete. The possible, available, and missing pair
-counts are all reported. A rater with no rating appears as `status: missing` in
-the per-run records. Kappa is `null` when there are no observations, or when
-expected agreement is one.
-
-The report records the hash of every rubric, LLM prompt, human instruction, and
-workspace specification, plus the judge models. Ratings made under different
-conditions then show up as different, instead of being merged without notice.
-
-`summary.json` holds the agreement figures and per-run ratings.
-`calibration-sample.json` holds the calibration sample, and only it. The sample
-takes up to a fixed number of runs from each group: F→P, F→F, P→P, invalid, and
-submissions the LLM judged unrelated. (F→P means failed on buggy, passed on
-golden.) Runs are ordered by a hash of the instance ID and directory name, so
-moving a batch does not change the choice. A run may fall in more than one
-group. The sample records whether every selected run has at least two completed
-human ratings. Until it does, agreement is not reported as calibrated.

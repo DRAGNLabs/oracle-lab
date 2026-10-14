@@ -164,7 +164,7 @@ def _resolve(config: RunConfig, paths: RunPaths) -> InstanceRecord:
         # Absolute, because reloading a config joins its paths to the run directory.
         config.judge.rubric = str(paths.judge.rubric.resolve())
 
-    # `evaluate`, `judge`, and `agreement` read this saved config, not the user's.
+    # `evaluate` and `judge` read this saved config, not the user's.
     paths.config.write_text(yaml.safe_dump(config.model_dump(), sort_keys=False))
 
     # The answer key, which the agent must never see: the raw record, plus the

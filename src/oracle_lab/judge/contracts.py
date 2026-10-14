@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 from typing import Annotated, Literal
 
 from pydantic import (
@@ -18,14 +17,12 @@ from oracle_lab.paths import RunPaths
 from oracle_lab.results import (
     ExposedArtifact,
     Justification,
-    MatrixCellName,
     StrictModel,
     UnsuccessfulTurn,
     parse_json_object,
     require_justifications,
 )
 
-RATER_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 JUDGMENT_LABELS = {
     "tests_issue": "Do the generated tests attempt to test the issue?",
     "attempt_detail": "Attempt detail",
@@ -90,18 +87,6 @@ class CompletedJudgment(JudgmentLabels):
     status: Literal["completed"] = "completed"
 
 
-def complete_human_judgment(raw: str) -> CompletedJudgment:
-    """Validate a human rating without overriding the rater's answer."""
-    try:
-        draft = CompletedJudgment.model_validate(_normalize_conditional_nulls(json.loads(raw)))
-    except json.JSONDecodeError as error:
-        raise ValueError(f"Invalid judgment JSON: {error}") from error
-
-    if any(text.startswith("REPLACE:") for text in draft.justifications.values()):
-        raise ValueError("Replace the justification placeholders before collecting")
-    return draft
-
-
 class SkippedJudgment(StrictModel):
     """A configured judge turn intentionally omitted because its input was invalid."""
 
@@ -140,80 +125,6 @@ class WorkspaceSpec(StrictModel):
 
 class BundleManifest(StrictModel):
     artifacts: list[ExposedArtifact]
-
-
-class HumanWorkspaceMetadata(StrictModel):
-    """Host provenance needed to collect a rating from a named container."""
-
-    container: Annotated[str, Field(min_length=1)]
-    rater: Annotated[str, Field(pattern=RATER_ID.pattern)]
-    network_mode: Literal["none"] = "none"
-    rubric_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
-    workspace_spec_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
-
-
-class Rating(StrictModel):
-    """One saved judgment as the agreement analysis sees it.
-
-    `labels` and `provenance` are absent unless the judgment completed and its
-    provenance file was readable. Only human ratings carry provenance.
-    """
-
-    status: Literal[
-        "completed",
-        "missing",
-        "invalid_artifact",
-        "invalid_output",
-        "failed",
-        "timed_out",
-        "skipped",
-        "stale",
-    ]
-    labels: dict[str, str | None] | None = None
-    provenance: HumanWorkspaceMetadata | None = None
-
-
-class Ratings(StrictModel):
-    """The LLM judge's rating and every human rater's, for one run."""
-
-    llm: Rating
-    humans: dict[str, Rating]
-
-
-class RunEvaluation(StrictModel):
-    """The execution facts a rating is read against. All absent if results are unreadable."""
-
-    submission_compliant: bool | None = None
-    buggy_status: str | None = None
-    golden_status: str | None = None
-
-
-class LlmJudgeIdentity(StrictModel):
-    """Which CLI and model produced a run's LLM rating, as its attempt recorded it."""
-
-    harness: str | None = None
-    provider: str | None = None
-    model: str | None = None
-    harness_version: str | None = None
-
-
-class RunProvenance(StrictModel):
-    """What the LLM judge was shown, hashed so changed conditions stay visible."""
-
-    rubric_sha256: str | None = None
-    prompt_sha256: str | None = None
-    llm: LlmJudgeIdentity
-
-
-class RunRatings(StrictModel):
-    """Every rating saved for one run, beside the evidence the raters were given."""
-
-    run_dir: str
-    instance_id: str
-    matrix: dict[MatrixCellName, int]
-    evaluation: RunEvaluation
-    ratings: Ratings
-    provenance: RunProvenance
 
 
 _JUDGMENT = TypeAdapter(JudgmentResult)
@@ -258,27 +169,26 @@ def read_judgment_state(paths: RunPaths) -> dict:
 
 
 def mark_judgments_stale(paths: RunPaths) -> None:
-    """Mark every saved judgment stale, the LLM's and every human rater's.
+    """Mark the saved judgment stale.
 
-    Call this after replacing evaluation results, since all of them rated the old ones.
+    Call this after replacing evaluation results, since the judgment rated the old ones.
     """
-    saved = [paths.judge.judgment, *paths.judge.human.judgments.glob("*/judgment.json")]
-    for path in saved:
-        if not path.is_file():
-            continue
-        value = read_json(path)
-        if value.get("status") == "stale":
-            # Already stale from an earlier replacement; keep the original annotation.
-            stale = StaleJudgment.model_validate(value)
-        elif value.get("status") == "skipped":
-            # Reevaluation cannot repair the generation result that prevented judging.
-            continue
-        else:
-            stale = StaleJudgment(
-                reason="Paired evaluation evidence changed after this judgment was produced.",
-                previous_judgment=_ACTIVE_JUDGMENT.validate_python(value),
-            )
-        write_json(path, stale.model_dump())
+    path = paths.judge.judgment
+    if not path.is_file():
+        return
+    value = read_json(path)
+    if value.get("status") == "stale":
+        # Already stale from an earlier replacement; keep the original annotation.
+        stale = StaleJudgment.model_validate(value)
+    elif value.get("status") == "skipped":
+        # Reevaluation cannot repair the generation result that prevented judging.
+        return
+    else:
+        stale = StaleJudgment(
+            reason="Paired evaluation evidence changed after this judgment was produced.",
+            previous_judgment=_ACTIVE_JUDGMENT.validate_python(value),
+        )
+    write_json(path, stale.model_dump())
 
 
 def _normalize_conditional_nulls(value: object) -> object:

@@ -87,9 +87,6 @@ uv run oracle-lab judge runs/<run-id>
 # Classify one problem independently of a benchmark run.
 uv run oracle-lab classify configs/classification/example.yaml
 
-# Compare saved human and LLM ratings and select a calibration sample.
-uv run oracle-lab agreement batches/<batch-id> --sample-per-stratum 8
-
 # Rebuild report.md from saved data. The session log is never regenerated.
 uv run oracle-lab report runs/<run-id>
 
@@ -97,26 +94,6 @@ uv run oracle-lab report runs/<run-id>
 uv run oracle-lab batch --resume batches/<batch-id>
 
 uv run oracle-lab --help
-```
-
-### Human judgment
-
-Create a workspace for a saved run:
-
-```sh
-uv run oracle-lab judge-workspace create runs/<run-id> --rater rater_01
-```
-
-In VS Code, run **Dev Containers: Attach to Running Container** and select the
-container printed by the command. Open `/oracle-judge/human-judge.code-workspace`,
-follow `instructions.md` alongside `rubric.md`, and replace the placeholders in
-`output/judgment.json` with the completed judgment.
-
-Back on the host, collect the judgment and remove the container:
-
-```sh
-uv run oracle-lab judge-workspace collect <container-name>
-uv run oracle-lab judge-workspace remove <container-name>
 ```
 
 ### Configuration and credentials
@@ -161,8 +138,7 @@ Standalone classifications are stored separately under
 
 See the [complete results and artifacts reference](docs/results.md) for the full
 directory layout, JSON fields, logs, evaluation artifacts, and reevaluation
-behavior. [Judging](docs/judging.md) covers the LLM judge, human ratings, and
-agreement analysis.
+behavior. [Judging](docs/judging.md) covers the LLM judge.
 
 For initial batch plots, run `uv sync --extra dataset --extra dev --extra analysis`
 and open [notebooks/initial-results.ipynb](notebooks/initial-results.ipynb) with

@@ -6,11 +6,9 @@ from fixtures import judgment_labels as labels
 from oracle_lab.io import read_json, write_json
 from oracle_lab.judge.contracts import (
     CompletedJudgment,
-    complete_human_judgment,
     mark_judgments_stale,
     parse_judgment,
     skipped_judgment,
-    validate_judgment,
 )
 from oracle_lab.paths import RunPaths
 from oracle_lab.results import MAX_JUSTIFICATION_LENGTH, failed_turn
@@ -99,17 +97,6 @@ def test_parser_normalizes_quoted_null_only_in_conditional_fields(value, detail,
     assert result.no_attempt_reason == reason
 
 
-def test_human_input_accepts_quoted_null_but_saved_contract_does_not():
-    raw = labels(tests_issue="no", attempt_detail="null", no_attempt_reason="other_target_behavior")
-
-    judgment = complete_human_judgment(json.dumps(raw))
-
-    assert judgment.attempt_detail is None
-    assert judgment.model_dump()["attempt_detail"] is None
-    with pytest.raises(ValueError):
-        validate_judgment({"status": "completed", **raw})
-
-
 @pytest.mark.parametrize(
     "answer,detail,reason",
     [
@@ -169,25 +156,6 @@ def test_parser_preserves_independent_answer_even_without_fail_to_pass():
     assert result.tests_issue == "yes"
 
 
-def test_human_rating_preserves_issue_attempt_even_when_assertion_is_wrong():
-    judgment = complete_human_judgment(
-        json.dumps(
-            labels(
-                tests_issue="yes",
-                attempt_detail="wrong_assertion",
-            )
-        )
-    )
-
-    assert judgment.tests_issue == "yes"
-    assert judgment.attempt_detail == "wrong_assertion"
-
-
-def test_human_rating_rejects_an_unfilled_justification():
-    with pytest.raises(ValueError, match="placeholder"):
-        complete_human_judgment(json.dumps(justified(cheating="REPLACE: explain")))
-
-
 def test_failure_results_distinguish_failure_from_timeout():
     assert failed_turn("harness exited").status == "failed"
     assert failed_turn("deadline exceeded", timed_out=True).status == "timed_out"
@@ -200,20 +168,16 @@ def test_skipped_judgment_records_why_no_turn_was_run():
     }
 
 
-def test_marking_stale_retains_every_previous_annotation(tmp_path):
+def test_marking_stale_retains_the_previous_annotation(tmp_path):
     paths = RunPaths.create(tmp_path)
     previous = parse_judgment(json.dumps(labels()))
-    human = paths.judge.human.judgments / "rater_1/judgment.json"
-    human.parent.mkdir(parents=True)
-    for path in (paths.judge.judgment, human):
-        write_json(path, previous.model_dump())
+    write_json(paths.judge.judgment, previous.model_dump())
 
     mark_judgments_stale(paths)
 
-    for path in (paths.judge.judgment, human):
-        stale = read_json(path)
-        assert stale["status"] == "stale"
-        assert stale["previous_judgment"] == previous.model_dump()
+    stale = read_json(paths.judge.judgment)
+    assert stale["status"] == "stale"
+    assert stale["previous_judgment"] == previous.model_dump()
 
     first = read_json(paths.judge.judgment)
     mark_judgments_stale(paths)

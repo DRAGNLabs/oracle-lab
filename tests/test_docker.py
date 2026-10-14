@@ -19,11 +19,6 @@ from oracle_lab.evaluation.outcomes import pair_results
 from oracle_lab.generation import verify_bundle
 from oracle_lab.instance import write_private_instance_artifacts
 from oracle_lab.io import read_json, write_json
-from oracle_lab.judge.human import (
-    collect_human_judgment,
-    create_human_workspace,
-    remove_human_workspace,
-)
 from oracle_lab.judge.run import judge as run_judge
 from oracle_lab.judge.workspace import JUDGE_ROOT, build_judge_workspace
 from oracle_lab.localization import localize
@@ -211,41 +206,6 @@ def test_reconstruct_privileged_judge_workspace(tmp_path, request):
 
     assert read_json(paths.judge.judgment)["status"] == "completed"
     assert read_json(paths.judge.result)["model"] == "judge-fixture"
-
-    workspace = create_human_workspace(config, paths, "smoke_rater")
-    container_name = workspace.splitlines()[0].removeprefix("Container: ")
-    human = client.containers.get(container_name)
-    assert human.attrs["HostConfig"]["NetworkMode"] == "none"
-    assert human.exec_run(["test", "-w", JUDGE_ROOT + "/output"], user="10001:10001").exit_code == 0
-    assert (
-        human.exec_run(["test", "!", "-w", JUDGE_ROOT + "/rubric.md"], user="10001:10001").exit_code
-        == 0
-    )
-    assert (
-        human.exec_run(
-            ["test", "!", "-w", config.runtime.workdir + "/.git"], user="10001:10001"
-        ).exit_code
-        == 0
-    )
-    assert (
-        human.exec_run(
-            ["test", "!", "-e", JUDGE_ROOT + "/judgment.json"], user="10001:10001"
-        ).exit_code
-        == 0
-    )
-    human_rating = json.dumps(judgment_labels(tests_issue="unsure", attempt_detail=None))
-    write_draft = (
-        "import pathlib; "
-        f"pathlib.Path('/oracle-judge/output/judgment.json').write_text({human_rating!r})"
-    )
-    assert (
-        human.exec_run([config.runtime.python, "-c", write_draft], user="10001:10001").exit_code
-        == 0
-    )
-    collected = collect_human_judgment(container_name)
-    assert read_json(collected)["status"] == "completed"
-    assert read_json(collected.parent / "provenance.json")["rater"] == "smoke_rater"
-    remove_human_workspace(container_name)
 
 
 # Deliberately handwritten evaluator probes, not benchmark predictions.

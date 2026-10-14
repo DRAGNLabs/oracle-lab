@@ -47,6 +47,23 @@ def instance_record(**changes) -> InstanceRecord:
     return InstanceRecord.model_validate(record)
 
 
+def swerebench_v2_record(**changes) -> dict:
+    """A SWE-rebench V2 dataset record, with the fields the resolver reads."""
+    record = {
+        "instance_id": "wtforms__wtforms-614",
+        "repo": "wtforms/wtforms",
+        "base_commit": "a" * 40,
+        "language": "python",
+        "image_name": "docker.io/swerebenchv2/wtforms-wtforms:614-aaaaaaa",
+        "patch": "diff --git a/src/wtforms/validators.py b/src/wtforms/validators.py\n",
+        "test_patch": "diff --git a/tests/test_fields.py b/tests/test_fields.py\n",
+        "FAIL_TO_PASS": ["tests/test_fields.py::TestFlags::test_existing_values"],
+        "PASS_TO_PASS": [],
+    }
+    record.update(changes)
+    return record
+
+
 def localized_target(**changes) -> dict:
     """A saved localized target naming one changed method."""
     target = {

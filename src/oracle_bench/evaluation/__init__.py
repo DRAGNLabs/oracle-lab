@@ -99,7 +99,7 @@ def run_reference(
         return instance.reference_test_ids
 
     directory = paths.reference / version
-    return _run_version(
+    return run_version(
         client, config, image, instance, version, directory, Profile.REFERENCE, setup
     )
 
@@ -124,12 +124,12 @@ def run_submission(
         sandbox.upload(paths.submission / "files", workdir, contents=True)
         return [config.task.generated_dir]
 
-    return _run_version(
+    return run_version(
         client, config, image, instance, version, directory, Profile.EVALUATION, setup
     )
 
 
-def _run_version(
+def run_version(
     client: DockerClient,
     config: RunConfig,
     image: str,

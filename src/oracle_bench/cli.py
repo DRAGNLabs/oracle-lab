@@ -18,6 +18,7 @@ from oracle_bench.judge.human import (
 )
 from oracle_bench.judge.run import judge
 from oracle_bench.paths import RunPaths
+from oracle_bench.preflight import preflight
 from oracle_bench.report import report
 from oracle_bench.run import reevaluate, run
 
@@ -44,6 +45,12 @@ def _build_parser() -> argparse.ArgumentParser:
     # Generate tests for one instance, then evaluate them.
     run_parser = sub.add_parser("run", help="Run one configured instance")
     run_parser.add_argument("config", type=Path)
+
+    # Check instances before any paid run: build, reference pair, environment.
+    preflight_parser = sub.add_parser(
+        "preflight", help="Check configured instances without calling a model"
+    )
+    preflight_parser.add_argument("configs", type=Path, nargs="+")
 
     # Run every job in a batch YAML, or pick up where a batch directory left off.
     batch_parser = sub.add_parser("batch", help="Run or resume an explicit batch")
@@ -111,6 +118,8 @@ def _dispatch(args: argparse.Namespace) -> int:
     if args.command in {"run", "batch", "judge", "classify"}:
         load_dotenv(Path.cwd() / ".env", override=False, interpolate=False)
 
+    if args.command == "preflight":
+        return _preflight_all(args.configs)
     if args.command == "run":
         output = run(load_config(args.config))
     elif args.command == "batch":
@@ -154,3 +163,19 @@ def _load_saved_run(run_dir: Path) -> tuple[RunConfig, RunPaths]:
     """Open a run and load its frozen resolved configuration once at the CLI boundary."""
     paths = RunPaths.open(run_dir.resolve())
     return load_config(paths.config, resolved=True), paths
+
+
+def _preflight_all(configs: list[Path]) -> int:
+    """Check every config, even after a failure, then list the outcome of each."""
+    outcomes = []
+    for path in configs:
+        try:
+            outcomes.append(("passed", path, preflight(load_config(path))))
+        except KeyboardInterrupt:
+            raise
+        except Exception as exc:
+            outcomes.append(("failed", path, exc))
+    print()
+    for state, path, detail in outcomes:
+        print(f"{state}  {path}  {detail}")
+    return 1 if any(state == "failed" for state, _, _ in outcomes) else 0

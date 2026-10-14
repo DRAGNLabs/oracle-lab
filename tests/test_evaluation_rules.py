@@ -17,6 +17,7 @@ from oracle_bench.config import RuntimeConfig, load_config
 from oracle_bench.container.sandbox import CommandResult
 from oracle_bench.io import read_json, write_json
 from oracle_bench.paths import RunPaths
+from oracle_bench.preflight import check_environment
 from oracle_bench.results import read_paired_result
 
 RUNNER = "/pytest_runner.py"
@@ -201,3 +202,34 @@ def test_a_reference_pair_that_does_not_distinguish_the_versions_stops_the_run(s
         evaluation.check_reference(Mock(), config, "image", instance, paths)
     saved = read_paired_result(paths.reference / "results.json")
     assert not saved.has_fail_on_buggy_pass_on_golden
+
+
+PREFLIGHT_TEST = "oracle_tests/test_oracle_bench_preflight.py::test_generated_tests_can_run"
+
+
+def test_the_environment_check_runs_its_test_like_a_submission_on_both_versions(setup):
+    config, paths, instance, sandboxes, outcomes = setup
+    for version in outcomes:
+        outcomes[version][PREFLIGHT_TEST] = "pass"
+
+    check_environment(Mock(), config, "image", instance, paths)
+
+    assert [(version, profile) for version, profile, _ in sandboxes] == [
+        ("buggy", "evaluation"),
+        ("golden", "evaluation"),
+    ]
+    for _, _, sandbox in sandboxes:
+        assert ("upload", "files", "/testbed") in sandbox.events
+    assert (paths.environment / "files/oracle_tests/test_oracle_bench_preflight.py").is_file()
+    saved = read_paired_result(paths.environment / "results.json")
+    assert saved.matrix["pass_on_both"].test_ids == [PREFLIGHT_TEST]
+
+
+def test_an_environment_check_that_does_not_pass_on_both_versions_fails(setup):
+    config, paths, instance, _, outcomes = setup
+    outcomes["buggy"][PREFLIGHT_TEST] = "pass"
+    outcomes["golden"][PREFLIGHT_TEST] = "fail"
+
+    with pytest.raises(RuntimeError, match="did not pass on both versions"):
+        check_environment(Mock(), config, "image", instance, paths)
+    assert (paths.environment / "results.json").is_file()

@@ -33,7 +33,7 @@ tests. It does not see the issue description or the fix. Oracle Bench then runs
 the same tests against the buggy version and the fixed (golden) version. It
 records the paired pass/fail outcomes.
 
-A separate `classify` command labels SWE-bench Verified problems. The labels
+A separate `classify` command labels SWE-bench and SWE-rebench V2 problems. The labels
 cover defect mechanism, test setup, oracle availability, scope, and benchmark
 quality. A run's report shows the newest classification for its instance, if
 one exists.
@@ -74,13 +74,17 @@ flowchart TD
 # Generate tests and evaluate both code versions.
 uv run oracle-bench run configs/smoke.yaml
 
+# Check instances before a paid run: build the image, run the reference pair,
+# and run one fixed test the way generated tests run. No model calls.
+uv run oracle-bench preflight configs/smoke.yaml [more configs...]
+
 # Rerun saved tests in fresh containers; no agent or model calls.
 uv run oracle-bench evaluate runs/<run-id>
 
 # Run the configured semantic judge after paired evaluation.
 uv run oracle-bench judge runs/<run-id>
 
-# Classify one SWE-bench Verified problem independently of a benchmark run.
+# Classify one problem independently of a benchmark run.
 uv run oracle-bench classify configs/classification/example.yaml
 
 # Compare saved human and LLM ratings and select a calibration sample.

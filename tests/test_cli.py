@@ -155,3 +155,22 @@ def test_agreement_command_is_offline(tmp_path, monkeypatch):
     )
 
     assert cli.main(["agreement", str(tmp_path), "--sample-per-stratum", "3"]) == 0
+
+
+def test_preflight_checks_every_config_and_fails_if_any_fails(tmp_path, monkeypatch, capsys):
+    def unexpected_load(*args, **kwargs):
+        pytest.fail("Preflight must not load credentials")
+
+    def preflight(path):
+        if path.name == "bad.yaml":
+            raise RuntimeError("reference pair did not reproduce")
+        return tmp_path / path.stem
+
+    monkeypatch.setattr(cli, "load_dotenv", unexpected_load)
+    monkeypatch.setattr(cli, "load_config", lambda path: path)
+    monkeypatch.setattr(cli, "preflight", preflight)
+
+    assert cli.main(["preflight", "bad.yaml", "good.yaml"]) == 1
+    output = capsys.readouterr().out
+    assert "failed  bad.yaml  reference pair did not reproduce" in output
+    assert f"passed  good.yaml  {tmp_path / 'good'}" in output

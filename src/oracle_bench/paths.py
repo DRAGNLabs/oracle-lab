@@ -45,6 +45,10 @@ class RunPaths:
         return self.root / "reference-check"
 
     @property
+    def environment(self) -> Path:
+        return self.root / "environment-check"
+
+    @property
     def generation(self) -> Path:
         return self.root / "generation"
 

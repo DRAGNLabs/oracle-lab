@@ -84,30 +84,42 @@ written for an earlier revision fails to load; it is never half-read.
 
 ## `source`
 
-The source selects one SWE-bench Verified record by default.
+The source selects one SWE-bench Verified record by default. It can instead
+select a SWE-rebench V2 record.
 
 ### `source.instance`
 
 - **Type:** string
 - **Required:** yes
 
-The SWE-bench `instance_id`, such as `psf__requests-1142`. Exactly one record
-must match. The official prepared image name is derived from this ID.
+The record's `instance_id`, such as `psf__requests-1142`. Exactly one record
+must match. For SWE-bench, the official prepared image name is derived from this
+ID.
 
 ### `source.kind`
 
-- **Type:** `swebench`
+- **Type:** `swebench` or `swerebench_v2`
 - **Default:** `swebench`
 
-Selects the source adapter. SWE-bench is the only one.
+Selects the source adapter. `swebench` reads SWE-bench Lite or Verified.
+`swerebench_v2` reads
+[SWE-rebench V2](https://huggingface.co/datasets/nebius/SWE-rebench-V2), whose
+records name their own prepared image. It reads the record from the dataset's one
+data file, which Hugging Face downloads once and caches.
+`configs/swerebench-v2/wtforms-809.yaml` is an example.
 
 ### `source.dataset`
 
 - **Type:** dataset alias
-- **Default:** `verified`
+- **Default:** `verified` for `swebench`; `swerebench_v2` for `swerebench_v2`
 
-`lite` resolves to `princeton-nlp/SWE-bench_Lite`; `verified` resolves to
-`princeton-nlp/SWE-bench_Verified`.
+| Alias | Kind | Dataset | Split |
+|---|---|---|---|
+| `lite` | `swebench` | `princeton-nlp/SWE-bench_Lite` | `test` |
+| `verified` | `swebench` | `princeton-nlp/SWE-bench_Verified` | `test` |
+| `swerebench_v2` | `swerebench_v2` | `nebius/SWE-rebench-V2` | `train` |
+
+The alias must belong to `source.kind`; a mismatch fails to load.
 
 ### `source.revision`
 
@@ -122,24 +134,28 @@ checksum.
 ### `source.split`
 
 - **Type:** string
-- **Default:** `test`
+- **Default:** the selected dataset's split from the table above
 
-The dataset split searched for `source.instance`. SWE-bench Verified runs use
-the default.
+The dataset split searched for `source.instance`. Leave it unset unless you
+need a different split.
 
 ### `source.record`
 
 - **Type:** host path or null
 - **Default:** null
 
-A local SWE-bench JSON record, for offline runs and fixtures. When it is set,
-Oracle Bench does not contact Hugging Face. The record must have:
+A local JSON record in the selected dataset's format, for offline runs and
+fixtures. When it is set, Oracle Bench does not contact Hugging Face. The record
+must have:
 
 - nonempty `instance_id`, `repo`, `base_commit`, `patch`, and `test_patch`
   strings;
 - an `instance_id` equal to `source.instance`;
 - a `base_commit` that is a full commit SHA;
 - a `FAIL_TO_PASS` that is a list of test IDs, or a JSON-encoded list.
+
+A SWE-rebench V2 record must also have `language: python` and a nonempty
+`image_name`.
 
 The resolved record, golden repair, and reference tests are saved privately in
 `instance.json`. The generation agent never sees them.

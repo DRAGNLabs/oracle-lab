@@ -42,6 +42,16 @@ def test_runtime_image_uses_source_specific_test_toolchain(config):
     assert arguments["PYTEST_VERSION"] == "6.2.5"
 
 
+def test_runtime_image_checks_the_source_paths(config):
+    config.runtime.workdir = "/project"
+    config.runtime.python = "/usr/local/bin/python"
+
+    arguments = runtime_arguments(config, Mock(id="sha256:source"), Mock(id="sha256:harnesses"))
+
+    assert arguments["PROJECT_WORKDIR"] == "/project"
+    assert arguments["PROJECT_PYTHON"] == "/usr/local/bin/python"
+
+
 def archive_bytes(entries):
     buffer = io.BytesIO()
     with tarfile.open(fileobj=buffer, mode="w") as archive:

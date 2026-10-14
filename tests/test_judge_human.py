@@ -4,7 +4,13 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from fixtures import context_of, detecting_result, instance_record, write_submission
+from fixtures import (
+    context_of,
+    detecting_result,
+    instance_record,
+    judgment_labels,
+    write_submission,
+)
 
 from oracle_lab.config import JudgeConfig, LimitsConfig, RuntimeConfig
 from oracle_lab.io import read_json, write_json
@@ -104,13 +110,7 @@ def install_client(monkeypatch, client):
 
 
 def valid_rating():
-    return {
-        "no_attempt_reason": None,
-        "tests_issue": "yes",
-        "attempt_detail": "correct_assertion",
-        "cheating": "no",
-        "rationale": "The generated test reaches and checks the reported behavior.",
-    }
+    return judgment_labels()
 
 
 def test_create_uses_blinded_networkless_container_and_saved_spec(tmp_path, monkeypatch):
@@ -216,12 +216,11 @@ def test_human_answer_is_preserved(tmp_path, monkeypatch, answer):
     client.containers.get.return_value = human_container(tmp_path)
     install_client(monkeypatch, client)
     monkeypatch.setattr("oracle_lab.judge.human.load_config", lambda *args, **kwargs: run_config())
-    draft = {
-        **valid_rating(),
-        "tests_issue": answer,
-        "attempt_detail": "correct_assertion" if answer == "yes" else None,
-        "no_attempt_reason": "nearby_behavior" if answer == "no" else None,
-    }
+    draft = judgment_labels(
+        tests_issue=answer,
+        attempt_detail="correct_assertion" if answer == "yes" else None,
+        no_attempt_reason="other_target_behavior" if answer == "no" else None,
+    )
     monkeypatch.setattr(
         "oracle_lab.judge.human.Sandbox.download",
         lambda self, source, destination, **kwargs: destination.write_text(json.dumps(draft)),

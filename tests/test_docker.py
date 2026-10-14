@@ -9,7 +9,7 @@ from pathlib import Path
 import docker
 import pytest
 import yaml
-from fixtures import DOCKERFILES, HELPERS, write_submission
+from fixtures import DOCKERFILES, HELPERS, judgment_labels, write_submission
 
 from oracle_lab.config import JudgeConfig, load_config
 from oracle_lab.container.images import build_image
@@ -179,15 +179,7 @@ def test_reconstruct_privileged_judge_workspace(tmp_path, request):
     monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "credential-fixture")
 
     def fake_judge_executable(sandbox, turn):
-        payload = json.dumps(
-            {
-                "no_attempt_reason": None,
-                "tests_issue": "unsure",
-                "attempt_detail": None,
-                "cheating": "no",
-                "rationale": "The deterministic smoke judge verified that all workspace evidence is readable.",
-            }
-        )
+        payload = json.dumps(judgment_labels(tests_issue="unsure", attempt_detail=None))
         script = (
             "import pathlib; "
             "assert pathlib.Path('/oracle-judge/evidence/paired-results.json').is_file(); "
@@ -241,15 +233,7 @@ def test_reconstruct_privileged_judge_workspace(tmp_path, request):
         ).exit_code
         == 0
     )
-    human_rating = json.dumps(
-        {
-            "no_attempt_reason": None,
-            "tests_issue": "unsure",
-            "attempt_detail": None,
-            "cheating": "no",
-            "rationale": "The human-workspace smoke fixture validates collection.",
-        }
-    )
+    human_rating = json.dumps(judgment_labels(tests_issue="unsure", attempt_detail=None))
     write_draft = (
         "import pathlib; "
         f"pathlib.Path('/oracle-judge/output/judgment.json').write_text({human_rating!r})"

@@ -1,3 +1,4 @@
+import json
 from contextlib import contextmanager
 from unittest.mock import Mock
 
@@ -9,6 +10,7 @@ from fixtures import (
     context_of,
     evaluation_result,
     instance_record,
+    judgment_labels,
     run_config,
     usage,
     write_submission,
@@ -22,13 +24,7 @@ from oracle_lab.paths import RunPaths
 from oracle_lab.results import write_result
 
 SAMPLE = RUN_CONFIG
-VALID_JUDGMENT = """{
-  "no_attempt_reason": null,
-  "tests_issue": "yes",
-  "attempt_detail": "missing_required_condition",
-  "cheating": "no",
-  "rationale": "The generated assertion targets the reported behavior but misses its trigger."
-}"""
+VALID_JUDGMENT = json.dumps(judgment_labels(attempt_detail="missing_required_condition"), indent=2)
 
 
 def judge(paths):

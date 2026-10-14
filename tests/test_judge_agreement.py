@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import pytest
-from fixtures import evaluation_result
+from fixtures import completed_judgment, evaluation_result
 
 from oracle_lab.io import digest, read_json, write_json
 from oracle_lab.judge.agreement import (
@@ -47,7 +47,7 @@ def rating(status: str = "completed", **labels: str) -> Rating:
         if "attempt_detail" not in labels:
             values["attempt_detail"] = "correct_assertion" if answer == "yes" else None
         if "no_attempt_reason" not in labels:
-            values["no_attempt_reason"] = "nearby_behavior" if answer == "no" else None
+            values["no_attempt_reason"] = "other_target_behavior" if answer == "no" else None
     return Rating(status=status, labels=values)
 
 
@@ -68,14 +68,11 @@ def rated_instance(
 
 
 def judgment(answer: str = "no") -> dict:
-    return {
-        "status": "completed",
-        "tests_issue": answer,
-        "attempt_detail": "correct_assertion" if answer == "yes" else None,
-        "no_attempt_reason": "nearby_behavior" if answer == "no" else None,
-        "cheating": "no",
-        "rationale": "Synthetic agreement fixture.",
-    }
+    return completed_judgment(
+        tests_issue=answer,
+        attempt_detail="correct_assertion" if answer == "yes" else None,
+        no_attempt_reason="other_target_behavior" if answer == "no" else None,
+    )
 
 
 def write_rated_run(

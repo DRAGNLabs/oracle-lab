@@ -156,8 +156,9 @@ to an older attempt.
 `classification.json` holds the instance and rubric hashes and the normalized
 result:
 
-- A completed in-scope result has every rubric facet.
-- An out-of-scope result has only the task nature and the rationale.
+- A completed in-scope result has every rubric question's label, and a
+  `justifications` object with one justification per question.
+- An out-of-scope result has only the task nature and its justification.
 - `invalid_output`, `failed`, and `timed_out` are explicit states.
 
 Beside it, for audit, are the raw final response, the frozen rubric, the harness
@@ -207,7 +208,8 @@ The human-readable summary, in this order:
   judge rows name the harness, version, model, provider, and limit.
 - Test outcomes: the paired matrix plus other outcomes, then failure causes per
   version.
-- Judgment: the labels and rationale, or the judge's non-completed state.
+- Judgment: the labels and each question's justification, or the judge's
+  non-completed state.
 - Task classification: the central classification for the problem.
 - Usage: wall time and input, cached input, and output tokens for generation
   and judge.
@@ -326,9 +328,10 @@ run is not. A cost failure never changes the run's state.
 ### `judge/judgment.json`
 
 The normalized judgment. A completed one has `status`, `tests_issue`,
-`attempt_detail`, `no_attempt_reason`, `cheating`, and `rationale`. A conditional
-field that does not apply is saved as JSON `null`, even when the response used
-the string `"null"`. The raw response is kept as well. The other states:
+`attempt_detail`, `no_attempt_reason`, `cheating`, and `justifications`. A
+conditional field that does not apply is saved as JSON `null`, even when the
+response used the string `"null"`. `justifications` maps each answered question
+to its justification; a question answered `null` has none. The raw response is kept as well. The other states:
 
 | Status | Meaning |
 |---|---|

@@ -4,7 +4,13 @@ from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
-from fixtures import context_of, instance_record, usage
+from fixtures import (
+    context_of,
+    in_scope_classification,
+    instance_record,
+    out_of_scope_classification,
+    usage,
+)
 
 from oracle_lab.classification.contracts import OutOfScopeClassification
 from oracle_lab.classification.run import (
@@ -76,18 +82,7 @@ def test_workspace_resets_base_checkout_and_exposes_only_declared_inputs(tmp_pat
     assert (tmp_path / "workspace-spec.json").is_file()
 
 
-VALID_CLASSIFICATION = json.dumps(
-    {
-        "task_nature": "behavioral_bug",
-        "defect_mechanisms": ["control_logic"],
-        "primary_assertion_target": "return_value_or_status",
-        "required_test_setup": "special_input",
-        "code_only_oracle_availability": "repository_pattern",
-        "required_test_scope": "component",
-        "benchmark_quality": "usable",
-        "rationale": "A sibling implementation establishes the expected result.",
-    }
-)
+VALID_CLASSIFICATION = json.dumps(in_scope_classification())
 
 
 def prepared_attempt(tmp_path):
@@ -142,7 +137,7 @@ def test_stage_saves_raw_response_normalized_result_and_provenance(tmp_path, mon
     assert saved["instance_id"] == instance.instance_id
     assert saved["base_commit"] == instance.base_commit
     assert saved["source_record_sha256"] == instance.source.record_sha256
-    assert saved["result"]["defect_mechanisms"] == ["control_logic"]
+    assert saved["result"]["defect_mechanisms"] == ["validation_checking"]
     assert read_json(attempt / "agent/result.json")["model"] == "classifier-model"
 
 
@@ -274,7 +269,7 @@ def test_classify_resolves_builds_and_records_attempt_lifecycle(tmp_path, monkey
 
     def stage(client, resolved, paths, image, resolved_instance):
         stages.append((image, resolved_instance.instance_id))
-        return OutOfScopeClassification(task_nature="out_of_scope", rationale="Feature request.")
+        return OutOfScopeClassification.model_validate(out_of_scope_classification())
 
     monkeypatch.setattr("oracle_lab.classification.run._classification_stage", stage)
     spent = []

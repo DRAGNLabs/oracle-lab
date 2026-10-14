@@ -56,7 +56,7 @@ def _summarize_judge(paths: RunPaths) -> dict:
     summary = {"status": status}
     if status == "completed":
         summary.update({key: judgment[key] for key in JUDGMENT_LABEL_KEYS})
-        summary["rationale"] = judgment["rationale"]
+        summary["justifications"] = judgment["justifications"]
     elif status in {"invalid_output", "invalid_artifact", "failed", "timed_out"}:
         summary["error"] = judgment.get("error")
     elif status == "stale":

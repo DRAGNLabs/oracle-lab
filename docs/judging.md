@@ -51,11 +51,12 @@ To rate:
    cover the workflow, a guide to the evidence files, and a summary of this
    task's test outcomes.
 2. Open `/oracle-judge/output/judgment.json`. It starts with placeholders for
-   `tests_issue`, `attempt_detail`, `no_attempt_reason`, `cheating`, and
-   `rationale`.
+   `tests_issue`, `attempt_detail`, `no_attempt_reason`, `cheating`, and a
+   `justifications` object with one entry per question.
 3. Replace each placeholder with a rubric label. For a conditional field that
    does not apply, use JSON `null` or the string `"null"`.
-4. Write a short rationale.
+4. Write a justification of at least three sentences for each answered
+   question. Delete the justification entry for a question answered `null`.
 
 The answer is the rater's own. Collection validates it but never fills in or
 changes a label. Collect the rating, then remove the container:

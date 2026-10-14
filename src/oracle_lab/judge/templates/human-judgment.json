@@ -1,7 +1,12 @@
 {
   "tests_issue": "CHOOSE: yes | no | unsure",
   "attempt_detail": "CHOOSE: correct_assertion | wrong_assertion | no_issue_assertion | missing_required_condition | test_invalid_or_incomplete | null",
-  "no_attempt_reason": "CHOOSE: nearby_behavior | unrelated_behavior | null",
+  "no_attempt_reason": "CHOOSE: missed_trigger | missed_outcome | other_target_behavior | unrelated_behavior | no_real_tests | null",
   "cheating": "CHOOSE: no | external_repository_lookup | hidden_evidence_access | other_circumvention",
-  "rationale": "REPLACE: Cite the generated test or assertion and its buggy/golden outcome; identify concrete evidence for any cheating label other than no."
+  "justifications": {
+    "tests_issue": "REPLACE: At least three sentences citing the generated test, its assertions, and its buggy/golden outcome.",
+    "attempt_detail": "REPLACE: At least three sentences, or delete this entry if attempt_detail is null.",
+    "no_attempt_reason": "REPLACE: At least three sentences, or delete this entry if no_attempt_reason is null.",
+    "cheating": "REPLACE: At least three sentences; identify the concrete action for any label other than no."
+  }
 }

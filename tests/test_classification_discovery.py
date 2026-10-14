@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from fixtures import instance_record
+from fixtures import instance_record, out_of_scope_classification
 
 from oracle_lab.classification.contracts import latest_classification
 from oracle_lab.io import write_json
@@ -21,12 +21,7 @@ def classification(result=None, **identity):
         "base_commit": "a" * 40,
         "source_record_sha256": "d" * 64,
         "rubric_sha256": "e" * 64,
-        "result": result
-        or {
-            "status": "completed",
-            "task_nature": "out_of_scope",
-            "rationale": "This is a feature request.",
-        },
+        "result": result or {"status": "completed", **out_of_scope_classification()},
     }
     value.update(identity)
     return value

@@ -9,8 +9,10 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import oracle_lab.container
+from oracle_lab.classification.contracts import CLASSIFICATION_LABELS
 from oracle_lab.config import RunConfig, RuntimeConfig, load_config
 from oracle_lab.io import digest, write_json
+from oracle_lab.judge.contracts import JUDGMENT_LABEL_KEYS
 from oracle_lab.paths import RunPaths
 from oracle_lab.results import MATRIX_CELLS, InstanceRecord, SubmissionManifest
 
@@ -108,18 +110,62 @@ def detecting_result(**changes) -> dict:
     return evaluation_result(matrix=matrix, **changes)
 
 
-def completed_judgment(**changes) -> dict:
-    """A valid normalized judgment."""
-    judgment = {
-        "status": "completed",
+def judgment_labels(**changes) -> dict:
+    """A judge's labels, with one justification per answered question.
+
+    Changing an answer changes which questions need a justification, so the
+    justifications follow the answers unless a test passes its own.
+    """
+    labels = {
         "no_attempt_reason": None,
         "tests_issue": "yes",
         "attempt_detail": "correct_assertion",
         "cheating": "no",
-        "rationale": "The generated test reaches and checks the reported behavior.",
     }
-    judgment.update(changes)
-    return judgment
+    labels.update(changes)
+    labels.setdefault(
+        "justifications",
+        {
+            key: f"The submission supports this {key} answer."
+            for key in JUDGMENT_LABEL_KEYS
+            if labels.get(key) not in (None, "null")
+        },
+    )
+    return labels
+
+
+def completed_judgment(**changes) -> dict:
+    """A valid normalized judgment."""
+    return {"status": "completed", **judgment_labels(**changes)}
+
+
+def in_scope_classification(**changes) -> dict:
+    """A classifier's answer for an in-scope task, before its status is added."""
+    classification = {
+        "task_nature": "behavioral_bug",
+        "defect_mechanisms": ["validation_checking"],
+        "primary_assertion_target": "exception_behavior",
+        "required_test_setup": "special_input",
+        "code_only_oracle_availability": "local_contract",
+        "required_test_scope": "unit",
+        "benchmark_quality": "usable",
+        "justifications": {
+            key: f"The task record and checkout support this {key} answer."
+            for key in CLASSIFICATION_LABELS
+        },
+    }
+    classification.update(changes)
+    return classification
+
+
+def out_of_scope_classification(**changes) -> dict:
+    """A classifier's answer for an out-of-scope task, before its status is added."""
+    classification = {
+        "task_nature": "out_of_scope",
+        "justifications": {"task_nature": "This task adds a new feature."},
+    }
+    classification.update(changes)
+    return classification
 
 
 def usage(**changes) -> dict:

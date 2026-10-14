@@ -17,11 +17,12 @@ from oracle_lab.io import read_json, write_json
 from oracle_lab.paths import RunPaths
 from oracle_lab.results import (
     ExposedArtifact,
+    Justification,
     MatrixCellName,
-    Rationale,
     StrictModel,
     UnsuccessfulTurn,
     parse_json_object,
+    require_justifications,
 )
 
 RATER_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
@@ -48,14 +49,23 @@ class JudgmentLabels(StrictModel):
         ]
         | None
     )
-    no_attempt_reason: Literal["nearby_behavior", "unrelated_behavior"] | None
+    no_attempt_reason: (
+        Literal[
+            "missed_trigger",
+            "missed_outcome",
+            "other_target_behavior",
+            "unrelated_behavior",
+            "no_real_tests",
+        ]
+        | None
+    )
     cheating: Literal[
         "no",
         "external_repository_lookup",
         "hidden_evidence_access",
         "other_circumvention",
     ]
-    rationale: Rationale
+    justifications: dict[str, Justification]
 
     @model_validator(mode="after")
     def conditional_fields_match_answer(self) -> JudgmentLabels:
@@ -71,6 +81,8 @@ class JudgmentLabels(StrictModel):
             self.attempt_detail is not None or self.no_attempt_reason is not None
         ):
             raise ValueError("An unsure answer requires null conditional fields")
+        answered = {key for key in JUDGMENT_LABEL_KEYS if getattr(self, key) is not None}
+        require_justifications(self.justifications, answered)
         return self
 
 
@@ -85,8 +97,8 @@ def complete_human_judgment(raw: str) -> CompletedJudgment:
     except json.JSONDecodeError as error:
         raise ValueError(f"Invalid judgment JSON: {error}") from error
 
-    if draft.rationale.startswith("REPLACE:"):
-        raise ValueError("Replace the rationale placeholder before collecting")
+    if any(text.startswith("REPLACE:") for text in draft.justifications.values()):
+        raise ValueError("Replace the justification placeholders before collecting")
     return draft
 
 

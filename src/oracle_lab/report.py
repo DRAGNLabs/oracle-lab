@@ -207,8 +207,7 @@ def _judge_lines(judgment: dict) -> list[str]:
             "|---|---|---|---|",
             "| " + " | ".join(judgment[key] or "—" for key in JUDGMENT_LABELS) + " |",
             "",
-            *_blockquote(judgment["rationale"]),
-            "",
+            *_justification_lines(judgment["justifications"]),
         ]
     elif status == "stale":
         lines += [f"Stale: {judgment['reason']}", ""]
@@ -262,7 +261,7 @@ def _classification_lines(classification: dict, attempt: Path | None) -> list[st
                 ],
                 "",
             ]
-        lines += [*_blockquote(classification["rationale"]), ""]
+        lines += _justification_lines(classification["justifications"])
     elif status == "missing":
         lines += ["Missing: no classification is saved for this problem.", ""]
     else:
@@ -392,3 +391,11 @@ def _link(paths: RunPaths, path: Path) -> str:
 
 def _blockquote(text: str) -> list[str]:
     return ["> " + line for line in text.splitlines()]
+
+
+def _justification_lines(justifications: dict[str, str]) -> list[str]:
+    """Each answered question's justification, under the question's field name."""
+    lines = []
+    for question, text in justifications.items():
+        lines += [f"`{question}`:", "", *_blockquote(text), ""]
+    return lines

@@ -59,8 +59,8 @@ SWE-rebench V2 (`source.kind` is `swerebench_v2`) adds:
 
 Inspect any of these fields to understand the task and assess benchmark quality.
 Treat `meta.llm_metadata` as another rater's opinion: reach your own labels
-from the evidence, and do not copy its labels. Facet E has a stricter evidence
-rule stated in that facet.
+from the evidence, and do not copy its labels. Question 5 has a stricter
+evidence rule stated in that question.
 
 ## Procedure
 
@@ -70,15 +70,17 @@ rule stated in that facet.
 2. You must inspect the buggy repository checkout, including the production
    code relevant to that behavior. Do not classify the task from the task
    record alone.
-3. When deciding Facet E, base the label only on evidence you found in the buggy
-   checkout without tests. Do not use the task record or existing tests for
-   that facet.
-4. Classify the task using the facets below.
+3. When answering Question 5, base the label only on evidence you found in the
+   buggy checkout without tests. Do not use the task record or existing tests
+   for that question.
+4. Answer the questions below.
 5. Return the JSON object in the required format. Use the exact label strings.
 
-## Facet A: In-scope task
+## Question 1: `task_nature`
 
-Choose one label that classifies the kind of task this issue is.
+What kind of task is this?
+
+Choose one label.
 
 - `behavioral_bug`: existing behavior violates its intended contract.
 - `performance_problem`: existing behavior violates a time, memory, or other
@@ -87,13 +89,15 @@ Choose one label that classifies the kind of task this issue is.
   documentation-only change, or compatibility request without a faulty existing
   behavior.
 
-If the label is `out_of_scope`, stop here and return only `task_nature` and a
-short `rationale`.
+If the label is `out_of_scope`, stop here and return only `task_nature` and its
+justification.
 
-## Facet B: Defect mechanism
+## Question 2: `defect_mechanisms`
 
-Choose every label that directly describes what is wrong in the buggy code. You may use the provided issue to answer.
-Do not add labels merely because they are downstream effects.
+What is wrong in the buggy code?
+
+Choose every label that directly describes the defect. You may use the provided
+issue to answer. Do not add labels merely because they are downstream effects.
 
 - `control_logic`: wrong branch, condition, ordering, or loop.
 - `computation_algorithm`: wrong calculation, transformation, or algorithm.
@@ -117,11 +121,13 @@ Do not add labels merely because they are downstream effects.
   wrong.
 - `other`: none of the above fits.
 
-## Facet C: Primary assertion target
+## Question 3: `primary_assertion_target`
 
-What does a minimal valid fail-to-pass test directly inspect to prove that buggy and repaired behavior differ?
+What does a minimal valid fail-to-pass test directly inspect to prove that
+buggy and repaired behavior differ?
 
-Choose one label that describes the primary assertion target. Classify the direct subject of the assertion, not a downstream consequence.
+Choose one label. Classify the direct subject of the assertion, not a
+downstream consequence.
 
 - `return_value_or_status`: a returned value, response, result object, or
   status is wrong.
@@ -142,11 +148,11 @@ For example, an incorrect HTTP request might eventually return the wrong value.
 Use `external_interaction` if the test asserts the request, and
 `return_value_or_status` if it asserts only the returned value.
 
-## Facet D: Required test setup
+## Question 4: `required_test_setup`
 
 What special setup is needed before the test can exercise the bug?
 
-Choose one label that describes the setup requires to replicate the issue.
+Choose one label.
 
 - `none`: a direct call or normal use of the feature is enough.
 - `special_input`: a particular value, boundary case, invalid value, or unusual
@@ -162,15 +168,15 @@ If several labels fit, choose the most distinctive prerequisite: the condition
 without which the test cannot reach the bug. For a duplicate-email test that
 needs both an existing user and a duplicate value, choose `existing_state`.
 
-## Facet E: Code-only oracle availability
+## Question 5: `code_only_oracle_availability`
 
-From the buggy checkout and generation prompt alone, where can the test author learn what to assert?
+From the buggy checkout and generation prompt alone, where can the test author
+learn what to assert?
 
-Choose one label that describes where the test oracle can be ascertained.
-
-NOTE: Do not use anything from the task record, such as the issue, repair,
-reference test, pull request text, or `interface`, as evidence. Do not use
-existing tests either. Only consider the buggy repository state without tests.
+Choose one label. Do not use anything from the task record, such as the issue,
+repair, reference test, pull request text, or `interface`, as evidence. Do not
+use existing tests either. Only consider the buggy repository state without
+tests.
 
 - `local_contract`: a signature, type, docstring, error message, or nearby
   production code states the expected behavior.
@@ -191,10 +197,11 @@ Choose the strongest source available. A task can be easy to trigger but still
 be `unavailable_or_ambiguous` if the buggy checkout does not reveal what the
 test should assert.
 
-## Facet F: Required test scope
+## Question 6: `required_test_scope`
 
-What is the broadest scope a valid test must exercise? Choose one label.
-You may refer to the provided golden test.
+What is the broadest scope a valid test must exercise?
+
+Choose one label. You may refer to the provided reference test.
 
 - `unit`: one function or object can be tested in isolation.
 - `component`: related behavior within one component is required.
@@ -206,10 +213,12 @@ You may refer to the provided golden test.
 - `performance_or_concurrency`: the test must measure resource use or exercise
   concurrent behavior.
 
-## Facet G: Benchmark-quality screen
+## Question 7: `benchmark_quality`
 
-Choose one label that describes the quality of the provided task. Use any
-available information, including your previous answers.
+Is this task sound enough to use?
+
+Choose one label. Use any available information, including your previous
+answers.
 
 - `usable`: the issue, repair, and reference tests describe one coherent task,
   and its execution is reliable.
@@ -226,13 +235,18 @@ available information, including your previous answers.
   its discussion. Nothing in the buggy code suggests it, so a test writer
   without the issue cannot know what to assert.
 
-In the rationale, name the specific field, code path, or execution result that
-supports a label other than `usable`.
-
 ## Required output
 
-For an in-scope task, return JSON in this form. Keep `rationale` to one or two
-sentences and cite the concrete evidence that drove the difficult judgment.
+Return exactly one JSON object with these exact fields and label strings. Do
+not wrap it in a Markdown fence and do not include any other text.
+
+`justifications` holds one justification for each question, keyed by the
+question's field name. Each justification is at least three sentences and cites
+the concrete evidence for that answer: a field of the task record, a code path,
+or an execution result. For a `benchmark_quality` label other than `usable`,
+name the specific evidence that supports it.
+
+For an in-scope task, return:
 
 ```json
 {
@@ -243,7 +257,15 @@ sentences and cite the concrete evidence that drove the difficult judgment.
   "code_only_oracle_availability": "local_contract",
   "required_test_scope": "unit",
   "benchmark_quality": "usable",
-  "rationale": "..."
+  "justifications": {
+    "task_nature": "...",
+    "defect_mechanisms": "...",
+    "primary_assertion_target": "...",
+    "required_test_setup": "...",
+    "code_only_oracle_availability": "...",
+    "required_test_scope": "...",
+    "benchmark_quality": "..."
+  }
 }
 ```
 
@@ -252,6 +274,8 @@ For an out-of-scope task, return:
 ```json
 {
   "task_nature": "out_of_scope",
-  "rationale": "..."
+  "justifications": {
+    "task_nature": "..."
+  }
 }
 ```

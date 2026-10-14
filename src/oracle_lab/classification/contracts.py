@@ -6,16 +6,17 @@ import json
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import Field, ValidationError, field_validator
+from pydantic import Field, ValidationError, field_validator, model_validator
 
 from oracle_lab.io import read_json
 from oracle_lab.results import (
     ExposedArtifact,
     InstanceRecord,
-    Rationale,
+    Justification,
     StrictModel,
     UnsuccessfulTurn,
     parse_json_object,
+    require_justifications,
 )
 
 CLASSIFICATION_LABELS = {
@@ -96,7 +97,7 @@ class InScopeClassification(StrictModel):
         "solution_or_oracle_leakage",
         "unfair_without_issue",
     ]
-    rationale: Rationale
+    justifications: dict[str, Justification]
 
     @field_validator("defect_mechanisms")
     @classmethod
@@ -105,11 +106,21 @@ class InScopeClassification(StrictModel):
             raise ValueError("defect_mechanisms must not contain duplicates")
         return value
 
+    @model_validator(mode="after")
+    def justify_every_answer(self) -> InScopeClassification:
+        require_justifications(self.justifications, set(CLASSIFICATION_LABELS))
+        return self
+
 
 class OutOfScopeClassification(StrictModel):
     status: Literal["completed"] = "completed"
     task_nature: Literal["out_of_scope"]
-    rationale: Rationale
+    justifications: dict[str, Justification]
+
+    @model_validator(mode="after")
+    def justify_the_one_answer(self) -> OutOfScopeClassification:
+        require_justifications(self.justifications, {"task_nature"})
+        return self
 
 
 ClassificationResult = InScopeClassification | OutOfScopeClassification | UnsuccessfulTurn

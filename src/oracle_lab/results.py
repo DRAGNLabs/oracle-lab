@@ -287,16 +287,27 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
 
-MAX_RATIONALE_LENGTH = 1_000
+MAX_JUSTIFICATION_LENGTH = 2_000
 
 
 def _require_text(value: str) -> str:
     if not value.strip():
-        raise ValueError("rationale must not be blank")
+        raise ValueError("justification must not be blank")
     return value
 
 
-Rationale = Annotated[str, Field(max_length=MAX_RATIONALE_LENGTH), AfterValidator(_require_text)]
+Justification = Annotated[
+    str, Field(max_length=MAX_JUSTIFICATION_LENGTH), AfterValidator(_require_text)
+]
+
+
+def require_justifications(justifications: dict[str, str], answered: set[str]) -> None:
+    """Each answered question has one justification, and nothing else does."""
+    if set(justifications) != answered:
+        raise ValueError(
+            f"justifications must cover exactly the answered questions {sorted(answered)}, "
+            f"not {sorted(justifications)}"
+        )
 
 
 class UnsuccessfulTurn(StrictModel):

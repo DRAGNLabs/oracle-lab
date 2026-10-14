@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from fixtures import evaluation_result, judge_attempt
+from fixtures import completed_judgment, evaluation_result, judge_attempt
 
 from oracle_lab.batch import load_batch_config, run_batch
 from oracle_lab.batch.summary import _aggregate_judgments
@@ -72,21 +72,18 @@ def fake_judgment(
     *,
     status: str = "completed",
     detail: str = "correct_assertion",
-    reason: str = "nearby_behavior",
+    reason: str = "other_target_behavior",
     answer: str = "yes",
 ) -> None:
     paths = RunPaths.open(run_dir)
     paths.judge.root.mkdir(parents=True, exist_ok=True)
     paths.judge.rubric.write_text("rubric")
     if status == "completed":
-        judgment = {
-            "status": status,
-            "tests_issue": answer,
-            "attempt_detail": detail if answer == "yes" else None,
-            "no_attempt_reason": reason if answer == "no" else None,
-            "cheating": "no",
-            "rationale": "Synthetic batch fixture.",
-        }
+        judgment = completed_judgment(
+            tests_issue=answer,
+            attempt_detail=detail if answer == "yes" else None,
+            no_attempt_reason=reason if answer == "no" else None,
+        )
     elif status == "stale":
         judgment = {
             "status": "stale",
@@ -296,7 +293,14 @@ def test_failed_judgment_does_not_make_completed_batch_job_resumable(tmp_path):
 
 def test_every_judge_label_is_counted_independently():
     labels = {
-        "no_attempt_reason": ["nearby_behavior", "unrelated_behavior", None],
+        "no_attempt_reason": [
+            "missed_trigger",
+            "missed_outcome",
+            "other_target_behavior",
+            "unrelated_behavior",
+            "no_real_tests",
+            None,
+        ],
         "tests_issue": ["yes", "no", "unsure"],
         "attempt_detail": [
             "correct_assertion",

@@ -8,10 +8,8 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
 
 from oracle_bench.config import RuntimeConfig, SourceConfig
 from oracle_bench.io import digest
@@ -100,23 +98,28 @@ def resolve(config: SourceConfig) -> tuple[InstanceRecord, RuntimeConfig]:
 
 
 def load_record(config: SourceConfig) -> dict:
-    """Read the configured record from a local file, or else from the dataset."""
+    """Read the configured local record, or else the matching row of the dataset.
+
+    Reads the split's one data file at the pinned revision. Hugging Face caches
+    the download, so only the first run fetches it.
+    """
     if config.record:
         return json.loads(Path(config.record).read_text())
     try:
-        from datasets import load_dataset
+        import pyarrow.parquet as pq
+        from huggingface_hub import hf_hub_download
     except ImportError as exc:
-        raise RuntimeError("Install oracle-bench[dataset] or set dataset.record") from exc
-    # `load_dataset` can return several shapes, but asking for one named split
-    # always gives rows we can loop over. The cast just tells the type checker.
-    rows = cast(
-        Iterable[dict],
-        load_dataset(config.dataset_name, split=config.split, revision=config.revision),
+        raise RuntimeError("Install oracle-bench[dataset] or set source.record") from exc
+    path = hf_hub_download(
+        config.dataset_name,
+        f"data/{config.split}-00000-of-00001.parquet",
+        repo_type="dataset",
+        revision=config.revision,
     )
-    matches = [row for row in rows if row["instance_id"] == config.instance]
-    if len(matches) != 1:
-        raise ValueError(f"Expected one record for {config.instance}, found {len(matches)}")
-    return matches[0]
+    rows = pq.read_table(path, filters=[("instance_id", "==", config.instance)]).to_pylist()
+    if len(rows) != 1:
+        raise ValueError(f"Expected one record for {config.instance}, found {len(rows)}")
+    return rows[0]
 
 
 def instance_from(record: dict, config: SourceConfig, upstream_revision: str) -> InstanceRecord:

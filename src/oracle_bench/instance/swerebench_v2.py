@@ -9,15 +9,9 @@ source and tests. Only the repos listed there work.
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 from oracle_bench.config import RuntimeConfig, SourceConfig
-from oracle_bench.instance.swebench import RepositoryLayout, instance_from
+from oracle_bench.instance.swebench import RepositoryLayout, instance_from, load_record
 from oracle_bench.results import InstanceRecord
-
-# The dataset's only data file at the pinned revision. It holds the one split.
-DATA_FILE = "data/train-00000-of-00001.parquet"
 
 REPOSITORY_LAYOUTS = {
     "wtforms/wtforms": RepositoryLayout("src/wtforms", "wtforms", ("tests",)),
@@ -35,27 +29,6 @@ def resolve(config: SourceConfig) -> tuple[InstanceRecord, RuntimeConfig]:
     if truncated:
         raise ValueError(f"SWE-rebench V2 record has truncated test IDs: {truncated}")
     return instance, runtime_for(record)
-
-
-def load_record(config: SourceConfig) -> dict:
-    """Read the configured local record, or else the matching row of the dataset file.
-
-    Hugging Face caches the downloaded file, so only the first run downloads it.
-    """
-    if config.record:
-        return json.loads(Path(config.record).read_text())
-    try:
-        import pyarrow.parquet as pq
-        from huggingface_hub import hf_hub_download
-    except ImportError as exc:
-        raise RuntimeError("Install oracle-bench[dataset] or set source.record") from exc
-    path = hf_hub_download(
-        config.dataset_name, DATA_FILE, repo_type="dataset", revision=config.revision
-    )
-    rows = pq.read_table(path, filters=[("instance_id", "==", config.instance)]).to_pylist()
-    if len(rows) != 1:
-        raise ValueError(f"Expected one record for {config.instance}, found {len(rows)}")
-    return rows[0]
 
 
 def runtime_for(record: dict) -> RuntimeConfig:

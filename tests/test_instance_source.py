@@ -128,3 +128,45 @@ def test_a_base_commit_that_is_not_a_full_sha_is_rejected(tmp_path, commit):
 def test_fail_to_pass_that_is_not_a_list_of_ids_is_rejected(tmp_path, value):
     with pytest.raises(ValueError, match="FAIL_TO_PASS must be a list"):
         resolve_record(tmp_path, FAIL_TO_PASS=value)
+
+
+def test_swebench_record_is_read_from_the_pinned_split_file(tmp_path, monkeypatch):
+    pa = pytest.importorskip("pyarrow")
+    pq = pytest.importorskip("pyarrow.parquet")
+    huggingface_hub = pytest.importorskip("huggingface_hub")
+    from oracle_bench.instance.swebench import load_record
+
+    rows = [
+        {"instance_id": "psf__requests-2148", "repo": "psf/requests"},
+        {"instance_id": "psf__requests-1142", "repo": "psf/requests"},
+    ]
+    data = tmp_path / "test.parquet"
+    pq.write_table(pa.Table.from_pylist(rows), data)
+    downloads = []
+
+    def download(repo, filename, *, repo_type, revision):
+        downloads.append((repo, filename, repo_type, revision))
+        return str(data)
+
+    monkeypatch.setattr(huggingface_hub, "hf_hub_download", download)
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "source": {"instance": "psf__requests-1142"},
+                "agent": {"model": "test-model"},
+                "task": {"prompt": str(Path(__file__).parents[1] / "prompts/agent/unit-tests.md")},
+            }
+        )
+    )
+    source = load_config(config_path).source
+
+    assert load_record(source) == rows[1]
+    assert downloads == [
+        (
+            "princeton-nlp/SWE-bench_Verified",
+            "data/test-00000-of-00001.parquet",
+            "dataset",
+            source.revision,
+        )
+    ]

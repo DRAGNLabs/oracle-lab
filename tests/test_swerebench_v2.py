@@ -98,5 +98,5 @@ def test_v2_record_is_read_from_the_pinned_dataset_file(tmp_path, monkeypatch):
 
     assert swerebench_v2.load_record(source) == RECORD
     assert downloads == [
-        ("nebius/SWE-rebench-V2", swerebench_v2.DATA_FILE, "dataset", source.revision)
+        ("nebius/SWE-rebench-V2", "data/train-00000-of-00001.parquet", "dataset", source.revision)
     ]

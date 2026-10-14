@@ -8,17 +8,17 @@ import json
 from contextlib import contextmanager
 from pathlib import Path
 
-import oracle_bench.container
-from oracle_bench.config import RunConfig, RuntimeConfig, load_config
-from oracle_bench.io import digest, write_json
-from oracle_bench.paths import RunPaths
-from oracle_bench.results import MATRIX_CELLS, InstanceRecord, SubmissionManifest
+import oracle_lab.container
+from oracle_lab.config import RunConfig, RuntimeConfig, load_config
+from oracle_lab.io import digest, write_json
+from oracle_lab.paths import RunPaths
+from oracle_lab.results import MATRIX_CELLS, InstanceRecord, SubmissionManifest
 
 # The run config tests start from, independent of the sample configs.
 RUN_CONFIG = Path(__file__).parent / "run-config.yaml"
 
 # Checked-in build inputs, for tests that run a helper or build an image.
-CONTAINER = Path(oracle_bench.container.__file__).parent
+CONTAINER = Path(oracle_lab.container.__file__).parent
 HELPERS = CONTAINER / "helpers"
 DOCKERFILES = CONTAINER / "docker"
 

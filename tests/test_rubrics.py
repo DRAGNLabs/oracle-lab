@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from oracle_bench.classification.contracts import (
+from oracle_lab.classification.contracts import (
     InScopeClassification,
     OutOfScopeClassification,
     parse_classification,
 )
-from oracle_bench.judge.contracts import JudgmentLabels, parse_judgment
+from oracle_lab.judge.contracts import JudgmentLabels, parse_judgment
 
 RUBRICS = Path(__file__).parents[1] / "prompts/judge"
 JUDGE_RUBRIC = RUBRICS / "generated-test-evaluation-rubric.md"

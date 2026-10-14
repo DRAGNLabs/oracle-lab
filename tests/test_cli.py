@@ -3,7 +3,7 @@ import os
 import pytest
 from fixtures import RUN_CONFIG
 
-from oracle_bench import cli
+from oracle_lab import cli
 
 SAMPLE = RUN_CONFIG
 

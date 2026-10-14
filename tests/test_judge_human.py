@@ -6,10 +6,10 @@ from unittest.mock import Mock
 import pytest
 from fixtures import context_of, detecting_result, instance_record, write_submission
 
-from oracle_bench.config import JudgeConfig, LimitsConfig, RuntimeConfig
-from oracle_bench.io import read_json, write_json
-from oracle_bench.judge.contracts import WorkspaceSpec
-from oracle_bench.judge.human import (
+from oracle_lab.config import JudgeConfig, LimitsConfig, RuntimeConfig
+from oracle_lab.io import read_json, write_json
+from oracle_lab.judge.contracts import WorkspaceSpec
+from oracle_lab.judge.human import (
     HUMAN_JUDGMENT_TEMPLATE,
     RATER_LABEL,
     RUN_DIRECTORY_LABEL,
@@ -18,8 +18,8 @@ from oracle_bench.judge.human import (
     create_human_workspace,
     remove_human_workspace,
 )
-from oracle_bench.paths import RunPaths
-from oracle_bench.results import write_result
+from oracle_lab.paths import RunPaths
+from oracle_lab.results import write_result
 
 
 def runtime_config():
@@ -88,7 +88,7 @@ def human_container(run_dir: Path, rater: str = "rater_1"):
     container.attrs = {
         "Config": {
             "Labels": {
-                "oracle-bench.profile": "human-judge",
+                "oracle-lab.profile": "human-judge",
                 RUN_DIRECTORY_LABEL: str(run_dir),
                 RATER_LABEL: rater,
             }
@@ -100,7 +100,7 @@ def human_container(run_dir: Path, rater: str = "rater_1"):
 def install_client(monkeypatch, client):
     client_context = context_of(client)
 
-    monkeypatch.setattr("oracle_bench.judge.human.docker_client", client_context)
+    monkeypatch.setattr("oracle_lab.judge.human.docker_client", client_context)
     return client
 
 
@@ -121,12 +121,12 @@ def test_create_uses_blinded_networkless_container_and_saved_spec(tmp_path, monk
     client.containers.create.return_value = container
     install_client(monkeypatch, client)
     monkeypatch.setattr(
-        "oracle_bench.judge.human.build_judge_workspace",
+        "oracle_lab.judge.human.build_judge_workspace",
         lambda *args, **kwargs: workspace_spec(),
     )
     workspace_file = tmp_path / "judge/human-workspaces/example.code-workspace"
     monkeypatch.setattr(
-        "oracle_bench.judge.human._prepare_human_files",
+        "oracle_lab.judge.human._prepare_human_files",
         lambda *args, **kwargs: workspace_file,
     )
 
@@ -136,7 +136,7 @@ def test_create_uses_blinded_networkless_container_and_saved_spec(tmp_path, monk
     assert options["network_mode"] == "none"
     assert options["user"] == "10001:10001"
     assert options.get("environment") is None
-    assert options["labels"]["oracle-bench.profile"] == "human-judge"
+    assert options["labels"]["oracle-lab.profile"] == "human-judge"
     assert options["labels"][RATER_LABEL] == "rater_1"
     assert "rater_1" in output
     container.start.assert_called_once_with()
@@ -176,7 +176,7 @@ def test_mismatched_reconstruction_is_removed(tmp_path, monkeypatch):
     install_client(monkeypatch, client)
     different = workspace_spec().model_copy(update={"rubric_sha256": "e" * 64})
     monkeypatch.setattr(
-        "oracle_bench.judge.human.build_judge_workspace", lambda *args, **kwargs: different
+        "oracle_lab.judge.human.build_judge_workspace", lambda *args, **kwargs: different
     )
 
     with pytest.raises(ValueError, match="does not match"):
@@ -191,14 +191,12 @@ def test_collect_validates_and_preserves_normalized_and_raw_rating(tmp_path, mon
     client = Mock()
     client.containers.get.return_value = container
     install_client(monkeypatch, client)
-    monkeypatch.setattr(
-        "oracle_bench.judge.human.load_config", lambda *args, **kwargs: run_config()
-    )
+    monkeypatch.setattr("oracle_lab.judge.human.load_config", lambda *args, **kwargs: run_config())
 
     def download(self, source, destination, **kwargs):
         destination.write_text(json.dumps(valid_rating()))
 
-    monkeypatch.setattr("oracle_bench.judge.human.Sandbox.download", download)
+    monkeypatch.setattr("oracle_lab.judge.human.Sandbox.download", download)
 
     saved = collect_human_judgment("workspace")
 
@@ -218,9 +216,7 @@ def test_human_answer_is_preserved(tmp_path, monkeypatch, answer):
     client = Mock()
     client.containers.get.return_value = human_container(tmp_path)
     install_client(monkeypatch, client)
-    monkeypatch.setattr(
-        "oracle_bench.judge.human.load_config", lambda *args, **kwargs: run_config()
-    )
+    monkeypatch.setattr("oracle_lab.judge.human.load_config", lambda *args, **kwargs: run_config())
     draft = {
         **valid_rating(),
         "tests_issue": answer,
@@ -228,7 +224,7 @@ def test_human_answer_is_preserved(tmp_path, monkeypatch, answer):
         "no_attempt_reason": "nearby_behavior" if answer == "no" else None,
     }
     monkeypatch.setattr(
-        "oracle_bench.judge.human.Sandbox.download",
+        "oracle_lab.judge.human.Sandbox.download",
         lambda self, source, destination, **kwargs: destination.write_text(json.dumps(draft)),
     )
 
@@ -244,14 +240,12 @@ def test_invalid_draft_remains_in_running_container(tmp_path, monkeypatch):
     client = Mock()
     client.containers.get.return_value = container
     install_client(monkeypatch, client)
-    monkeypatch.setattr(
-        "oracle_bench.judge.human.load_config", lambda *args, **kwargs: run_config()
-    )
+    monkeypatch.setattr("oracle_lab.judge.human.load_config", lambda *args, **kwargs: run_config())
 
     def download(self, source, destination, **kwargs):
         destination.write_text('{"tests_issue": "maybe"}')
 
-    monkeypatch.setattr("oracle_bench.judge.human.Sandbox.download", download)
+    monkeypatch.setattr("oracle_lab.judge.human.Sandbox.download", download)
 
     with pytest.raises(ValueError, match="Human judgment is invalid"):
         collect_human_judgment("workspace")
@@ -266,14 +260,12 @@ def test_collection_requires_explicit_archive_before_replacement(tmp_path, monke
     client = Mock()
     client.containers.get.return_value = container
     install_client(monkeypatch, client)
-    monkeypatch.setattr(
-        "oracle_bench.judge.human.load_config", lambda *args, **kwargs: run_config()
-    )
+    monkeypatch.setattr("oracle_lab.judge.human.load_config", lambda *args, **kwargs: run_config())
 
     def download(self, source, destination, **kwargs):
         destination.write_text(json.dumps(valid_rating()))
 
-    monkeypatch.setattr("oracle_bench.judge.human.Sandbox.download", download)
+    monkeypatch.setattr("oracle_lab.judge.human.Sandbox.download", download)
     collect_human_judgment("workspace")
 
     with pytest.raises(FileExistsError, match="--archive-existing"):
@@ -287,7 +279,7 @@ def test_collection_requires_explicit_archive_before_replacement(tmp_path, monke
 def test_remove_refuses_unrelated_container(monkeypatch):
     client = Mock()
     unrelated = Mock()
-    unrelated.attrs = {"Config": {"Labels": {"oracle-bench.profile": "generation"}}}
+    unrelated.attrs = {"Config": {"Labels": {"oracle-lab.profile": "generation"}}}
     client.containers.get.return_value = unrelated
     install_client(monkeypatch, client)
 

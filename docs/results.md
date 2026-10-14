@@ -1,6 +1,6 @@
 # Results and artifacts reference
 
-Every `oracle-bench run` creates a timestamped run directory under the configured
+Every `oracle-lab run` creates a timestamped run directory under the configured
 `output` path. It is the complete record of one agent attempt: its inputs, the
 resolved dataset instance, the runtime, the agent's activity, the captured
 submission, the reference check, the paired evaluations, and the report.
@@ -89,7 +89,7 @@ are not retried; they end with their normal status.
 
 ## Preflight directories
 
-`oracle-bench preflight` checks an instance without calling a model. Each config
+`oracle-lab preflight` checks an instance without calling a model. Each config
 gets a timestamped directory under `<output>/preflight/`, apart from real runs.
 It runs resolve, build, localize (localized configs only), and the reference
 check, the same way a run does, then an environment check:
@@ -103,7 +103,7 @@ check, the same way a run does, then an environment check:
 ├── ground-truth/
 └── environment-check/
     ├── results.json
-    ├── files/<generated directory>/test_oracle_bench_preflight.py
+    ├── files/<generated directory>/test_oracle_lab_preflight.py
     ├── buggy/<execution artifacts>
     └── golden/<execution artifacts>
 ```
@@ -186,7 +186,7 @@ The judge's disposable container receives:
 - the issue and the patches;
 - the saved evaluation evidence.
 
-Oracle Bench verifies the submission bundle before the transfer. It checks every
+Oracle Lab verifies the submission bundle before the transfer. It checks every
 generated file again inside both views. The repository views are not copied back
 to the host. The saved run files and the workspace specification are enough to
 rebuild them.
@@ -215,7 +215,7 @@ The human-readable summary, in this order:
   private ground truth, which is written on the host and never reaches the
   generation container.
 
-`oracle-bench report runs/<run-id>` rebuilds this file from saved data. It runs
+`oracle-lab report runs/<run-id>` rebuilds this file from saved data. It runs
 no tests and calls no model.
 
 The judge shows as `disabled` when the run has no frozen rubric, and as `missing`
@@ -438,7 +438,7 @@ the agent's messages, tool calls and their results, errors, standard error, and
 the harness result. It is the best file for reviewing what the agent did.
 
 It cannot show reasoning the provider hid. The CLI may already have truncated
-tool output. It is written once, after generation. `oracle-bench report` never
+tool output. It is written once, after generation. `oracle-lab report` never
 rebuilds it.
 
 ### `generation/trace.jsonl`
@@ -625,7 +625,7 @@ repair, private test, and environment work before any money is spent on a model.
 Running:
 
 ```sh
-uv run oracle-bench evaluate runs/<run-id>
+uv run oracle-lab evaluate runs/<run-id>
 ```
 
 does three things:
@@ -641,7 +641,7 @@ unchanged. Every earlier evaluation stays available for comparison.
 Reevaluation marks an existing `judge/judgment.json` as `stale`, because the
 evidence it rated has been replaced. Human judgments become stale for the same
 reason. Each stale record keeps the previous judgment inside it. Reevaluation
-never calls the judge model. Run `oracle-bench judge` to get a new LLM judgment.
+never calls the judge model. Run `oracle-lab judge` to get a new LLM judgment.
 
 ## Empty, optional, and absent files
 
@@ -660,7 +660,7 @@ the nearest stage log.
 
 ## Batch artifacts
 
-`oracle-bench batch` writes a batch directory with the original manifest, the
+`oracle-lab batch` writes a batch directory with the original manifest, the
 resolved job list with its checksums, the batch status, `summary.json`, and
 `report.md`.
 
@@ -708,7 +708,7 @@ The full cross-tabulations are only in `summary.json`.
 
 ## Agreement artifacts
 
-`oracle-bench agreement` writes `agreement/report.md`, `agreement/summary.json`,
+`oracle-lab agreement` writes `agreement/report.md`, `agreement/summary.json`,
 and `agreement/calibration-sample.json` inside the batch directory.
 
 Agreement is reported separately for each label (`tests_issue`,

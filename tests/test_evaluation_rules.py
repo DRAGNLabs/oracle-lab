@@ -12,19 +12,19 @@ from unittest.mock import Mock
 import pytest
 from fixtures import RUN_CONFIG, instance_record, write_submission
 
-import oracle_bench.evaluation as evaluation
-from oracle_bench.config import RuntimeConfig, load_config
-from oracle_bench.container.sandbox import CommandResult
-from oracle_bench.io import read_json, write_json
-from oracle_bench.paths import RunPaths
-from oracle_bench.preflight import check_environment
-from oracle_bench.results import read_paired_result
+import oracle_lab.evaluation as evaluation
+from oracle_lab.config import RuntimeConfig, load_config
+from oracle_lab.container.sandbox import CommandResult
+from oracle_lab.io import read_json, write_json
+from oracle_lab.paths import RunPaths
+from oracle_lab.preflight import check_environment
+from oracle_lab.results import read_paired_result
 
 RUNNER = "/pytest_runner.py"
 
 
 class RecordingSandbox:
-    helpers = "/opt/oracle-bench/container-helpers"
+    helpers = "/opt/oracle-lab/container-helpers"
 
     def __init__(self, outcomes: dict[str, str]):
         self.events = []
@@ -204,7 +204,7 @@ def test_a_reference_pair_that_does_not_distinguish_the_versions_stops_the_run(s
     assert not saved.has_fail_on_buggy_pass_on_golden
 
 
-PREFLIGHT_TEST = "oracle_tests/test_oracle_bench_preflight.py::test_generated_tests_can_run"
+PREFLIGHT_TEST = "oracle_tests/test_oracle_lab_preflight.py::test_generated_tests_can_run"
 
 
 def test_the_environment_check_runs_its_test_like_a_submission_on_both_versions(setup):
@@ -220,7 +220,7 @@ def test_the_environment_check_runs_its_test_like_a_submission_on_both_versions(
     ]
     for _, _, sandbox in sandboxes:
         assert ("upload", "files", "/testbed") in sandbox.events
-    assert (paths.environment / "files/oracle_tests/test_oracle_bench_preflight.py").is_file()
+    assert (paths.environment / "files/oracle_tests/test_oracle_lab_preflight.py").is_file()
     saved = read_paired_result(paths.environment / "results.json")
     assert saved.matrix["pass_on_both"].test_ids == [PREFLIGHT_TEST]
 

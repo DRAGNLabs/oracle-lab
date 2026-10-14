@@ -10,7 +10,7 @@ A run with a `judge` section is judged automatically after paired evaluation.
 To judge a saved run for the first time, or again:
 
 ```sh
-uv run oracle-bench judge runs/<run-id>
+uv run oracle-lab judge runs/<run-id>
 ```
 
 The command needs the configured judge credential and the saved runtime image.
@@ -28,7 +28,7 @@ Create a blinded human workspace from the same saved `workspace-spec.json` used
 for model judging:
 
 ```sh
-uv run oracle-bench judge-workspace create runs/<run-id> --rater rater_01
+uv run oracle-lab judge-workspace create runs/<run-id> --rater rater_01
 ```
 
 The command rebuilds the judge bundle. It stops if the rebuilt specification
@@ -61,8 +61,8 @@ The answer is the rater's own. Collection validates it but never fills in or
 changes a label. Collect the rating, then remove the container:
 
 ```sh
-uv run oracle-bench judge-workspace collect <container-name>
-uv run oracle-bench judge-workspace remove <container-name>
+uv run oracle-lab judge-workspace collect <container-name>
+uv run oracle-lab judge-workspace remove <container-name>
 ```
 
 If the JSON or a label is invalid, collection rejects it and leaves the workspace
@@ -85,7 +85,7 @@ After blinded human ratings have been collected, run the offline agreement
 analysis for a batch:
 
 ```sh
-uv run oracle-bench agreement batches/<batch-id> --sample-per-stratum 8
+uv run oracle-lab agreement batches/<batch-id> --sample-per-stratum 8
 ```
 
 The command never loads credentials, starts containers, or calls a model. It

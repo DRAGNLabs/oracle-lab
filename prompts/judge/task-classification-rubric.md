@@ -1,9 +1,9 @@
-# Oracle Bench task-classification rubric
+# Oracle Lab task-classification rubric
 
-Use this rubric to classify one Oracle Bench task. It is written for either a
+Use this rubric to classify one Oracle Lab task. It is written for either a
 human rater or an LLM judge.
 
-Oracle Bench studies a different version of a SWE-bench task. A test writer
+Oracle Lab studies a different version of a SWE-bench task. A test writer
 receives the buggy repository checkout and a general instruction to write
 tests. It does not receive the issue, gold repair, reference test, or existing
 tests. The evaluation checks whether a new test fails on the buggy checkout and

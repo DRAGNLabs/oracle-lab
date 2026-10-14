@@ -1,7 +1,7 @@
 from fixtures import instance_record
 
-from oracle_bench.instance import write_private_instance_artifacts
-from oracle_bench.paths import RunPaths
+from oracle_lab.instance import write_private_instance_artifacts
+from oracle_lab.paths import RunPaths
 
 
 def test_ground_truth_preserves_issue_and_exact_fix(tmp_path):

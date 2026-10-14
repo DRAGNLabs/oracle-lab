@@ -4,10 +4,10 @@ import pytest
 import yaml
 from fixtures import evaluation_result, judge_attempt
 
-from oracle_bench.batch import load_batch_config, run_batch
-from oracle_bench.batch.summary import _aggregate_judgments
-from oracle_bench.io import read_json, write_json
-from oracle_bench.paths import RunPaths
+from oracle_lab.batch import load_batch_config, run_batch
+from oracle_lab.batch.summary import _aggregate_judgments
+from oracle_lab.io import read_json, write_json
+from oracle_lab.paths import RunPaths
 
 
 def write_run_config(path: Path, instance: str) -> None:
@@ -341,7 +341,7 @@ def test_a_failing_summary_does_not_hide_an_interrupted_job(tmp_path, monkeypatc
     def interrupted(config):
         raise KeyboardInterrupt
 
-    monkeypatch.setattr("oracle_bench.batch.write_summary", broken_summary)
+    monkeypatch.setattr("oracle_lab.batch.write_summary", broken_summary)
 
     with pytest.raises(KeyboardInterrupt) as error:
         run_batch(manifest, run_one=interrupted)

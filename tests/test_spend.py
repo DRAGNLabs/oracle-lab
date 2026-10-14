@@ -4,9 +4,9 @@ import urllib.error
 
 import pytest
 
-import oracle_bench.spend as spend
-from oracle_bench.config import HarnessConfig
-from oracle_bench.io import read_json
+import oracle_lab.spend as spend
+from oracle_lab.config import HarnessConfig
+from oracle_lab.io import read_json
 
 KEY = "credential-fixture"
 

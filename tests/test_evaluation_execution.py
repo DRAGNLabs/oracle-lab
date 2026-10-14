@@ -5,12 +5,12 @@ from unittest.mock import Mock
 import pytest
 from fixtures import instance_record, localized_target, run_config, submission_manifest
 
-import oracle_bench.evaluation as evaluation
-from oracle_bench.container.sandbox import CommandResult
-from oracle_bench.evaluation import run_tests
-from oracle_bench.io import read_json, write_json
-from oracle_bench.paths import RunPaths
-from oracle_bench.results import (
+import oracle_lab.evaluation as evaluation
+from oracle_lab.container.sandbox import CommandResult
+from oracle_lab.evaluation import run_tests
+from oracle_lab.io import read_json, write_json
+from oracle_lab.paths import RunPaths
+from oracle_lab.results import (
     SubmissionManifest,
     VersionResult,
     read_evaluation_result,

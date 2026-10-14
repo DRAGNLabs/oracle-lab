@@ -3,13 +3,13 @@ from pathlib import Path
 import pytest
 from fixtures import evaluation_result
 
-from oracle_bench.io import digest, read_json, write_json
-from oracle_bench.judge.agreement import (
+from oracle_lab.io import digest, read_json, write_json
+from oracle_lab.judge.agreement import (
     _agreement_for_facet,
     _comparison_group,
     analyze_agreement,
 )
-from oracle_bench.judge.contracts import (
+from oracle_lab.judge.contracts import (
     JUDGMENT_LABEL_KEYS,
     LlmJudgeIdentity,
     Rating,
@@ -18,8 +18,8 @@ from oracle_bench.judge.contracts import (
     RunProvenance,
     RunRatings,
 )
-from oracle_bench.paths import RunPaths
-from oracle_bench.results import MATRIX_CELLS
+from oracle_lab.paths import RunPaths
+from oracle_lab.results import MATRIX_CELLS
 
 DEFAULT_LABELS = {
     "tests_issue": "yes",

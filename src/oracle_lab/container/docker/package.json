@@ -1,0 +1,11 @@
+{
+  "name": "oracle-lab-harnesses",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pinned agent CLIs installed in Oracle Lab runtime images",
+  "dependencies": {
+    "@anthropic-ai/claude-code": "2.1.280",
+    "@openai/codex": "0.153.4",
+    "opencode-ai": "1.18.32"
+  }
+}

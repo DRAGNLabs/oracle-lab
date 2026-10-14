@@ -2,7 +2,7 @@
 
 import pytest
 
-from oracle_bench.harnesses import retry
+from oracle_lab.harnesses import retry
 
 TRANSIENT = {"status": "failed", "errors": [{"message": "503 Service Unavailable"}]}
 PERMANENT = {"status": "failed", "errors": [{"message": "invalid API key"}]}

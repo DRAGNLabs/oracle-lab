@@ -7,8 +7,8 @@ import sys
 import pytest
 from fixtures import HELPERS
 
-from oracle_bench.container.helpers.judge_workspace import copy_views, verify_submission
-from oracle_bench.io import digest
+from oracle_lab.container.helpers.judge_workspace import copy_views, verify_submission
+from oracle_lab.io import digest
 
 
 def submission(root, name="oracle_tests/test_generated.py", body=b"def test_generated(): pass\n"):

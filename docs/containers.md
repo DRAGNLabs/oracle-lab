@@ -1,7 +1,7 @@
 # Container development
 
-Oracle Bench uses the official Docker SDK for Python. Images are built from the
-checked-in [Dockerfiles](../src/oracle_bench/container/docker/README.md). The
+Oracle Lab uses the official Docker SDK for Python. Images are built from the
+checked-in [Dockerfiles](../src/oracle_lab/container/docker/README.md). The
 host's container interface is a small wrapper around an SDK container. There is
 no separate Docker engine layer or generic task framework.
 

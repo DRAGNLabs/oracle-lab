@@ -6,16 +6,16 @@ from unittest.mock import Mock
 import pytest
 from fixtures import RUN_CONFIG
 
-from oracle_bench.config import JudgeConfig, RuntimeConfig, WallTimeLimit, load_config
-from oracle_bench.container.sandbox import CommandResult
-from oracle_bench.harnesses import claude, codex, generate, opencode, run_turn
-from oracle_bench.harnesses.launch import (
+from oracle_lab.config import JudgeConfig, RuntimeConfig, WallTimeLimit, load_config
+from oracle_lab.container.sandbox import CommandResult
+from oracle_lab.harnesses import claude, codex, generate, opencode, run_turn
+from oracle_lab.harnesses.launch import (
     AgentTurnRequest,
     read_trace,
     run_agent_turn,
     turn_status,
 )
-from oracle_bench.paths import RunPaths
+from oracle_lab.paths import RunPaths
 
 
 @pytest.mark.parametrize(

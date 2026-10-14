@@ -2,8 +2,8 @@ import json
 
 import pytest
 
-from oracle_bench.io import read_json, write_json
-from oracle_bench.judge.contracts import (
+from oracle_lab.io import read_json, write_json
+from oracle_lab.judge.contracts import (
     CompletedJudgment,
     complete_human_judgment,
     mark_judgments_stale,
@@ -11,8 +11,8 @@ from oracle_bench.judge.contracts import (
     skipped_judgment,
     validate_judgment,
 )
-from oracle_bench.paths import RunPaths
-from oracle_bench.results import MAX_RATIONALE_LENGTH, failed_turn
+from oracle_lab.paths import RunPaths
+from oracle_lab.results import MAX_RATIONALE_LENGTH, failed_turn
 
 
 def labels(**changes):

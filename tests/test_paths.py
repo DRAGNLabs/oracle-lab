@@ -1,4 +1,4 @@
-from oracle_bench.paths import RunPaths
+from oracle_lab.paths import RunPaths
 
 
 def test_creating_a_run_makes_the_directories_its_stages_write_into(tmp_path):

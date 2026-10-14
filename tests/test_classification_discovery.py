@@ -2,8 +2,8 @@ from pathlib import Path
 
 from fixtures import instance_record
 
-from oracle_bench.classification.contracts import latest_classification
-from oracle_bench.io import write_json
+from oracle_lab.classification.contracts import latest_classification
+from oracle_lab.io import write_json
 
 
 def prepared_run(tmp_path: Path) -> tuple[Path, Path]:

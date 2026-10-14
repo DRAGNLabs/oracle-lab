@@ -4,10 +4,10 @@ import re
 import pytest
 from fixtures import instance_record, judge_attempt, localized_target, usage
 
-from oracle_bench.io import write_json
-from oracle_bench.paths import RunPaths
-from oracle_bench.report import report
-from oracle_bench.results import MATRIX_CELLS, write_result
+from oracle_lab.io import write_json
+from oracle_lab.paths import RunPaths
+from oracle_lab.report import report
+from oracle_lab.results import MATRIX_CELLS, write_result
 
 
 @pytest.mark.parametrize(
@@ -379,7 +379,7 @@ def test_report_renders_central_task_classification_and_provenance(tmp_path, mon
         "rationale": "A nearby implementation establishes the expected behavior.",
     }
     monkeypatch.setattr(
-        "oracle_bench.report._classification", lambda run_paths: (classification, attempt)
+        "oracle_lab.report._classification", lambda run_paths: (classification, attempt)
     )
 
     text = report(paths).read_text()
@@ -417,7 +417,7 @@ def test_report_renders_out_of_scope_and_unsuccessful_classifications(
     paths = RunPaths.create(tmp_path)
     paths.results.write_text(json.dumps(report_results()))
     monkeypatch.setattr(
-        "oracle_bench.report._classification", lambda run_paths: (classification, None)
+        "oracle_lab.report._classification", lambda run_paths: (classification, None)
     )
 
     text = report(paths).read_text()

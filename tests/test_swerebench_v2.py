@@ -5,9 +5,9 @@ import pytest
 import yaml
 from fixtures import swerebench_v2_record
 
-from oracle_bench.config import load_config
-from oracle_bench.instance import resolve_source, swerebench_v2
-from oracle_bench.instance.swerebench_v2 import runtime_for
+from oracle_lab.config import load_config
+from oracle_lab.instance import resolve_source, swerebench_v2
+from oracle_lab.instance.swerebench_v2 import runtime_for
 
 RECORD = swerebench_v2_record()
 

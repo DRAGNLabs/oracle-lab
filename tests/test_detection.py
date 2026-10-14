@@ -3,7 +3,7 @@
 import pytest
 from fixtures import detecting_result, evaluation_result
 
-from oracle_bench.results import EvaluationResult
+from oracle_lab.results import EvaluationResult
 
 
 def test_a_compliant_completed_run_with_a_distinguishing_test_is_detected():

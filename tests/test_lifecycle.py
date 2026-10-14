@@ -15,21 +15,21 @@ from fixtures import (
     submission_manifest,
 )
 
-import oracle_bench.judge.run as judge_module
-import oracle_bench.preflight as preflight_module
-import oracle_bench.run as run_module
-from oracle_bench.config import JudgeConfig, RuntimeConfig, load_config
-from oracle_bench.evaluation import archive_previous_evaluation
-from oracle_bench.harnesses import require_credentials
-from oracle_bench.io import read_json, write_json
-from oracle_bench.paths import RunPaths
-from oracle_bench.results import (
+import oracle_lab.judge.run as judge_module
+import oracle_lab.preflight as preflight_module
+import oracle_lab.run as run_module
+from oracle_lab.config import JudgeConfig, RuntimeConfig, load_config
+from oracle_lab.evaluation import archive_previous_evaluation
+from oracle_lab.harnesses import require_credentials
+from oracle_lab.io import read_json, write_json
+from oracle_lab.paths import RunPaths
+from oracle_lab.results import (
     EvaluationResult,
     LocalizedTarget,
     SubmissionManifest,
     write_result,
 )
-from oracle_bench.run import completion_state
+from oracle_lab.run import completion_state
 
 SAMPLE = RUN_CONFIG
 
@@ -128,7 +128,7 @@ def install_pipeline_fakes(monkeypatch, runtime, instance, judge_effect=None):
 
     # Fake the turn itself, not the stage. judge_stage's own failure handling then
     # runs for real, which is what these tests are checking.
-    judge_sandbox = context_of(Mock(helpers="/opt/oracle-bench/container-helpers"))
+    judge_sandbox = context_of(Mock(helpers="/opt/oracle-lab/container-helpers"))
 
     def judge_effectively(sandbox, request):
         if judge_effect is not None:

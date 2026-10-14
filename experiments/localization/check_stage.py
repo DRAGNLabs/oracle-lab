@@ -1,4 +1,4 @@
-"""Run Oracle Bench's real `localize` stage against real runtime images.
+"""Run Oracle Lab's real `localize` stage against real runtime images.
 
 For each instance: resolve it from the dataset, build its runtime image with
 `prepare_image`, run `localize`, and compare the target with the prototype's
@@ -16,12 +16,12 @@ import sys
 import tempfile
 from pathlib import Path
 
-from oracle_bench.config import load_config
-from oracle_bench.container.images import prepare_image
-from oracle_bench.container.sandbox import docker_client
-from oracle_bench.instance import resolve_source
-from oracle_bench.localization import localize
-from oracle_bench.paths import RunPaths
+from oracle_lab.config import load_config
+from oracle_lab.container.images import prepare_image
+from oracle_lab.container.sandbox import docker_client
+from oracle_lab.instance import resolve_source
+from oracle_lab.localization import localize
+from oracle_lab.paths import RunPaths
 
 HERE = Path(__file__).parent
 # A localized sample config; only its source instance changes.

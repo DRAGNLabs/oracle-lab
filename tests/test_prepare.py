@@ -3,8 +3,8 @@ import sys
 
 import pytest
 
-import oracle_bench.container.helpers.prepare as prepare_module
-from oracle_bench.container.helpers.prepare import remove_existing_tests, replace_git_history
+import oracle_lab.container.helpers.prepare as prepare_module
+from oracle_lab.container.helpers.prepare import remove_existing_tests, replace_git_history
 
 
 def test_helper_annotations_work_on_old_repository_python():
@@ -148,7 +148,7 @@ def test_the_generation_workspace_has_no_history_no_hidden_tests_and_an_empty_te
 
     prepare_module.prepare(settings(root, hide=True, sanitize_history=True))
 
-    assert commits(root) == ["Oracle Bench workspace"]
+    assert commits(root) == ["Oracle Lab workspace"]
     assert not (root / "package" / "tests" / "test_core.py").exists()
     assert (root / "package" / "core.py").read_text() == "VALUE = 2\n"
     assert list((root / "oracle_tests").iterdir()) == []
@@ -165,7 +165,7 @@ def test_a_reference_workspace_keeps_existing_tests_and_history(checkout):
     prepare_module.prepare(settings(root, hide=False, sanitize_history=False))
 
     assert (root / "package" / "tests" / "test_core.py").exists()
-    assert commits(root) == ["Oracle Bench workspace", "second", "first"]
+    assert commits(root) == ["Oracle Lab workspace", "second", "first"]
 
 
 def test_an_existing_generated_directory_is_refused(checkout):

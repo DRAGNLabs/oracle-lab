@@ -87,6 +87,40 @@ attempt is kept under `generation-history/`, `judge-history/`, or a
 classification attempt's `agent-history/`. Other harness failures and deadlines
 are not retried; they end with their normal status.
 
+## Preflight directories
+
+`oracle-bench preflight` checks an instance without calling a model. Each config
+gets a timestamped directory under `<output>/preflight/`, apart from real runs.
+It runs resolve, build, localize (localized configs only), and the reference
+check, the same way a run does, then an environment check:
+
+```text
+<output>/preflight/<run-id>/
+├── status.json
+├── inputs/
+├── image-build/
+├── reference-check/
+├── ground-truth/
+└── environment-check/
+    ├── results.json
+    ├── files/<generated directory>/test_oracle_bench_preflight.py
+    ├── buggy/<execution artifacts>
+    └── golden/<execution artifacts>
+```
+
+The directory also holds the empty `generation/`, `submission/`, `evaluation/`,
+and `judge/` directories that every run directory starts with.
+
+The environment check puts one fixed test, which cannot fail, in the generated
+tests directory and runs it the way an agent's tests run: existing tests hidden,
+on both versions. It must pass on both. A failure means generated tests could
+not be collected or run in this environment.
+
+The final status is stage `finished` with state `passed`. A failure records its
+stage, which can be `environment`, and the state `failed`. The runtime image is
+cached by its inputs, so a later `run` of the same config reuses it. The run
+still repeats its own reference check.
+
 ## Classification attempts
 
 Task classifications are stored centrally, not in run directories:

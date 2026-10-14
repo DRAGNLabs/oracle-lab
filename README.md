@@ -74,6 +74,10 @@ flowchart TD
 # Generate tests and evaluate both code versions.
 uv run oracle-bench run configs/smoke.yaml
 
+# Check instances before a paid run: build the image, run the reference pair,
+# and run one fixed test the way generated tests run. No model calls.
+uv run oracle-bench preflight configs/smoke.yaml [more configs...]
+
 # Rerun saved tests in fresh containers; no agent or model calls.
 uv run oracle-bench evaluate runs/<run-id>
 

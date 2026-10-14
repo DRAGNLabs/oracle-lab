@@ -445,3 +445,33 @@ def test_reevaluation_marks_existing_judgment_stale_without_calling_a_model(tmp_
     assert read_json(human_judgment)["status"] == "stale"
     assert read_json(run_dir / "status.json")["judge_status"] == "stale"
     judge_call.assert_not_called()
+
+
+def test_preflight_checks_the_environment_without_credentials_or_generation(tmp_path, monkeypatch):
+    config, runtime, instance = configured_pipeline(tmp_path, True)
+    install_pipeline_fakes(monkeypatch, runtime, instance)
+    monkeypatch.setattr(run_module, "require_credentials", Mock(side_effect=AssertionError))
+    monkeypatch.setattr(run_module, "check_environment", Mock())
+
+    run_dir = run_module.preflight(config)
+
+    assert run_dir.parent == Path(config.output) / "preflight"
+    final = read_json(run_dir / "status.json")
+    assert (final["stage"], final["state"]) == ("finished", "passed")
+    run_module.check_reference.assert_called_once()
+    run_module.check_environment.assert_called_once()
+    run_module.generate_submission.assert_not_called()
+
+
+def test_a_preflight_failure_records_the_stage_it_stopped_in(tmp_path, monkeypatch):
+    config, runtime, instance = configured_pipeline(tmp_path, False)
+    install_pipeline_fakes(monkeypatch, runtime, instance)
+    failure = RuntimeError("Environment check test did not pass on both versions")
+    monkeypatch.setattr(run_module, "check_environment", Mock(side_effect=failure))
+
+    with pytest.raises(RuntimeError, match="did not pass"):
+        run_module.preflight(config)
+
+    (run_dir,) = (Path(config.output) / "preflight").iterdir()
+    final = read_json(run_dir / "status.json")
+    assert (final["stage"], final["state"]) == ("environment", "failed")

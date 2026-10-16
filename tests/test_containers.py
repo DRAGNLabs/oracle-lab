@@ -12,18 +12,18 @@ import pytest
 from docker.errors import APIError, ImageNotFound, NotFound
 from fixtures import DOCKERFILES, HELPERS, run_config
 
-from oracle_bench.config import HARNESS_VERSIONS
-from oracle_bench.container.files import RedactedOutput, download, upload
-from oracle_bench.container.images import (
+from oracle_lab.config import HARNESS_VERSIONS
+from oracle_lab.container.files import RedactedOutput, download, upload
+from oracle_lab.container.images import (
     build_image,
     image_tag,
     inspect_harness_versions,
     prepare_contexts,
     runtime_arguments,
 )
-from oracle_bench.container.lifecycle import setup_deadline
-from oracle_bench.container.sandbox import Profile, Sandbox, docker_client, open_sandbox
-from oracle_bench.repository import Repository
+from oracle_lab.container.lifecycle import setup_deadline
+from oracle_lab.container.sandbox import Profile, Sandbox, docker_client, open_sandbox
+from oracle_lab.repository import Repository
 
 
 @pytest.fixture
@@ -163,7 +163,7 @@ def test_docker_client_checks_daemon_and_closes_connection(monkeypatch):
     client = Mock()
     client.info.return_value = {"OSType": "linux"}
     from_env = Mock(return_value=client)
-    monkeypatch.setattr("oracle_bench.container.sandbox.docker.from_env", from_env)
+    monkeypatch.setattr("oracle_lab.container.sandbox.docker.from_env", from_env)
 
     with docker_client() as opened:
         assert opened is client

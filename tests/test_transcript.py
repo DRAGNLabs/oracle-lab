@@ -1,7 +1,7 @@
 import json
 
-from oracle_bench.harnesses.transcript import render_session
-from oracle_bench.paths import RunPaths
+from oracle_lab.harnesses.transcript import render_session
+from oracle_lab.paths import RunPaths
 
 
 def test_session_preserves_messages_tools_errors_and_unknown_events(tmp_path):

@@ -1,6 +1,6 @@
 import json
 
-from oracle_bench.harnesses.codex import parse_trace
+from oracle_lab.harnesses.codex import parse_trace
 
 
 def test_codex_usage_already_counts_cached_prompt_tokens(tmp_path):

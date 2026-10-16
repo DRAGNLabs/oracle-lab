@@ -5,9 +5,9 @@ import pytest
 import yaml
 from fixtures import swerebench_v2_record
 
-from oracle_bench.config import load_config
-from oracle_bench.instance import resolve_source, swerebench_v2
-from oracle_bench.instance.swerebench_v2 import runtime_for
+from oracle_lab.config import load_config
+from oracle_lab.instance import resolve_source, swerebench_v2
+from oracle_lab.instance.swerebench_v2 import runtime_for
 
 RECORD = swerebench_v2_record()
 
@@ -76,6 +76,16 @@ def test_v2_record_with_a_truncated_test_id_is_refused(tmp_path):
         FAIL_TO_PASS=["tests/test_a.py::test_ok", "tests/test_a.py::test_length[a-longer"]
     )
     with pytest.raises(ValueError, match=r"truncated test IDs: \['tests/test_a.py::test_length"):
+        resolve_source(load(tmp_path, record=record))
+
+
+@pytest.mark.parametrize(
+    "categories",
+    [["core_feat"], ["minor_bug", "core_feat"], ["major_bug", "documentation_enh"], []],
+)
+def test_v2_record_not_labeled_as_only_a_bug_fix_is_refused(tmp_path, categories):
+    record = swerebench_v2_record(meta={"llm_metadata": {"pr_categories": categories}})
+    with pytest.raises(ValueError, match="not labeled as a bug fix only"):
         resolve_source(load(tmp_path, record=record))
 
 

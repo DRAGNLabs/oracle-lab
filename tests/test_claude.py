@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from oracle_bench.harnesses.claude import parse_trace
+from oracle_lab.harnesses.claude import parse_trace
 
 
 @pytest.mark.parametrize(

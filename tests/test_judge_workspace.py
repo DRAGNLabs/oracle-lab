@@ -3,13 +3,13 @@ from unittest.mock import Mock
 import pytest
 from fixtures import RUN_CONFIG, detecting_result, instance_record, run_config, write_submission
 
-from oracle_bench.config import JudgeConfig
-from oracle_bench.container.sandbox import CommandResult
-from oracle_bench.generation import verify_bundle
-from oracle_bench.io import read_json, write_json
-from oracle_bench.judge.workspace import JUDGE_ROOT, build_judge_workspace
-from oracle_bench.paths import RunPaths
-from oracle_bench.results import read_evaluation_result
+from oracle_lab.config import JudgeConfig
+from oracle_lab.container.sandbox import CommandResult
+from oracle_lab.generation import verify_bundle
+from oracle_lab.io import read_json, write_json
+from oracle_lab.judge.workspace import JUDGE_ROOT, build_judge_workspace
+from oracle_lab.paths import RunPaths
+from oracle_lab.results import read_evaluation_result
 
 SAMPLE = RUN_CONFIG
 
@@ -19,7 +19,6 @@ def prepared_run(tmp_path):
     config = run_config("package", image="example/runtime")
     config.judge = JudgeConfig(
         rubric="rubric.md",
-        instructions="instructions.md",
         harness="claude",
         model="judge-model",
         limit={"kind": "wall_seconds", "value": 300},
@@ -74,7 +73,7 @@ def prepared_run(tmp_path):
 
 
 def fake_sandbox(files, *, worktrees=True):
-    sandbox = Mock(helpers="/opt/oracle-bench/container-helpers")
+    sandbox = Mock(helpers="/opt/oracle-lab/container-helpers")
     sandbox.uploaded = {}
     expected = {name: info["sha256"] for name, info in files.items()}
 
@@ -127,8 +126,6 @@ def test_workspace_exposes_complete_hashed_bundle_and_identical_tests(tmp_path):
     ]
     instructions = sandbox.uploaded[JUDGE_ROOT + "/instructions.md"].decode()
     assert "## Reading order" in instructions
-    assert "## Human judgment" in instructions
-    assert "Fill `output/judgment.json`" in instructions
     assert "`evidence/agent-session.log`" in instructions
     assert "package/core.py" in instructions
     assert "tests/test_core.py::test_fixed" in instructions

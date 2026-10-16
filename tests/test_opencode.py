@@ -1,6 +1,6 @@
 import json
 
-from oracle_bench.harnesses.opencode import parse_trace
+from oracle_lab.harnesses.opencode import parse_trace
 
 
 def test_parse_trace_accumulates_usage_and_final_text(tmp_path):

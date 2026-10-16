@@ -1,8 +1,8 @@
 # Judging
 
-An LLM judge and blinded human raters can each rate a run's submission. A third
-command measures how well they agree. This guide covers the commands. The
-[results reference](results.md) describes the files each one writes.
+An LLM judge rates a run's submission, and human raters then rate the judge's
+answers. This guide covers both commands. The [results reference](results.md)
+describes the files they write.
 
 ## The LLM judge
 
@@ -10,7 +10,7 @@ A run with a `judge` section is judged automatically after paired evaluation.
 To judge a saved run for the first time, or again:
 
 ```sh
-uv run oracle-bench judge runs/<run-id>
+uv run oracle-lab judge runs/<run-id>
 ```
 
 The command needs the configured judge credential and the saved runtime image.
@@ -22,73 +22,92 @@ The command needs the configured judge credential and the saved runtime image.
 - A rerun first moves the whole previous attempt to
   `judge-history/<UTC timestamp>/`, then rebuilds the workspace.
 
-## Human raters
+## Human review
 
-Create a blinded human workspace from the same saved `workspace-spec.json` used
-for model judging:
+Raters measure the two LLM judges, the generated-test judge and the task
+classifier, by rating each answer they gave. They do not answer the questions
+themselves. Each answer gets one rating:
 
-```sh
-uv run oracle-bench judge-workspace create runs/<run-id> --rater rater_01
-```
+| Rating | Meaning |
+|---|---|
+| `correct` | The rater would give the same answer. |
+| `defensible` | The rater would answer differently, but the judge's answer is reasonable given the evidence and the stage rubric. |
+| `incorrect` | The evidence or the stage rubric contradicts the judge's answer. |
 
-The command rebuilds the judge bundle. It stops if the rebuilt specification
-differs from the saved one. It then leaves a named container running, with no
-network and no model credential, and prints commands for opening a shell or
-attaching VS Code.
+A question the judge answered `null` is not rated, so a judgment has up to 4
+ratings, an in-scope classification 7, and an out-of-scope one 1. Only a
+completed judgment or classification can be reviewed; a failed, skipped, or
+stale one is listed with the reason it cannot be.
 
-Inside the container:
-
-- The shared evidence is read-only. The non-root `oracle` user can write only to
-  `/oracle-judge/output/`.
-- LLM responses and other raters' ratings are never uploaded.
-- The run's rubric is the one frozen when the run was created. Ratings made
-  against an older rubric do not validate. To use a newer rubric, create a new
-  run rather than mixing rubric versions.
-
-To rate:
-
-1. Read `/oracle-judge/instructions.md` alongside `rubric.md`. The instructions
-   cover the workflow, a guide to the evidence files, and a summary of this
-   task's test outcomes.
-2. Open `/oracle-judge/output/judgment.json`. It starts with placeholders for
-   `tests_issue`, `attempt_detail`, `no_attempt_reason`, `cheating`, and
-   `rationale`.
-3. Replace each placeholder with a rubric label. For a conditional field that
-   does not apply, use JSON `null` or the string `"null"`.
-4. Write a short rationale.
-
-The answer is the rater's own. Collection validates it but never fills in or
-changes a label. Collect the rating, then remove the container:
+[The human review workflow](human-review.md) describes how a review set is
+shared with raters and how their reviews come back. Start the review page with:
 
 ```sh
-uv run oracle-bench judge-workspace collect <container-name>
-uv run oracle-bench judge-workspace remove <container-name>
+uv run oracle-lab review <dir> --rater <id>
 ```
 
-If the JSON or a label is invalid, collection rejects it and leaves the workspace
-running so the rater can fix it. A valid rating is saved under
-`judge/human/<opaque-rater-id>/`, as both the submitted JSON and the normalized
-result. Its `provenance.json` records the hashes of the rubric and of the shared
-workspace specification, which covers `instructions.md`.
+`<dir>` is a run, a classification attempt, or a directory holding `runs/` and
+`classifications/`, such as a review data repository. The command starts a local
+web server on `127.0.0.1` and opens the browser. `--port` picks the port and
+`--no-browser` prints the URL instead of opening it. Press Ctrl+C to stop.
 
-Collection never overwrites a saved rating. To replace one, pass
-`--archive-existing`. The previous files then move to
-`judge/human-history/<opaque-rater-id>/<UTC timestamp>/`.
+The page needs no Docker, credentials, or model calls. It does need Git and
+network access to GitHub: the repository views are built from a shallow fetch of
+the instance's base commit, cached under `~/.cache/oracle-lab/repos/` (or
+`$XDG_CACHE_HOME/oracle-lab/repos/`). Later reviews of the same commit reuse the
+cache.
 
-`remove` checks the container's profile label, so it cannot remove an unrelated
-container. Rerunning the LLM judge leaves human ratings alone. Reevaluation marks
-both LLM and human judgments stale, because the evidence they rated has changed.
+The page shows the rater what the judge had:
+
+- the judge's answers and justifications beside three rating buttons;
+- for a judgment, the issue, the paired-outcome matrix and per-test outcomes,
+  the generated tests, the repair, and the reference tests;
+- for a classification, the task record's issue, issue comments or pull request
+  texts, the repair, and the reference tests;
+- the repository views the judge read, with a file finder: buggy and golden for
+  a judgment, with a side-by-side view of the repair, and the buggy checkout
+  only for a classification;
+- the judge's evidence files, such as the agent session log or the task record;
+- the stage rubric.
+
+Unsaved ratings stay in the browser until the rater saves. Saving writes the
+review under `reviews/<rater>/` beside the output it rates (`judge/reviews/` in a
+run); saving again moves the earlier review to `reviews-history/<rater>/`. The
+page reads only the current rater's reviews, never another rater's. Rerunning
+the judge moves the reviews into `judge-history/` with the judgment they rated.
 
 ## Agreement
 
-After blinded human ratings have been collected, run the offline agreement
-analysis for a batch:
+Once raters have reviewed, compute agreement over the reviewed set:
 
 ```sh
-uv run oracle-bench agreement batches/<batch-id> --sample-per-stratum 8
+uv run oracle-lab agreement ../oracle-lab-data
 ```
 
-The command never loads credentials, starts containers, or calls a model. It
-also picks a calibration sample of runs for raters to rate. Do not show raters
-the sample file or any existing labels. They rate through the blinded workspace
-only.
+It takes one or more runs, classification attempts, or directories holding
+`runs/` and `classifications/`, and reads every rater's review. It writes
+`agreement.json` and `agreement.md` to `--output`, or by default to
+`agreement/<UTC timestamp>/` in the current directory. It needs no Docker,
+network, or credentials.
+
+The two stages are reported separately. For each question it reports:
+
+- **Rating counts:** how many `correct`, `defensible`, and `incorrect` ratings
+  the question received across every target and rater.
+- **Judge quality:** the share of ratings that are `correct`, and the share that
+  are `correct` or `defensible`.
+- **Raw agreement:** of every pair of raters who rated the same target, the share
+  that gave the same rating.
+- **Krippendorff's alpha:** agreement beyond what chance would produce, treating
+  the ratings as ordered: `correct`, `defensible`, `incorrect`. So two raters a
+  step apart disagree less than two raters at opposite ends. 1 is perfect
+  agreement and 0 is chance level.
+
+Read alpha beside raw agreement. When nearly every rating is the same, alpha is
+low or undefined even if raters agree, because there is little variation to
+agree on; raw agreement shows that case. Alpha needs at least two raters on some
+target and some variation in the ratings; otherwise it is reported as missing.
+
+Every rater is expected to review every target, so the report also lists each
+target that lacks a review from any rater who reviewed something, and each
+target that could not be reviewed with the reason.

@@ -15,7 +15,6 @@ agent:
 
 judge:
   rubric: ../prompts/judge/generated-test-evaluation-rubric.md
-  instructions: ../prompts/judge/generated-test-instructions.md
   harness: claude
   provider: openrouter
   model: judge-model

@@ -6,9 +6,9 @@ from unittest.mock import Mock
 import pytest
 from fixtures import HELPERS, run_config, submission_manifest, write_submission
 
-from oracle_bench.generation import capture, changed_files, generate_submission, verify_bundle
-from oracle_bench.io import digest, read_json, write_json
-from oracle_bench.paths import RunPaths
+from oracle_lab.generation import capture, changed_files, generate_submission, verify_bundle
+from oracle_lab.io import digest, read_json, write_json
+from oracle_lab.paths import RunPaths
 
 
 def entry(data, kind="file"):
@@ -82,12 +82,12 @@ def test_transient_generation_uses_clean_container_and_archives_attempt(tmp_path
 
     capture = Mock(return_value={"empty": False})
     delay = Mock()
-    monkeypatch.setattr("oracle_bench.generation.open_sandbox", sandbox_context)
-    monkeypatch.setattr("oracle_bench.generation.Repository", repository)
-    monkeypatch.setattr("oracle_bench.generation.snapshot", Mock(return_value={}))
-    monkeypatch.setattr("oracle_bench.generation.generate", generate)
-    monkeypatch.setattr("oracle_bench.generation.capture", capture)
-    monkeypatch.setattr("oracle_bench.harnesses.retry.sleep", delay)
+    monkeypatch.setattr("oracle_lab.generation.open_sandbox", sandbox_context)
+    monkeypatch.setattr("oracle_lab.generation.Repository", repository)
+    monkeypatch.setattr("oracle_lab.generation.snapshot", Mock(return_value={}))
+    monkeypatch.setattr("oracle_lab.generation.generate", generate)
+    monkeypatch.setattr("oracle_lab.generation.capture", capture)
+    monkeypatch.setattr("oracle_lab.harnesses.retry.sleep", delay)
 
     result = generate_submission(Mock(), Mock(), "runtime-image", Mock(base_commit="a" * 40), paths)
 
@@ -158,7 +158,7 @@ def test_capture_diff_includes_agent_commits_and_untracked_files(tmp_path):
 class CaptureSandbox:
     """Serves the final workspace snapshot, the diff, and each file's bytes."""
 
-    helpers = "/opt/oracle-bench/container-helpers"
+    helpers = "/opt/oracle-lab/container-helpers"
 
     def __init__(self, runtime, after: dict, contents: dict[str, bytes], diff: str | None = "d"):
         self.runtime = runtime

@@ -5,20 +5,24 @@ place instead of drifting silently across suites.
 """
 
 import json
+import subprocess
 from contextlib import contextmanager
 from pathlib import Path
+from typing import NamedTuple
 
-import oracle_bench.container
-from oracle_bench.config import RunConfig, RuntimeConfig, load_config
-from oracle_bench.io import digest, write_json
-from oracle_bench.paths import RunPaths
-from oracle_bench.results import MATRIX_CELLS, InstanceRecord, SubmissionManifest
+import oracle_lab.container
+from oracle_lab.classification.contracts import CLASSIFICATION_LABELS
+from oracle_lab.config import RunConfig, RuntimeConfig, load_config
+from oracle_lab.io import digest, write_json
+from oracle_lab.judge.contracts import JUDGMENT_LABEL_KEYS
+from oracle_lab.paths import RunPaths
+from oracle_lab.results import MATRIX_CELLS, InstanceRecord, SubmissionManifest, write_result
 
 # The run config tests start from, independent of the sample configs.
 RUN_CONFIG = Path(__file__).parent / "run-config.yaml"
 
 # Checked-in build inputs, for tests that run a helper or build an image.
-CONTAINER = Path(oracle_bench.container.__file__).parent
+CONTAINER = Path(oracle_lab.container.__file__).parent
 HELPERS = CONTAINER / "helpers"
 DOCKERFILES = CONTAINER / "docker"
 
@@ -59,6 +63,7 @@ def swerebench_v2_record(**changes) -> dict:
         "test_patch": "diff --git a/tests/test_fields.py b/tests/test_fields.py\n",
         "FAIL_TO_PASS": ["tests/test_fields.py::TestFlags::test_existing_values"],
         "PASS_TO_PASS": [],
+        "meta": {"llm_metadata": {"pr_categories": ["regression_bug", "edge_case_bug"]}},
     }
     record.update(changes)
     return record
@@ -107,18 +112,62 @@ def detecting_result(**changes) -> dict:
     return evaluation_result(matrix=matrix, **changes)
 
 
-def completed_judgment(**changes) -> dict:
-    """A valid normalized judgment."""
-    judgment = {
-        "status": "completed",
+def judgment_labels(**changes) -> dict:
+    """A judge's labels, with one justification per answered question.
+
+    Changing an answer changes which questions need a justification, so the
+    justifications follow the answers unless a test passes its own.
+    """
+    labels = {
         "no_attempt_reason": None,
         "tests_issue": "yes",
         "attempt_detail": "correct_assertion",
         "cheating": "no",
-        "rationale": "The generated test reaches and checks the reported behavior.",
     }
-    judgment.update(changes)
-    return judgment
+    labels.update(changes)
+    labels.setdefault(
+        "justifications",
+        {
+            key: f"The submission supports this {key} answer."
+            for key in JUDGMENT_LABEL_KEYS
+            if labels.get(key) not in (None, "null")
+        },
+    )
+    return labels
+
+
+def completed_judgment(**changes) -> dict:
+    """A valid normalized judgment."""
+    return {"status": "completed", **judgment_labels(**changes)}
+
+
+def in_scope_classification(**changes) -> dict:
+    """A classifier's answer for an in-scope task, before its status is added."""
+    classification = {
+        "task_nature": "behavioral_bug",
+        "defect_mechanisms": ["validation_checking"],
+        "primary_assertion_target": "exception_behavior",
+        "required_test_setup": "special_input",
+        "code_only_oracle_availability": "local_contract",
+        "required_test_scope": "unit",
+        "benchmark_quality": "usable",
+        "justifications": {
+            key: f"The task record and checkout support this {key} answer."
+            for key in CLASSIFICATION_LABELS
+        },
+    }
+    classification.update(changes)
+    return classification
+
+
+def out_of_scope_classification(**changes) -> dict:
+    """A classifier's answer for an out-of-scope task, before its status is added."""
+    classification = {
+        "task_nature": "out_of_scope",
+        "justifications": {"task_nature": "This task adds a new feature."},
+    }
+    classification.update(changes)
+    return classification
 
 
 def usage(**changes) -> dict:
@@ -211,3 +260,125 @@ def context_of(value):
         yield value
 
     return factory
+
+
+REPAIR = (
+    "diff --git a/package/core.py b/package/core.py\n"
+    "--- a/package/core.py\n+++ b/package/core.py\n@@ -1 +1 @@\n-old\n+new\n"
+)
+
+
+def judged_run(
+    root: Path, judgment: dict | None = None, instance: InstanceRecord | None = None
+) -> RunPaths:
+    """A judged run on disk, holding every file its judge read."""
+    paths = RunPaths.create(root)
+    instance = instance or instance_record(golden_patch=REPAIR)
+    write_result(paths.instance, instance)
+    paths.config.write_text("instance: owner__project-1\n")
+    paths.judge.rubric.write_text("# Judge rubric\n")
+    (paths.ground_truth / "issue.md").write_text("# Issue\n\nIncorrect result.\n")
+    (paths.ground_truth / "fix.patch").write_text(instance.golden_patch)
+    (paths.generation / "session.log").write_text("agent session\n")
+    (paths.generation / "workspace.diff").write_text("generated diff\n")
+    write_submission(paths)
+    write_json(paths.results, detecting_result())
+    for version in ("buggy", "golden"):
+        write_json(paths.evaluation / version / "tests.json", {"status": "completed"})
+        (paths.evaluation / version / "output.log").write_text(version + " output\n")
+    write_json(
+        paths.judge.workspace_spec,
+        {
+            "prepared_image": {"reference": "example/runtime", "image_id": "id", "digests": []},
+            "base_commit": instance.base_commit,
+            "repair_patch_sha256": digest(instance.golden_patch.encode()),
+            "reference_test_patch_sha256": digest(instance.reference_test_patch.encode()),
+            "rubric_sha256": digest(paths.judge.rubric.read_bytes()),
+            "workspace_method": "git_worktree",
+            "reconstruction_commands": [],
+            "artifacts": [],
+        },
+    )
+    write_json(paths.judge.result, judge_attempt())
+    write_json(paths.judge.judgment, completed_judgment() if judgment is None else judgment)
+    return paths
+
+
+def classified_attempt(
+    root: Path, result: dict | None = None, instance: InstanceRecord | None = None
+) -> Path:
+    """A classification attempt on disk, holding every file its classifier read."""
+    instance = instance or instance_record()
+    write_result(root / "inputs/instance.json", instance)
+    (root / "inputs/config.resolved.yaml").write_text("source: owner__project-1\n")
+    (root / "inputs/rubric.md").write_text("# Classification rubric\n")
+    write_json(root / "agent/result.json", judge_attempt(model="classifier-model"))
+    write_json(
+        root / "workspace-spec.json",
+        {"image": "example/runtime", "base_commit": instance.base_commit, "artifacts": []},
+    )
+    write_json(
+        root / "classification.json",
+        {
+            "instance_id": instance.instance_id,
+            "base_commit": instance.base_commit,
+            "source_record_sha256": instance.source.record_sha256,
+            "rubric_sha256": digest((root / "inputs/rubric.md").read_bytes()),
+            "result": result or {"status": "completed", **in_scope_classification()},
+        },
+    )
+    return root
+
+
+def git(directory: Path, *args: str) -> str:
+    """Run Git in `directory` as a test author, ignoring the user's signing settings."""
+    identity = ["-c", "user.name=Test", "-c", "user.email=t@example.com"]
+    command = ["git", "-C", str(directory), *identity, "-c", "commit.gpgsign=false", *args]
+    return subprocess.run(command, check=True, capture_output=True, text=True).stdout.strip()
+
+
+class Upstream(NamedTuple):
+    """A local stand-in for a task's GitHub repository."""
+
+    url: str
+    base_commit: str
+    repair: str  # a Git diff from the base commit
+
+
+def upstream_repository(repo: Path) -> Upstream:
+    """A local upstream at its base commit, and a repair for it.
+
+    The repair changes `package/core.py`, creates `package/added.py`, and deletes
+    `package/gone.py`.
+    """
+    (repo / "package").mkdir(parents=True)
+    (repo / "package/core.py").write_text("old\n")
+    (repo / "package/gone.py").write_text("removed by the repair\n")
+    (repo / "README.md").write_text("project\n")
+    git(repo, "init", "--quiet", "--initial-branch=main")
+    git(repo, "add", ".")
+    git(repo, "commit", "--quiet", "-m", "base")
+    base = git(repo, "rev-parse", "HEAD")
+
+    # Write the repair on a branch, take its diff, and leave main at the base commit.
+    git(repo, "switch", "--quiet", "-c", "fixed")
+    (repo / "package/core.py").write_text("new\n")
+    (repo / "package/added.py").write_text("created by the repair\n")
+    (repo / "package/gone.py").unlink()
+    git(repo, "add", "-A")
+    git(repo, "commit", "--quiet", "-m", "fix")
+    repair = git(repo, "diff", base, "HEAD") + "\n"
+    git(repo, "switch", "--quiet", "main")
+    return Upstream("file://" + str(repo), base, repair)
+
+
+REVIEWED_RUN = "runs/run-a"
+
+
+def review_set(root: Path, upstream: Upstream) -> Path:
+    """A review data repository: a judged run on `upstream`, a failed run, and a classification."""
+    instance = instance_record(base_commit=upstream.base_commit, golden_patch=upstream.repair)
+    judged_run(root / REVIEWED_RUN, instance=instance)
+    judged_run(root / "runs/run-b", {"status": "failed", "error": "Crashed."})
+    classified_attempt(root / "classifications/owner__project-1/attempt-1")
+    return root

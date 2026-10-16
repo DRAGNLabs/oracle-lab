@@ -6,16 +6,16 @@ from unittest.mock import Mock
 import pytest
 from fixtures import RUN_CONFIG
 
-from oracle_bench.config import JudgeConfig, RuntimeConfig, WallTimeLimit, load_config
-from oracle_bench.container.sandbox import CommandResult
-from oracle_bench.harnesses import claude, codex, generate, opencode, run_turn
-from oracle_bench.harnesses.launch import (
+from oracle_lab.config import JudgeConfig, RuntimeConfig, WallTimeLimit, load_config
+from oracle_lab.container.sandbox import CommandResult
+from oracle_lab.harnesses import claude, codex, generate, opencode, run_turn
+from oracle_lab.harnesses.launch import (
     AgentTurnRequest,
     read_trace,
     run_agent_turn,
     turn_status,
 )
-from oracle_bench.paths import RunPaths
+from oracle_lab.paths import RunPaths
 
 
 @pytest.mark.parametrize(
@@ -170,7 +170,6 @@ def test_agent_turn_uses_caller_supplied_paths_and_working_directory(tmp_path, m
 def test_claude_judge_uses_wall_time_and_disables_subagents(tmp_path, monkeypatch):
     judge = JudgeConfig(
         rubric="rubric.md",
-        instructions="instructions.md",
         harness="claude",
         model="judge-model",
         limit={"kind": "wall_seconds", "value": 45},
@@ -206,7 +205,6 @@ def test_codex_judge_turn_collects_its_own_last_message_file(tmp_path, monkeypat
     """The caller never names a harness-specific container path."""
     judge = JudgeConfig(
         rubric="rubric.md",
-        instructions="instructions.md",
         harness="codex",
         model="judge-model",
         limit={"kind": "wall_seconds", "value": 45},

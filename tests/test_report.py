@@ -2,12 +2,20 @@ import json
 import re
 
 import pytest
-from fixtures import instance_record, judge_attempt, localized_target, usage
+from fixtures import completed_judgment as fixture_completed_judgment
+from fixtures import (
+    instance_record,
+    judge_attempt,
+    localized_target,
+    out_of_scope_classification,
+    usage,
+)
 
-from oracle_bench.io import write_json
-from oracle_bench.paths import RunPaths
-from oracle_bench.report import report
-from oracle_bench.results import MATRIX_CELLS, write_result
+from oracle_lab.classification.contracts import CLASSIFICATION_LABELS
+from oracle_lab.io import write_json
+from oracle_lab.paths import RunPaths
+from oracle_lab.report import report
+from oracle_lab.results import MATRIX_CELLS, write_result
 
 
 @pytest.mark.parametrize(
@@ -115,14 +123,13 @@ def report_results(**changes):
 
 
 def completed_judgment():
-    return {
-        "status": "completed",
-        "no_attempt_reason": None,
-        "tests_issue": "yes",
-        "attempt_detail": "correct_assertion",
-        "cheating": "no",
-        "rationale": "The generated assertion reaches the issue and distinguishes both revisions.",
-    }
+    return fixture_completed_judgment(
+        justifications={
+            "tests_issue": "The generated assertion reaches the issue.",
+            "attempt_detail": "It distinguishes both revisions.",
+            "cheating": "The session shows only repository exploration.",
+        }
+    )
 
 
 def test_report_renders_completed_judge_with_provenance_and_supporting_files(tmp_path):
@@ -159,7 +166,8 @@ def test_report_renders_completed_judge_with_provenance_and_supporting_files(tmp
         in text
     )
     assert "| yes | correct_assertion | — | no |" in text
-    assert "> The generated assertion reaches the issue" in text
+    assert "`tests_issue`:\n\n> The generated assertion reaches the issue." in text
+    assert "`attempt_detail`:\n\n> It distinguishes both revisions." in text
     assert "| Generate | 4 s | 12 | 0 | 20 |" in text
     assert "| Judge | 3 s | 20 | 0 | 20 |" in text
     assert "[workspace](judge/workspace-spec.json)" in text
@@ -326,11 +334,7 @@ def test_report_finds_the_classification_beside_the_runs_directory(tmp_path):
             "base_commit": instance.base_commit,
             "source_record_sha256": instance.source.record_sha256,
             "rubric_sha256": "e" * 64,
-            "result": {
-                "status": "completed",
-                "task_nature": "out_of_scope",
-                "rationale": "A feature request.",
-            },
+            "result": {"status": "completed", **out_of_scope_classification()},
         },
     )
 
@@ -376,10 +380,13 @@ def test_report_renders_central_task_classification_and_provenance(tmp_path, mon
         "code_only_oracle_availability": "repository_pattern",
         "required_test_scope": "component",
         "benchmark_quality": "usable",
-        "rationale": "A nearby implementation establishes the expected behavior.",
+        "justifications": {
+            key: f"A nearby implementation establishes the {key} answer."
+            for key in CLASSIFICATION_LABELS
+        },
     }
     monkeypatch.setattr(
-        "oracle_bench.report._classification", lambda run_paths: (classification, attempt)
+        "oracle_lab.report._classification", lambda run_paths: (classification, attempt)
     )
 
     text = report(paths).read_text()
@@ -387,7 +394,7 @@ def test_report_renders_central_task_classification_and_provenance(tmp_path, mon
     assert "## Task classification" in text
     assert "| Defect mechanisms | `control_logic, data_state` |" in text
     assert "| Code-only oracle availability | `repository_pattern` |" in text
-    assert "> A nearby implementation establishes the expected behavior." in text
+    assert "> A nearby implementation establishes the code_only_oracle_availability answer." in text
     assert "Classifier: codex 0.153.4, classifier-model, openrouter, 90 s limit." in text
     assert f"[result]({attempt / 'classification.json'})" in text
     assert f"[rubric]({attempt / 'inputs/rubric.md'})" in text
@@ -398,11 +405,7 @@ def test_report_renders_central_task_classification_and_provenance(tmp_path, mon
     ("classification", "expected"),
     [
         (
-            {
-                "status": "completed",
-                "task_nature": "out_of_scope",
-                "rationale": "This task adds a new feature.",
-            },
+            {"status": "completed", **out_of_scope_classification()},
             "Task nature: `out_of_scope`.",
         ),
         (
@@ -417,7 +420,7 @@ def test_report_renders_out_of_scope_and_unsuccessful_classifications(
     paths = RunPaths.create(tmp_path)
     paths.results.write_text(json.dumps(report_results()))
     monkeypatch.setattr(
-        "oracle_bench.report._classification", lambda run_paths: (classification, None)
+        "oracle_lab.report._classification", lambda run_paths: (classification, None)
     )
 
     text = report(paths).read_text()

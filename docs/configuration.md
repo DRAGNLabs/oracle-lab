@@ -1,9 +1,9 @@
 # Configuration reference
 
-Oracle Bench runs one benchmark instance from a YAML file:
+Oracle Lab runs one benchmark instance from a YAML file:
 
 ```sh
-uv run oracle-bench run configs/smoke.yaml
+uv run oracle-lab run configs/smoke.yaml
 ```
 
 A batch manifest runs several independent configurations:
@@ -18,7 +18,7 @@ execution:
 output: ../../batches
 ```
 
-Run it with `oracle-bench batch <manifest>`. Paths are relative to the manifest.
+Run it with `oracle-lab batch <manifest>`. Paths are relative to the manifest.
 `configs/validation/batch.yaml` is an example.
 
 How a batch runs:
@@ -26,7 +26,7 @@ How a batch runs:
 - Every job configuration is validated and hashed before any job starts.
 - Jobs run one at a time. A failed job does not stop the others.
 - The aggregate JSON and Markdown are rewritten after every job.
-- `oracle-bench batch --resume <batch-directory>` continues an unfinished batch.
+- `oracle-lab batch --resume <batch-directory>` continues an unfinished batch.
 
 A run configuration has six top-level sections: `source`, `agent`, `judge`
 (optional), `task`, `limits`, and `output`. Only `source.instance`,
@@ -122,7 +122,7 @@ The alias must belong to `source.kind`; a mismatch fails to load.
 ### `source.revision`
 
 - **Type:** 40-character commit SHA
-- **Default:** Oracle Bench's pinned revision for the selected dataset
+- **Default:** Oracle Lab's pinned revision for the selected dataset
 
 The commit of the Hugging Face dataset repository. Leave it unset unless you
 need a different dataset version. It is not the buggy code's commit; that is the
@@ -143,7 +143,7 @@ need a different split.
 - **Default:** null
 
 A local JSON record in the selected dataset's format, for offline runs and
-fixtures. When it is set, Oracle Bench does not contact Hugging Face. The record
+fixtures. When it is set, Oracle Lab does not contact Hugging Face. The record
 must have:
 
 - nonempty `instance_id`, `repo`, `base_commit`, `patch`, and `test_patch`
@@ -153,7 +153,9 @@ must have:
 - a `FAIL_TO_PASS` that is a list of test IDs, or a JSON-encoded list.
 
 A SWE-rebench V2 record must also have `language: python` and a nonempty
-`image_name`.
+`image_name`. It must be labeled as a bug fix only: every label in
+`meta.llm_metadata.pr_categories`, which the dataset's own model assigned, must
+end in `_bug`. Feature, enhancement, mixed, and unlabeled records are refused.
 
 The resolved record, golden repair, and reference tests are saved privately in
 `instance.json`. The generation agent never sees them.
@@ -232,13 +234,12 @@ Codex picks its credential from the provider alone.
 
 The optional judge rates the generated tests, with access to private evidence.
 When this section is present, `run` calls the judge after paired evaluation.
-`oracle-bench judge runs/<run-id>` reruns the same stage from saved evidence.
+`oracle-lab judge runs/<run-id>` reruns the same stage from saved evidence.
 Without this section, a run makes no judge model call.
 
 ```yaml
 judge:
   rubric: ../prompts/judge/generated-test-evaluation-rubric.md
-  instructions: ../prompts/judge/generated-test-instructions.md
   harness: claude
   provider: anthropic
   model: haiku
@@ -251,15 +252,11 @@ judge:
 A run with a judge checks for the judge credential before generation starts. A
 missing credential fails the run before it spends anything.
 
-`judge.rubric` and `judge.instructions` are both required. Their paths are
-relative to the configuration file. A run copies both files to `judge/rubric.md`
-and `judge/instructions.md` when it starts. A later `oracle-bench judge` then
-uses the same text.
-
-The instructions tell the judge what the workspace holds and what to return.
-`$root` in them becomes the workspace path inside the container. The rubric
-defines the labels. The two are joined, instructions first, into
-`judge/prompt.md`, the exact text sent to the model.
+`judge.rubric` is required. Its path is relative to the configuration file. The
+rubric is the whole judge prompt: it says what the workspace holds, defines the
+labels, and says what to return. A run copies it to `judge/rubric.md` when it
+starts, so a later `oracle-lab judge` uses the same text. `judge/prompt.md`
+records the exact text sent to the model.
 
 Every other field works as it does under `agent`, except `multi_agent`, which is
 always `false`.
@@ -280,7 +277,7 @@ this file. It may use these variables:
 - `${test_target}`: a localized run's target, one line per file, as saved in
   `inputs/target.json`. See [`task.scope`](#taskscope).
 
-Oracle Bench fills them in and saves the exact text sent as `prompt.txt`. Write
+Oracle Lab fills them in and saves the exact text sent as `prompt.txt`. Write
 `$$` for a literal dollar sign.
 
 ### `task.scope`
@@ -372,7 +369,7 @@ Parent directory for timestamped run directories.
 
 ## Resolved-only sections
 
-`config.resolved.yaml` adds `runtime` and `toolchain` sections. Oracle Bench
+`config.resolved.yaml` adds `runtime` and `toolchain` sections. Oracle Lab
 fills them in from the SWE-bench instance and its own pinned versions. An input
 file that sets either is rejected.
 
@@ -384,11 +381,11 @@ file that sets either is rejected.
   OpenCode versions), and the pytest version.
 
 A run cannot pin its own CLI versions. They are read from
-`src/oracle_bench/container/docker/package.json`, so upgrading a CLI means
+`src/oracle_lab/container/docker/package.json`, so upgrading a CLI means
 changing that file and its lockfile. The SWE-bench adapter overrides pytest when
 the project's Python cannot run the default.
 
-The resolved file also spells out every default. `oracle-bench evaluate` reads
+The resolved file also spells out every default. `oracle-lab evaluate` reads
 it. Edit the small input file for new runs. Treat the resolved file as a record
 of the run, not as input.
 
@@ -398,7 +395,7 @@ Task classification has its own YAML format, because it labels a problem once
 rather than running an agent on it. Run it with:
 
 ```sh
-uv run oracle-bench classify configs/classification/example.yaml
+uv run oracle-lab classify configs/classification/example.yaml
 ```
 
 Its top-level fields:

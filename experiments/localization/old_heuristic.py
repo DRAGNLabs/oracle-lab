@@ -1,6 +1,6 @@
-"""Oracle Bench's old diff-text target heuristic, frozen for comparison.
+"""Oracle Lab's old diff-text target heuristic, frozen for comparison.
 
-Copied unchanged from `src/oracle_bench/instance/swebench.py` at the commit before
+Copied unchanged from `src/oracle_lab/instance/swebench.py` at the commit before
 `4a85d45`, which removed it. `evaluate.py` scores it against the AST method.
 """
 

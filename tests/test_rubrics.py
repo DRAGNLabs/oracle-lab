@@ -6,38 +6,40 @@ from pathlib import Path
 
 import pytest
 
-from oracle_bench.classification.contracts import (
+from oracle_lab.classification.contracts import (
     InScopeClassification,
     OutOfScopeClassification,
     parse_classification,
 )
-from oracle_bench.judge.contracts import JudgmentLabels, parse_judgment
+from oracle_lab.judge.contracts import JudgmentLabels, parse_judgment
 
 RUBRICS = Path(__file__).parents[1] / "prompts/judge"
 JUDGE_RUBRIC = RUBRICS / "generated-test-evaluation-rubric.md"
 CLASSIFICATION_RUBRIC = RUBRICS / "task-classification-rubric.md"
-CLASSIFICATION_FACETS = {
-    "Facet A": "task_nature",
-    "Facet B": "defect_mechanisms",
-    "Facet C": "primary_assertion_target",
-    "Facet D": "required_test_setup",
-    "Facet E": "code_only_oracle_availability",
-    "Facet F": "required_test_scope",
-    "Facet G": "benchmark_quality",
-}
+CLASSIFICATION_FIELDS = [
+    "task_nature",
+    "defect_mechanisms",
+    "primary_assertion_target",
+    "required_test_setup",
+    "code_only_oracle_availability",
+    "required_test_scope",
+    "benchmark_quality",
+]
 
 
-def sections(path: Path) -> dict[str, set[str]]:
-    """Each `## ` heading's bulleted labels, without the `null` placeholder."""
+def questions(path: Path) -> dict[str, set[str]]:
+    """Each `## Question N: `field`` section's bulleted labels, without `null`."""
     found: dict[str, set[str]] = {}
-    heading = None
+    field = None
     for line in path.read_text().splitlines():
         if line.startswith("## "):
-            heading = line[3:]
-            found[heading] = set()
-        elif heading and (match := re.match(r"- `([a-z_]+)`:", line)):
-            found[heading].add(match.group(1))
-    return {heading: labels - {"null"} for heading, labels in found.items() if labels}
+            match = re.fullmatch(r"## Question \d+: `([a-z_]+)`", line)
+            field = match.group(1) if match else None
+            if field:
+                found[field] = set()
+        elif field and (match := re.match(r"- `([a-z_]+)`:", line)):
+            found[field].add(match.group(1))
+    return {field: labels - {"null"} for field, labels in found.items()}
 
 
 def allowed(model: type, field: str) -> set[str]:
@@ -59,23 +61,26 @@ def allowed(model: type, field: str) -> set[str]:
     "field", ["tests_issue", "attempt_detail", "no_attempt_reason", "cheating"]
 )
 def test_judge_rubric_labels_are_exactly_what_the_parser_accepts(field):
-    (labels,) = [
-        labels for heading, labels in sections(JUDGE_RUBRIC).items() if f"`{field}`" in heading
-    ]
-    assert labels == allowed(JudgmentLabels, field)
+    assert questions(JUDGE_RUBRIC)[field] == allowed(JudgmentLabels, field)
 
 
-@pytest.mark.parametrize("facet,field", CLASSIFICATION_FACETS.items())
-def test_classification_rubric_labels_are_exactly_what_the_parser_accepts(facet, field):
-    (labels,) = [
-        labels
-        for heading, labels in sections(CLASSIFICATION_RUBRIC).items()
-        if heading.startswith(facet + ":")
-    ]
+@pytest.mark.parametrize("field", CLASSIFICATION_FIELDS)
+def test_classification_rubric_labels_are_exactly_what_the_parser_accepts(field):
+    labels = questions(CLASSIFICATION_RUBRIC)[field]
     accepted = allowed(InScopeClassification, field)
     if field == "task_nature":
         accepted |= allowed(OutOfScopeClassification, field)
     assert labels == accepted
+
+
+def test_both_rubrics_ask_exactly_the_fields_their_parsers_read():
+    assert list(questions(JUDGE_RUBRIC)) == [
+        "tests_issue",
+        "attempt_detail",
+        "no_attempt_reason",
+        "cheating",
+    ]
+    assert list(questions(CLASSIFICATION_RUBRIC)) == CLASSIFICATION_FIELDS
 
 
 def output_examples(path: Path) -> list[str]:

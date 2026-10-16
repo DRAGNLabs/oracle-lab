@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Oracle Lab review</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/static/vendor/github.min.css" media="(prefers-color-scheme: light)">
+  <link rel="stylesheet" href="/static/vendor/github-dark.min.css" media="(prefers-color-scheme: dark)">
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/vendor/highlight.min.js"></script>
+  <script src="/static/vendor/marked.min.js"></script>
+  <script src="/static/app.js" type="module"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="home" href="#/">Oracle Lab review</a>
+    <span class="spacer"></span>
+    <span class="rater" id="rater"></span>
+    <button type="button" class="help-button" id="help-button" aria-haspopup="dialog">How to review</button>
+  </header>
+
+  <main id="app" aria-live="polite"></main>
+
+  <dialog id="help" aria-labelledby="help-title">
+    <h2 id="help-title">How to review</h2>
+    <p>
+      You are rating the judge's answers. You are not answering the questions
+      yourself.
+    </p>
+    <p>
+      For each question, read the judge's answer and its justification, check
+      them against the evidence, and choose one rating:
+    </p>
+    <dl id="help-ratings"></dl>
+    <p>
+      Rate each question on its own. If an earlier answer is wrong, rate the
+      later ones as if it were right. The stage rubric defines every question
+      and label.
+    </p>
+    <p class="keys">
+      <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> rate the selected question.
+      <kbd>j</kbd> and <kbd>k</kbd> move between questions.
+      <kbd>Ctrl</kbd> <kbd>P</kbd> finds a file.
+    </p>
+    <form method="dialog"><button class="primary" autofocus>Start reviewing</button></form>
+  </dialog>
+
+  <dialog id="finder" aria-label="Find a file">
+    <input type="search" id="finder-input" placeholder="Type part of a file path" autocomplete="off" spellcheck="false">
+    <ul id="finder-results" role="listbox"></ul>
+  </dialog>
+</body>
+</html>

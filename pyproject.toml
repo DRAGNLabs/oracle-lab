@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "oracle-bench"
+name = "oracle-lab"
 version = "0.1.0"
 description = "Paired-version evaluation of agent-generated unit tests"
 requires-python = ">=3.11"
@@ -20,19 +20,21 @@ dev = ["pytest>=8,<9", "ruff>=0.11,<1"]
 analysis = ["matplotlib>=3.8,<4", "ipykernel>=6,<7"]
 
 [project.scripts]
-oracle-bench = "oracle_bench.cli:main"
+oracle-lab = "oracle_lab.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-oracle_bench = [
+oracle_lab = [
     "container/helpers/*.py",
     "container/docker/*.Dockerfile",
     "container/docker/package*.json",
     "container/docker/*.md",
     "judge/templates/*.md",
     "judge/templates/*.json",
+    "web/static/*",
+    "web/static/vendor/*",
 ]
 
 [tool.pytest.ini_options]

@@ -9,41 +9,36 @@ from pathlib import Path
 import docker
 import pytest
 import yaml
-from fixtures import DOCKERFILES, HELPERS, write_submission
+from fixtures import DOCKERFILES, HELPERS, judgment_labels, write_submission
 
-from oracle_bench.config import JudgeConfig, load_config
-from oracle_bench.container.images import build_image
-from oracle_bench.container.sandbox import Profile, open_sandbox
-from oracle_bench.evaluation import run_submission
-from oracle_bench.evaluation.outcomes import pair_results
-from oracle_bench.generation import verify_bundle
-from oracle_bench.instance import write_private_instance_artifacts
-from oracle_bench.io import read_json, write_json
-from oracle_bench.judge.human import (
-    collect_human_judgment,
-    create_human_workspace,
-    remove_human_workspace,
-)
-from oracle_bench.judge.run import judge as run_judge
-from oracle_bench.judge.workspace import JUDGE_ROOT, build_judge_workspace
-from oracle_bench.localization import localize
-from oracle_bench.paths import RunPaths
-from oracle_bench.results import (
+from oracle_lab.config import JudgeConfig, load_config
+from oracle_lab.container.images import build_image
+from oracle_lab.container.sandbox import Profile, open_sandbox
+from oracle_lab.evaluation import run_submission
+from oracle_lab.evaluation.outcomes import pair_results
+from oracle_lab.generation import verify_bundle
+from oracle_lab.instance import write_private_instance_artifacts
+from oracle_lab.io import read_json, write_json
+from oracle_lab.judge.run import judge as run_judge
+from oracle_lab.judge.workspace import JUDGE_ROOT, build_judge_workspace
+from oracle_lab.localization import localize
+from oracle_lab.paths import RunPaths
+from oracle_lab.results import (
     read_evaluation_result,
     read_instance_record,
     read_localized_target,
     write_result,
 )
-from oracle_bench.run import reevaluate
+from oracle_lab.run import reevaluate
 
 pytestmark = pytest.mark.docker
 
 
 def test_local_sdk_build_exec_and_copy(tmp_path):
     """Opt-in image/API smoke check using only a previously prepared runtime."""
-    saved = os.environ.get("ORACLE_BENCH_SMOKE_RUN")
+    saved = os.environ.get("ORACLE_LAB_SMOKE_RUN")
     if not saved:
-        pytest.skip("Set ORACLE_BENCH_SMOKE_RUN to use a local prepared runtime")
+        pytest.skip("Set ORACLE_LAB_SMOKE_RUN to use a local prepared runtime")
     saved = Path(saved).resolve()
     saved_paths = RunPaths.open(saved)
     config = load_config(saved_paths.config, resolved=True)
@@ -106,17 +101,14 @@ def test_local_sdk_build_exec_and_copy(tmp_path):
 
 def test_reconstruct_privileged_judge_workspace(tmp_path, request):
     """Build both judge views from a saved run without calling a model."""
-    saved = os.environ.get("ORACLE_BENCH_SMOKE_RUN")
+    saved = os.environ.get("ORACLE_LAB_SMOKE_RUN")
     if not saved:
-        pytest.skip("Set ORACLE_BENCH_SMOKE_RUN to use a completed saved run")
+        pytest.skip("Set ORACLE_LAB_SMOKE_RUN to use a completed saved run")
     saved = Path(saved).resolve()
     saved_paths = RunPaths.open(saved)
     config = load_config(saved_paths.config, resolved=True)
     config.judge = JudgeConfig(
         rubric=str(Path(__file__).parents[1] / "prompts/judge/generated-test-evaluation-rubric.md"),
-        instructions=str(
-            Path(__file__).parents[1] / "prompts/judge/generated-test-instructions.md"
-        ),
         harness="claude",
         model="judge-fixture",
         limit={"kind": "wall_seconds", "value": 300},
@@ -182,15 +174,7 @@ def test_reconstruct_privileged_judge_workspace(tmp_path, request):
     monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "credential-fixture")
 
     def fake_judge_executable(sandbox, turn):
-        payload = json.dumps(
-            {
-                "no_attempt_reason": None,
-                "tests_issue": "unsure",
-                "attempt_detail": None,
-                "cheating": "no",
-                "rationale": "The deterministic smoke judge verified that all workspace evidence is readable.",
-            }
-        )
+        payload = json.dumps(judgment_labels(tests_issue="unsure", attempt_detail=None))
         script = (
             "import pathlib; "
             "assert pathlib.Path('/oracle-judge/evidence/paired-results.json').is_file(); "
@@ -216,55 +200,12 @@ def test_reconstruct_privileged_judge_workspace(tmp_path, request):
             "errors": [],
         }
 
-    monkeypatch.setattr("oracle_bench.harnesses.claude.run_turn", fake_judge_executable)
+    monkeypatch.setattr("oracle_lab.harnesses.claude.run_turn", fake_judge_executable)
 
     run_judge(config, paths)
 
     assert read_json(paths.judge.judgment)["status"] == "completed"
     assert read_json(paths.judge.result)["model"] == "judge-fixture"
-
-    workspace = create_human_workspace(config, paths, "smoke_rater")
-    container_name = workspace.splitlines()[0].removeprefix("Container: ")
-    human = client.containers.get(container_name)
-    assert human.attrs["HostConfig"]["NetworkMode"] == "none"
-    assert human.exec_run(["test", "-w", JUDGE_ROOT + "/output"], user="10001:10001").exit_code == 0
-    assert (
-        human.exec_run(["test", "!", "-w", JUDGE_ROOT + "/rubric.md"], user="10001:10001").exit_code
-        == 0
-    )
-    assert (
-        human.exec_run(
-            ["test", "!", "-w", config.runtime.workdir + "/.git"], user="10001:10001"
-        ).exit_code
-        == 0
-    )
-    assert (
-        human.exec_run(
-            ["test", "!", "-e", JUDGE_ROOT + "/judgment.json"], user="10001:10001"
-        ).exit_code
-        == 0
-    )
-    human_rating = json.dumps(
-        {
-            "no_attempt_reason": None,
-            "tests_issue": "unsure",
-            "attempt_detail": None,
-            "cheating": "no",
-            "rationale": "The human-workspace smoke fixture validates collection.",
-        }
-    )
-    write_draft = (
-        "import pathlib; "
-        f"pathlib.Path('/oracle-judge/output/judgment.json').write_text({human_rating!r})"
-    )
-    assert (
-        human.exec_run([config.runtime.python, "-c", write_draft], user="10001:10001").exit_code
-        == 0
-    )
-    collected = collect_human_judgment(container_name)
-    assert read_json(collected)["status"] == "completed"
-    assert read_json(collected.parent / "provenance.json")["rater"] == "smoke_rater"
-    remove_human_workspace(container_name)
 
 
 # Deliberately handwritten evaluator probes, not benchmark predictions.
@@ -290,9 +231,9 @@ def test_fail_on_both():
 
 @pytest.mark.parametrize("visibility", ["keep", "hide_all"])
 def test_real_requests_pair_and_artifact_copy(tmp_path, visibility, monkeypatch, request):
-    saved = os.environ.get("ORACLE_BENCH_SMOKE_RUN")
+    saved = os.environ.get("ORACLE_LAB_SMOKE_RUN")
     if not saved:
-        pytest.skip("Set ORACLE_BENCH_SMOKE_RUN to a run with a prepared Requests smoke image")
+        pytest.skip("Set ORACLE_LAB_SMOKE_RUN to a run with a prepared Requests smoke image")
     saved = Path(saved).resolve()
     saved_paths = RunPaths.open(saved)
     config = load_config(saved_paths.config, resolved=True)
@@ -332,9 +273,9 @@ def test_real_requests_pair_and_artifact_copy(tmp_path, visibility, monkeypatch,
 
 
 def test_localize_reads_the_saved_image_and_reproduces_the_saved_target(tmp_path, request):
-    saved = os.environ.get("ORACLE_BENCH_SMOKE_RUN")
+    saved = os.environ.get("ORACLE_LAB_SMOKE_RUN")
     if not saved:
-        pytest.skip("Set ORACLE_BENCH_SMOKE_RUN to a localized run")
+        pytest.skip("Set ORACLE_LAB_SMOKE_RUN to a localized run")
     saved_paths = RunPaths.open(Path(saved).resolve())
     if not saved_paths.target.is_file():
         pytest.skip("The saved run is not localized")
@@ -366,9 +307,9 @@ def record_removal_step() -> str:
 
 @pytest.mark.parametrize("planted,builds", [("/swebench_matterhorn", True), ("/elsewhere", False)])
 def test_runtime_build_removes_or_refuses_a_task_record(tmp_path, planted, builds):
-    saved = os.environ.get("ORACLE_BENCH_SMOKE_RUN")
+    saved = os.environ.get("ORACLE_LAB_SMOKE_RUN")
     if not saved:
-        pytest.skip("Set ORACLE_BENCH_SMOKE_RUN to use a local prepared runtime")
+        pytest.skip("Set ORACLE_LAB_SMOKE_RUN to use a local prepared runtime")
     saved_paths = RunPaths.open(Path(saved).resolve())
     platform = load_config(saved_paths.config, resolved=True).require_runtime().platform
     context = tmp_path / "context"

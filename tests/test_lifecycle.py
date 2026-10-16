@@ -15,21 +15,21 @@ from fixtures import (
     submission_manifest,
 )
 
-import oracle_bench.judge.run as judge_module
-import oracle_bench.preflight as preflight_module
-import oracle_bench.run as run_module
-from oracle_bench.config import JudgeConfig, RuntimeConfig, load_config
-from oracle_bench.evaluation import archive_previous_evaluation
-from oracle_bench.harnesses import require_credentials
-from oracle_bench.io import read_json, write_json
-from oracle_bench.paths import RunPaths
-from oracle_bench.results import (
+import oracle_lab.judge.run as judge_module
+import oracle_lab.preflight as preflight_module
+import oracle_lab.run as run_module
+from oracle_lab.config import JudgeConfig, RuntimeConfig, load_config
+from oracle_lab.evaluation import archive_previous_evaluation
+from oracle_lab.harnesses import require_credentials
+from oracle_lab.io import read_json, write_json
+from oracle_lab.paths import RunPaths
+from oracle_lab.results import (
     EvaluationResult,
     LocalizedTarget,
     SubmissionManifest,
     write_result,
 )
-from oracle_bench.run import completion_state
+from oracle_lab.run import completion_state
 
 SAMPLE = RUN_CONFIG
 
@@ -85,11 +85,8 @@ def configured_pipeline(tmp_path, with_judge):
     if with_judge:
         rubric = tmp_path / "rubric.md"
         rubric.write_text("# Rubric\n")
-        instructions = tmp_path / "instructions.md"
-        instructions.write_text("Judge the submission in $root.\n")
         config.judge = JudgeConfig(
             rubric=str(rubric),
-            instructions=str(instructions),
             harness="claude",
             model="judge-model",
             limit={"kind": "wall_seconds", "value": 300},
@@ -128,7 +125,7 @@ def install_pipeline_fakes(monkeypatch, runtime, instance, judge_effect=None):
 
     # Fake the turn itself, not the stage. judge_stage's own failure handling then
     # runs for real, which is what these tests are checking.
-    judge_sandbox = context_of(Mock(helpers="/opt/oracle-bench/container-helpers"))
+    judge_sandbox = context_of(Mock(helpers="/opt/oracle-lab/container-helpers"))
 
     def judge_effectively(sandbox, request):
         if judge_effect is not None:
@@ -419,14 +416,10 @@ def test_reevaluation_marks_existing_judgment_stale_without_calling_a_model(tmp_
     paths = RunPaths.create(run_dir)
     config.judge.rubric = str(paths.judge.rubric)
     paths.judge.rubric.write_text("# Rubric\n")
-    config.judge.instructions = str(paths.judge.instructions)
-    paths.judge.instructions.write_text("Judge the submission in $root.\n")
     paths.config.write_text(yaml.safe_dump(config.model_dump(), sort_keys=False))
     write_json(paths.runtime, {"image": "example/runtime"})
     write_result(paths.instance, instance)
     write_json(paths.judge.judgment, completed_judgment())
-    human_judgment = paths.judge.human.judgments / "rater_1/judgment.json"
-    write_json(human_judgment, read_json(paths.judge.judgment))
     client = Mock()
 
     client_context = context_of(client)
@@ -443,7 +436,6 @@ def test_reevaluation_marks_existing_judgment_stale_without_calling_a_model(tmp_
     judgment = read_json(paths.judge.judgment)
     assert judgment["status"] == "stale"
     assert judgment["previous_judgment"]["tests_issue"] == "yes"
-    assert read_json(human_judgment)["status"] == "stale"
     assert read_json(run_dir / "status.json")["judge_status"] == "stale"
     judge_call.assert_not_called()
 

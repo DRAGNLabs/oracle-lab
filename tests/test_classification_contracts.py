@@ -1,34 +1,20 @@
 import json
 
 import pytest
+from fixtures import in_scope_classification, out_of_scope_classification
 
-from oracle_bench.classification.contracts import parse_classification
-
-
-def valid_classification(**changes):
-    value = {
-        "task_nature": "behavioral_bug",
-        "defect_mechanisms": ["validation_checking"],
-        "primary_assertion_target": "exception_behavior",
-        "required_test_setup": "special_input",
-        "code_only_oracle_availability": "local_contract",
-        "required_test_scope": "unit",
-        "benchmark_quality": "usable",
-        "rationale": "The docstring and repair identify the missing validation.",
-    }
-    value.update(changes)
-    return value
+from oracle_lab.classification.contracts import parse_classification
 
 
 def test_parses_in_scope_classification():
-    result = parse_classification(json.dumps(valid_classification()))
+    result = parse_classification(json.dumps(in_scope_classification()))
 
     assert result.status == "completed"
     assert result.defect_mechanisms == ["validation_checking"]
 
 
 def test_parses_out_of_scope_classification_in_fence():
-    raw = '```json\n{"task_nature":"out_of_scope","rationale":"Adds a feature."}\n```'
+    raw = "```json\n" + json.dumps(out_of_scope_classification()) + "\n```"
 
     result = parse_classification(raw)
 
@@ -39,10 +25,12 @@ def test_parses_out_of_scope_classification_in_fence():
 @pytest.mark.parametrize(
     "value",
     [
-        valid_classification(defect_mechanisms=[]),
-        valid_classification(defect_mechanisms=["control_logic", "control_logic"]),
-        valid_classification(unexpected=True),
-        {"task_nature": "out_of_scope", "rationale": "", "benchmark_quality": "usable"},
+        in_scope_classification(defect_mechanisms=[]),
+        in_scope_classification(defect_mechanisms=["control_logic", "control_logic"]),
+        in_scope_classification(unexpected=True),
+        out_of_scope_classification(justifications={"task_nature": ""}),
+        out_of_scope_classification(benchmark_quality="usable"),
+        in_scope_classification(justifications={"task_nature": "Only one answer is justified."}),
     ],
 )
 def test_invalid_semantic_output_is_explicit(value):

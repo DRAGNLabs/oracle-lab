@@ -4,8 +4,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from oracle_bench.config import load_config
-from oracle_bench.instance.swebench import image_for, resolve, runtime_for
+from oracle_lab.config import load_config
+from oracle_lab.instance.swebench import image_for, resolve, runtime_for
 
 
 def test_image_is_derived_from_instance_id():
@@ -134,7 +134,7 @@ def test_swebench_record_is_read_from_the_pinned_split_file(tmp_path, monkeypatc
     pa = pytest.importorskip("pyarrow")
     pq = pytest.importorskip("pyarrow.parquet")
     huggingface_hub = pytest.importorskip("huggingface_hub")
-    from oracle_bench.instance.swebench import load_record
+    from oracle_lab.instance.swebench import load_record
 
     rows = [
         {"instance_id": "psf__requests-2148", "repo": "psf/requests"},

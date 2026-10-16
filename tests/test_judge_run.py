@@ -1,3 +1,4 @@
+import json
 from contextlib import contextmanager
 from unittest.mock import Mock
 
@@ -9,26 +10,21 @@ from fixtures import (
     context_of,
     evaluation_result,
     instance_record,
+    judgment_labels,
     run_config,
     usage,
     write_submission,
 )
 
-from oracle_bench.config import JudgeConfig, load_config
-from oracle_bench.harnesses import claude
-from oracle_bench.io import read_json, write_json
-from oracle_bench.judge.run import judge as run_judge
-from oracle_bench.paths import RunPaths
-from oracle_bench.results import write_result
+from oracle_lab.config import JudgeConfig, load_config
+from oracle_lab.harnesses import claude
+from oracle_lab.io import read_json, write_json
+from oracle_lab.judge.run import judge as run_judge
+from oracle_lab.paths import RunPaths
+from oracle_lab.results import write_result
 
 SAMPLE = RUN_CONFIG
-VALID_JUDGMENT = """{
-  "no_attempt_reason": null,
-  "tests_issue": "yes",
-  "attempt_detail": "missing_required_condition",
-  "cheating": "no",
-  "rationale": "The generated assertion targets the reported behavior but misses its trigger."
-}"""
+VALID_JUDGMENT = json.dumps(judgment_labels(attempt_detail="missing_required_condition"), indent=2)
 
 
 def judge(paths):
@@ -41,7 +37,6 @@ def saved_run(tmp_path):
     config = run_config("package", image="example/runtime")
     config.judge = JudgeConfig(
         rubric=str(paths.judge.rubric),
-        instructions=str(paths.judge.instructions),
         harness="claude",
         # Set on purpose. The default is openrouter, and these tests want to
         # exercise the anthropic credential path.
@@ -51,7 +46,6 @@ def saved_run(tmp_path):
     )
     paths.config.write_text(yaml.safe_dump(config.model_dump(), sort_keys=False))
     paths.judge.rubric.write_text("# Frozen rubric\n\nChoose labels.\n")
-    paths.judge.instructions.write_text("Inspect $root/buggy/ and $root/golden/.\n\n")
     write_json(paths.runtime, {"image": "example/runtime"})
     write_json(paths.status, {"stage": "finished", "state": "completed", "judge_status": "missing"})
     write_result(paths.instance, instance_record())
@@ -83,10 +77,10 @@ def install_fakes(monkeypatch, final_text=VALID_JUDGMENT, status="completed"):
             "errors": [] if status == "completed" else [{"message": "harness failed"}],
         }
 
-    monkeypatch.setattr("oracle_bench.judge.run.docker_client", client_context)
-    monkeypatch.setattr("oracle_bench.judge.run.open_sandbox", sandbox_context)
-    monkeypatch.setattr("oracle_bench.judge.run.build_judge_workspace", Mock())
-    monkeypatch.setattr("oracle_bench.harnesses.claude.run_turn", claude_turn)
+    monkeypatch.setattr("oracle_lab.judge.run.docker_client", client_context)
+    monkeypatch.setattr("oracle_lab.judge.run.open_sandbox", sandbox_context)
+    monkeypatch.setattr("oracle_lab.judge.run.build_judge_workspace", Mock())
+    monkeypatch.setattr("oracle_lab.harnesses.claude.run_turn", claude_turn)
     return client
 
 
@@ -106,8 +100,7 @@ def test_standalone_judge_saves_prompt_raw_output_provenance_and_labels(tmp_path
     assert result["model"] == "judge-model"
     assert result["harness"] == "claude"
     prompt = paths.judge.prompt.read_text()
-    assert "/oracle-judge/buggy/" in prompt
-    assert prompt.endswith(paths.judge.rubric.read_text())
+    assert prompt == paths.judge.rubric.read_text()
     assert read_json(paths.status)["judge_status"] == "completed"
 
 
@@ -116,7 +109,7 @@ def test_invalid_model_output_is_saved_without_a_retry(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "credential-fixture")
     install_fakes(monkeypatch, final_text="explanation before JSON")
     turn = Mock(wraps=claude.run_turn)
-    monkeypatch.setattr("oracle_bench.harnesses.claude.run_turn", turn)
+    monkeypatch.setattr("oracle_lab.harnesses.claude.run_turn", turn)
 
     judge(paths)
 
@@ -151,9 +144,9 @@ def test_transient_harness_failure_is_archived_and_retried(tmp_path, monkeypatch
             "errors": [],
         }
 
-    monkeypatch.setattr("oracle_bench.harnesses.claude.run_turn", transient_then_complete)
+    monkeypatch.setattr("oracle_lab.harnesses.claude.run_turn", transient_then_complete)
     delay = Mock()
-    monkeypatch.setattr("oracle_bench.harnesses.retry.sleep", delay)
+    monkeypatch.setattr("oracle_lab.harnesses.retry.sleep", delay)
 
     output = judge(paths)
 
@@ -181,9 +174,9 @@ def test_transient_harness_failure_stops_after_three_retries(tmp_path, monkeypat
         }
 
     turn = Mock(side_effect=always_rate_limited)
-    monkeypatch.setattr("oracle_bench.harnesses.claude.run_turn", turn)
+    monkeypatch.setattr("oracle_lab.harnesses.claude.run_turn", turn)
     delay = Mock()
-    monkeypatch.setattr("oracle_bench.harnesses.retry.sleep", delay)
+    monkeypatch.setattr("oracle_lab.harnesses.retry.sleep", delay)
 
     output = judge(paths)
 
@@ -216,9 +209,6 @@ def test_rerun_archives_complete_previous_attempt(tmp_path, monkeypatch):
     paths.judge.judgment.write_text('{"old": true}\n')
     paths.judge.agent.mkdir()
     (paths.judge.agent / "trace.jsonl").write_text("old trace\n")
-    human = paths.judge.human.judgments / "rater_1/judgment.json"
-    human.parent.mkdir(parents=True)
-    human.write_text('{"human": true}\n')
     monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "credential-fixture")
     install_fakes(monkeypatch)
 
@@ -228,8 +218,6 @@ def test_rerun_archives_complete_previous_attempt(tmp_path, monkeypatch):
     assert len(archives) == 1
     assert read_json(archives[0] / "judgment.json") == {"old": True}
     assert (archives[0] / "agent/trace.jsonl").read_text() == "old trace\n"
-    assert read_json(human) == {"human": True}
-    assert not (archives[0] / "human").exists()
     assert paths.judge.rubric.read_text() == "# Frozen rubric\n\nChoose labels.\n"
 
 
@@ -237,7 +225,7 @@ def test_missing_credential_fails_before_docker(tmp_path, monkeypatch):
     paths = saved_run(tmp_path)
     monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
     docker = Mock()
-    monkeypatch.setattr("oracle_bench.judge.run.docker_client", docker)
+    monkeypatch.setattr("oracle_lab.judge.run.docker_client", docker)
 
     with pytest.raises(RuntimeError, match="CLAUDE_CODE_OAUTH_TOKEN"):
         judge(paths)
@@ -250,7 +238,7 @@ def test_missing_evaluation_results_fail_before_docker(tmp_path, monkeypatch):
     paths.results.unlink()
     monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "credential-fixture")
     docker = Mock()
-    monkeypatch.setattr("oracle_bench.judge.run.docker_client", docker)
+    monkeypatch.setattr("oracle_lab.judge.run.docker_client", docker)
 
     with pytest.raises(FileNotFoundError, match="results.json"):
         judge(paths)
@@ -263,7 +251,7 @@ def test_unexpected_harness_error_is_saved_as_failure(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "credential-fixture")
     install_fakes(monkeypatch)
     turn = Mock(side_effect=RuntimeError("transport broke"))
-    monkeypatch.setattr("oracle_bench.harnesses.claude.run_turn", turn)
+    monkeypatch.setattr("oracle_lab.harnesses.claude.run_turn", turn)
 
     judge(paths)
 
@@ -286,7 +274,7 @@ def test_workspace_failure_is_recorded_by_standalone_judge(tmp_path, monkeypatch
     paths = saved_run(tmp_path)
     monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "credential-fixture")
     install_fakes(monkeypatch)
-    monkeypatch.setattr("oracle_bench.judge.run.build_judge_workspace", Mock(side_effect=error))
+    monkeypatch.setattr("oracle_lab.judge.run.build_judge_workspace", Mock(side_effect=error))
 
     judge(paths)
 
@@ -305,7 +293,7 @@ def test_late_failure_keeps_the_judgment_the_attempt_already_produced(tmp_path, 
         yield Mock()
         raise RuntimeError("Could not remove benchmark container")
 
-    monkeypatch.setattr("oracle_bench.judge.run.open_sandbox", failing_cleanup)
+    monkeypatch.setattr("oracle_lab.judge.run.open_sandbox", failing_cleanup)
 
     judge(paths)
 
@@ -325,7 +313,7 @@ def test_missing_runtime_image_does_not_archive_previous_attempt(tmp_path, monke
 
     client_context = context_of(client)
 
-    monkeypatch.setattr("oracle_bench.judge.run.docker_client", client_context)
+    monkeypatch.setattr("oracle_lab.judge.run.docker_client", client_context)
 
     with pytest.raises(RuntimeError, match="runtime image is missing"):
         judge(paths)
@@ -338,7 +326,7 @@ def test_a_tampered_submission_is_rejected_before_docker(tmp_path, monkeypatch):
     (paths.submission / "files/oracle_tests/test_generated.py").write_text("tampered")
     monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "credential-fixture")
     docker = Mock()
-    monkeypatch.setattr("oracle_bench.judge.run.docker_client", docker)
+    monkeypatch.setattr("oracle_lab.judge.run.docker_client", docker)
 
     with pytest.raises(ValueError, match="checksum mismatch"):
         judge(paths)
@@ -353,7 +341,7 @@ def test_empty_submission_is_rejected_before_docker(tmp_path, monkeypatch):
     write_json(paths.submission / "manifest.json", manifest)
     monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "credential-fixture")
     docker = Mock()
-    monkeypatch.setattr("oracle_bench.judge.run.docker_client", docker)
+    monkeypatch.setattr("oracle_lab.judge.run.docker_client", docker)
 
     with pytest.raises(ValueError, match="no generated tests"):
         judge(paths)

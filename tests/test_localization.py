@@ -4,12 +4,12 @@ from contextlib import contextmanager
 import pytest
 from fixtures import RUN_CONFIG, instance_record, run_config
 
-import oracle_bench.localization as localization
-from oracle_bench.localization import production_diffs
-from oracle_bench.localization.patches import apply_patch, parse_patch
-from oracle_bench.localization.target import choose_target, compare
-from oracle_bench.paths import RunPaths
-from oracle_bench.results import LocalizedTarget, TargetFile, read_localized_target, write_result
+import oracle_lab.localization as localization
+from oracle_lab.localization import production_diffs
+from oracle_lab.localization.patches import apply_patch, parse_patch
+from oracle_lab.localization.target import choose_target, compare
+from oracle_lab.paths import RunPaths
+from oracle_lab.results import LocalizedTarget, TargetFile, read_localized_target, write_result
 
 BASE = """\
 import os

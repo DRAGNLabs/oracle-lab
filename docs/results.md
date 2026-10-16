@@ -1,6 +1,6 @@
 # Results and artifacts reference
 
-Every `oracle-bench run` creates a timestamped run directory under the configured
+Every `oracle-lab run` creates a timestamped run directory under the configured
 `output` path. It is the complete record of one agent attempt: its inputs, the
 resolved dataset instance, the runtime, the agent's activity, the captured
 submission, the reference check, the paired evaluations, and the report.
@@ -66,11 +66,9 @@ runs/<run-id>/
 │   ├── prompt.md
 │   ├── judgment.raw.txt
 │   ├── judgment.json
-│   ├── human/<opaque-rater-id>/{judgment.raw.json,judgment.json,provenance.json}
-│   ├── human-history/<opaque-rater-id>/<archived rating>/
-│   ├── human-workspaces/<workspace metadata and VS Code files>
-│   ├── human-workspace.log
-│   └── agent/{command.json,version.txt,trace.jsonl,stderr.log,final.txt,result.json}
+│   ├── agent/{command.json,version.txt,trace.jsonl,stderr.log,final.txt,result.json}
+│   ├── reviews/<rater>/{review.json,provenance.json} (after human review)
+│   └── reviews-history/<rater>/<UTC timestamp>/ (replaced reviews)
 ├── judge-history/<archived judge attempts>/
 ├── generation-history/<archived interrupted generation attempts>/
 └── evaluation-history/<archived reevaluations>/
@@ -89,7 +87,7 @@ are not retried; they end with their normal status.
 
 ## Preflight directories
 
-`oracle-bench preflight` checks an instance without calling a model. Each config
+`oracle-lab preflight` checks an instance without calling a model. Each config
 gets a timestamped directory under `<output>/preflight/`, apart from real runs.
 It runs resolve, build, localize (localized configs only), and the reference
 check, the same way a run does, then an environment check:
@@ -103,7 +101,7 @@ check, the same way a run does, then an environment check:
 ├── ground-truth/
 └── environment-check/
     ├── results.json
-    ├── files/<generated directory>/test_oracle_bench_preflight.py
+    ├── files/<generated directory>/test_oracle_lab_preflight.py
     ├── buggy/<execution artifacts>
     └── golden/<execution artifacts>
 ```
@@ -138,10 +136,16 @@ classifications/<instance-id>/<timestamp>-<id>/
 ├── classification.raw.txt
 ├── classification.json
 ├── cost.json
-└── status.json
+├── status.json
+├── reviews/<rater>/{review.json,provenance.json} (after human review)
+└── reviews-history/<rater>/<UTC timestamp>/ (replaced reviews)
 ```
 
-Every `classify` call creates a new attempt, and attempts are never changed.
+Every `classify` call creates a new attempt. The classifier's files are never
+changed; human reviews are added beside them, in the same format as
+[`judge/reviews/`](#judgereviews). Their provenance names
+`classification.json` as the reviewed output and the classifier's harness and
+model from `agent/result.json`.
 
 A run's report finds its classification like this:
 
@@ -156,8 +160,9 @@ to an older attempt.
 `classification.json` holds the instance and rubric hashes and the normalized
 result:
 
-- A completed in-scope result has every rubric facet.
-- An out-of-scope result has only the task nature and the rationale.
+- A completed in-scope result has every rubric question's label, and a
+  `justifications` object with one justification per question.
+- An out-of-scope result has only the task nature and its justification.
 - `invalid_output`, `failed`, and `timed_out` are explicit states.
 
 Beside it, for audit, are the raw final response, the frozen rubric, the harness
@@ -186,12 +191,12 @@ The judge's disposable container receives:
 - the issue and the patches;
 - the saved evaluation evidence.
 
-Oracle Bench verifies the submission bundle before the transfer. It checks every
+Oracle Lab verifies the submission bundle before the transfer. It checks every
 generated file again inside both views. The repository views are not copied back
 to the host. The saved run files and the workspace specification are enough to
 rebuild them.
 
-[Judging](judging.md) covers running the judge and collecting human ratings.
+[Judging](judging.md) covers running the judge.
 
 ## Primary results
 
@@ -207,7 +212,8 @@ The human-readable summary, in this order:
   judge rows name the harness, version, model, provider, and limit.
 - Test outcomes: the paired matrix plus other outcomes, then failure causes per
   version.
-- Judgment: the labels and rationale, or the judge's non-completed state.
+- Judgment: the labels and each question's justification, or the judge's
+  non-completed state.
 - Task classification: the central classification for the problem.
 - Usage: wall time and input, cached input, and output tokens for generation
   and judge.
@@ -215,7 +221,7 @@ The human-readable summary, in this order:
   private ground truth, which is written on the host and never reaches the
   generation container.
 
-`oracle-bench report runs/<run-id>` rebuilds this file from saved data. It runs
+`oracle-lab report runs/<run-id>` rebuilds this file from saved data. It runs
 no tests and calls no model.
 
 The judge shows as `disabled` when the run has no frozen rubric, and as `missing`
@@ -326,9 +332,11 @@ run is not. A cost failure never changes the run's state.
 ### `judge/judgment.json`
 
 The normalized judgment. A completed one has `status`, `tests_issue`,
-`attempt_detail`, `no_attempt_reason`, `cheating`, and `rationale`. A conditional
-field that does not apply is saved as JSON `null`, even when the response used
-the string `"null"`. The raw response is kept as well. The other states:
+`attempt_detail`, `no_attempt_reason`, `cheating`, and `justifications`. A
+conditional field that does not apply is saved as JSON `null`, even when the
+response used the string `"null"`. `justifications` maps each answered question
+to its justification; a question answered `null` has none. The raw response is
+kept as well. The other states:
 
 | Status | Meaning |
 |---|---|
@@ -344,6 +352,21 @@ the string `"null"`. The raw response is kept as well. The other states:
 and `rubric.md` are the exact instructions it got. `agent/result.json` records
 the status, usage, duration, harness, provider, model, CLI version, and wall-time
 limit. The other files in `agent/` match their namesakes under `generation/`.
+
+### `judge/reviews/`
+
+One directory per human rater, written by `oracle-lab review`. See
+[human review](judging.md#human-review).
+
+- `review.json`: `{"ratings": {question: rating}}`, one of `correct`,
+  `defensible`, or `incorrect` for exactly the questions the judge answered.
+- `provenance.json`: what the review was based on. `stage`, `rater`, the
+  reviewed output's path (`judge/judgment.json`) and SHA-256, the judge's
+  harness and model from `agent/result.json`, and the SHA-256 of the stage
+  rubric and of `workspace-spec.json`.
+
+Saving again moves the earlier pair to `reviews-history/<rater>/<UTC
+timestamp>/`.
 
 ## Inputs and reproducibility
 
@@ -438,7 +461,7 @@ the agent's messages, tool calls and their results, errors, standard error, and
 the harness result. It is the best file for reviewing what the agent did.
 
 It cannot show reasoning the provider hid. The CLI may already have truncated
-tool output. It is written once, after generation. `oracle-bench report` never
+tool output. It is written once, after generation. `oracle-lab report` never
 rebuilds it.
 
 ### `generation/trace.jsonl`
@@ -625,7 +648,7 @@ repair, private test, and environment work before any money is spent on a model.
 Running:
 
 ```sh
-uv run oracle-bench evaluate runs/<run-id>
+uv run oracle-lab evaluate runs/<run-id>
 ```
 
 does three things:
@@ -639,9 +662,9 @@ unchanged. Every earlier evaluation stays available for comparison.
 `generation/session.log` belongs to generation, so it is not archived.
 
 Reevaluation marks an existing `judge/judgment.json` as `stale`, because the
-evidence it rated has been replaced. Human judgments become stale for the same
-reason. Each stale record keeps the previous judgment inside it. Reevaluation
-never calls the judge model. Run `oracle-bench judge` to get a new LLM judgment.
+evidence it rated has been replaced. The stale record keeps the previous
+judgment inside it. Reevaluation
+never calls the judge model. Run `oracle-lab judge` to get a new LLM judgment.
 
 ## Empty, optional, and absent files
 
@@ -658,9 +681,26 @@ Some files are normally empty or absent:
 To explain a missing file, read `status.json`, the relevant `execution.json`, and
 the nearest stage log.
 
+## Agreement reports
+
+`oracle-lab agreement` writes a directory, by default
+`agreement/<UTC timestamp>/`, holding:
+
+- `agreement.json`: `created_at`, the `inputs` it read, every `raters` ID, and
+  per stage (`judge`, `classification`) the number of targets and reviews and,
+  for each question with at least one rating, its `label`, `targets`,
+  `ratings` counts, `correct_share`, `acceptable_share` (`correct` or
+  `defensible`), `rater_pairs`, `pairwise_agreement`, and `alpha`. A share or
+  alpha that cannot be computed is `null`. `missing` maps each target that some
+  rater did not review to those raters; `unreviewable` maps each target that
+  could not be reviewed to the reason.
+- `agreement.md`: the same results as tables, with a note on reading alpha.
+
+See [agreement](judging.md#agreement) for what each figure means.
+
 ## Batch artifacts
 
-`oracle-bench batch` writes a batch directory with the original manifest, the
+`oracle-lab batch` writes a batch directory with the original manifest, the
 resolved job list with its checksums, the batch status, `summary.json`, and
 `report.md`.
 
@@ -706,37 +746,3 @@ when no job has a cost.
 The Markdown report shows a short per-run comparison and the label count tables.
 The full cross-tabulations are only in `summary.json`.
 
-## Agreement artifacts
-
-`oracle-bench agreement` writes `agreement/report.md`, `agreement/summary.json`,
-and `agreement/calibration-sample.json` inside the batch directory.
-
-Agreement is reported separately for each label (`tests_issue`,
-`attempt_detail`, `no_attempt_reason`, and `cheating`). Within each label,
-human–human and human–LLM agreement are also separate. Each result has:
-
-- the number of observations;
-- raw agreement;
-- Cohen's kappa (agreement corrected for chance) for each rater pair, and their
-  mean weighted by observations;
-- a pooled confusion matrix;
-- each disagreement.
-
-Each rater pair also keeps its own expected agreement. A pair counts only when
-both ratings are valid and complete. The possible, available, and missing pair
-counts are all reported. A rater with no rating appears as `status: missing` in
-the per-run records. Kappa is `null` when there are no observations, or when
-expected agreement is one.
-
-The report records the hash of every rubric, LLM prompt, human instruction, and
-workspace specification, plus the judge models. Ratings made under different
-conditions then show up as different, instead of being merged without notice.
-
-`summary.json` holds the agreement figures and per-run ratings.
-`calibration-sample.json` holds the calibration sample, and only it. The sample
-takes up to a fixed number of runs from each group: F→P, F→F, P→P, invalid, and
-submissions the LLM judged unrelated. (F→P means failed on buggy, passed on
-golden.) Runs are ordered by a hash of the instance ID and directory name, so
-moving a batch does not change the choice. A run may fall in more than one
-group. The sample records whether every selected run has at least two completed
-human ratings. Until it does, agreement is not reported as calibrated.

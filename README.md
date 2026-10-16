@@ -1,4 +1,4 @@
-# Oracle Bench
+# Oracle Lab
 
 ## Quickstart
 
@@ -22,14 +22,14 @@ Run from the repository root:
 ```sh
 uv sync --extra dataset --extra dev
 
-uv run oracle-bench run configs/smoke.yaml
+uv run oracle-lab run configs/smoke.yaml
 ```
 
 ## About
 
-Oracle Bench measures how well coding agents write unit tests for code that
+Oracle Lab measures how well coding agents write unit tests for code that
 already contains a bug. The agent gets a buggy repository and a request to write
-tests. It does not see the issue description or the fix. Oracle Bench then runs
+tests. It does not see the issue description or the fix. Oracle Lab then runs
 the same tests against the buggy version and the fixed (golden) version. It
 records the paired pass/fail outcomes.
 
@@ -72,51 +72,35 @@ flowchart TD
 
 ```sh
 # Generate tests and evaluate both code versions.
-uv run oracle-bench run configs/smoke.yaml
+uv run oracle-lab run configs/smoke.yaml
 
 # Check instances before a paid run: build the image, run the reference pair,
 # and run one fixed test the way generated tests run. No model calls.
-uv run oracle-bench preflight configs/smoke.yaml [more configs...]
+uv run oracle-lab preflight configs/smoke.yaml [more configs...]
 
 # Rerun saved tests in fresh containers; no agent or model calls.
-uv run oracle-bench evaluate runs/<run-id>
+uv run oracle-lab evaluate runs/<run-id>
 
 # Run the configured semantic judge after paired evaluation.
-uv run oracle-bench judge runs/<run-id>
+uv run oracle-lab judge runs/<run-id>
 
 # Classify one problem independently of a benchmark run.
-uv run oracle-bench classify configs/classification/example.yaml
+uv run oracle-lab classify configs/classification/example.yaml
 
-# Compare saved human and LLM ratings and select a calibration sample.
-uv run oracle-bench agreement batches/<batch-id> --sample-per-stratum 8
+# Rate the LLM judges' answers in a local web page. No Docker or model calls.
+# See docs/human-review.md for sharing review sets with raters.
+uv run oracle-lab review ../oracle-lab-data --rater <your-id>
+
+# Agreement between raters, and how often they found the LLM judges right.
+uv run oracle-lab agreement ../oracle-lab-data
 
 # Rebuild report.md from saved data. The session log is never regenerated.
-uv run oracle-bench report runs/<run-id>
+uv run oracle-lab report runs/<run-id>
 
 # Continue pending or failed jobs without repeating completed jobs.
-uv run oracle-bench batch --resume batches/<batch-id>
+uv run oracle-lab batch --resume batches/<batch-id>
 
-uv run oracle-bench --help
-```
-
-### Human judgment
-
-Create a workspace for a saved run:
-
-```sh
-uv run oracle-bench judge-workspace create runs/<run-id> --rater rater_01
-```
-
-In VS Code, run **Dev Containers: Attach to Running Container** and select the
-container printed by the command. Open `/oracle-judge/human-judge.code-workspace`,
-follow `instructions.md` alongside `rubric.md`, and replace the placeholders in
-`output/judgment.json` with the completed judgment.
-
-Back on the host, collect the judgment and remove the container:
-
-```sh
-uv run oracle-bench judge-workspace collect <container-name>
-uv run oracle-bench judge-workspace remove <container-name>
+uv run oracle-lab --help
 ```
 
 ### Configuration and credentials
@@ -161,8 +145,7 @@ Standalone classifications are stored separately under
 
 See the [complete results and artifacts reference](docs/results.md) for the full
 directory layout, JSON fields, logs, evaluation artifacts, and reevaluation
-behavior. [Judging](docs/judging.md) covers the LLM judge, human ratings, and
-agreement analysis.
+behavior. [Judging](docs/judging.md) covers the LLM judge.
 
 For initial batch plots, run `uv sync --extra dataset --extra dev --extra analysis`
 and open [notebooks/initial-results.ipynb](notebooks/initial-results.ipynb) with
@@ -171,7 +154,7 @@ which saved batch to inspect.
 
 ### Development
 
-The package lives in `src/oracle_bench/`. It has one module or package per
+The package lives in `src/oracle_lab/`. It has one module or package per
 pipeline stage, and `run.py` calls each stage once:
 
 - `instance/` resolves a task.
@@ -198,7 +181,7 @@ uv run ruff check src tests
 uv run ruff format --check src tests
 
 # Docker integration checks after a smoke run has prepared its image.
-ORACLE_BENCH_SMOKE_RUN=runs/<run-id> uv run pytest -q -m docker
+ORACLE_LAB_SMOKE_RUN=runs/<run-id> uv run pytest -q -m docker
 ```
 
 Local tests cover configuration, credentials, agent traces, artifacts, pytest

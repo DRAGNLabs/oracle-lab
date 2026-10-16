@@ -3,7 +3,7 @@ import os
 import pytest
 from fixtures import RUN_CONFIG
 
-from oracle_bench import cli
+from oracle_lab import cli
 
 SAMPLE = RUN_CONFIG
 
@@ -104,59 +104,6 @@ def test_classify_loads_credentials_and_uses_its_own_config(tmp_path, monkeypatc
     assert cli.main(["classify", "classification.yaml"]) == 0
 
 
-def test_human_workspace_commands_are_offline_and_dispatch_explicit_actions(tmp_path, monkeypatch):
-    def unexpected_load(*args, **kwargs):
-        pytest.fail("Human workspace commands must not load model credentials")
-
-    calls = []
-    monkeypatch.setattr(cli, "load_dotenv", unexpected_load)
-    monkeypatch.setattr(cli, "_load_saved_run", lambda path: (object(), cli.RunPaths.open(path)))
-    monkeypatch.setattr(
-        cli,
-        "create_human_workspace",
-        lambda config, paths, rater: calls.append(("create", paths.root, rater)) or "created",
-    )
-    monkeypatch.setattr(
-        cli,
-        "collect_human_judgment",
-        lambda name, archive_existing: (
-            calls.append(("collect", name, archive_existing)) or tmp_path / "judgment.json"
-        ),
-    )
-    monkeypatch.setattr(
-        cli,
-        "remove_human_workspace",
-        lambda name: calls.append(("remove", name)) or name,
-    )
-
-    assert cli.main(["judge-workspace", "create", str(tmp_path), "--rater", "rater_1"]) == 0
-    assert cli.main(["judge-workspace", "collect", "container", "--archive-existing"]) == 0
-    assert cli.main(["judge-workspace", "remove", "container"]) == 0
-    assert calls == [
-        ("create", tmp_path, "rater_1"),
-        ("collect", "container", True),
-        ("remove", "container"),
-    ]
-
-
-def test_agreement_command_is_offline(tmp_path, monkeypatch):
-    def unexpected_load(*args, **kwargs):
-        pytest.fail("Agreement analysis must not load model credentials")
-
-    monkeypatch.setattr(cli, "load_dotenv", unexpected_load)
-    monkeypatch.setattr(
-        cli,
-        "analyze_agreement",
-        lambda path, sample_per_stratum: (
-            tmp_path / f"agreement-{sample_per_stratum}.md"
-            if path == tmp_path
-            else pytest.fail("Unexpected batch path")
-        ),
-    )
-
-    assert cli.main(["agreement", str(tmp_path), "--sample-per-stratum", "3"]) == 0
-
-
 def test_preflight_checks_every_config_and_fails_if_any_fails(tmp_path, monkeypatch, capsys):
     def unexpected_load(*args, **kwargs):
         pytest.fail("Preflight must not load credentials")
@@ -174,3 +121,24 @@ def test_preflight_checks_every_config_and_fails_if_any_fails(tmp_path, monkeypa
     output = capsys.readouterr().out
     assert "failed  bad.yaml  reference pair did not reproduce" in output
     assert f"passed  good.yaml  {tmp_path / 'good'}" in output
+
+
+def test_review_serves_the_page_without_loading_credentials(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "load_dotenv", lambda *a, **k: pytest.fail("No credentials"))
+    monkeypatch.setattr(cli, "serve", lambda *args, **kwargs: calls.append((args, kwargs)) or 0)
+
+    assert cli.main(["review", str(tmp_path), "--rater", "rater-1", "--no-browser"]) == 0
+    assert calls == [((tmp_path, "rater-1"), {"port": 0, "open_browser": False})]
+
+
+def test_agreement_prints_where_it_saved(tmp_path, monkeypatch, capsys):
+    calls = []
+    monkeypatch.setattr(cli, "load_dotenv", lambda *a, **k: pytest.fail("No credentials"))
+    monkeypatch.setattr(
+        cli, "agreement", lambda paths, output: calls.append((paths, output)) or tmp_path
+    )
+
+    assert cli.main(["agreement", str(tmp_path), "--output", str(tmp_path / "out")]) == 0
+    assert calls == [([tmp_path], tmp_path / "out")]
+    assert capsys.readouterr().out.strip() == str(tmp_path)

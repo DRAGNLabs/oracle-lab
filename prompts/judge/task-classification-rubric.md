@@ -1,41 +1,66 @@
-# Oracle Bench task-classification rubric
+# Oracle Lab task-classification rubric
 
-Use this rubric to classify one Oracle Bench task. It is written for either a
+Use this rubric to classify one Oracle Lab task. It is written for either a
 human rater or an LLM judge.
 
-Oracle Bench studies a different version of a SWE-bench task. A test writer
-receives the buggy repository checkout and a general instruction to write
-tests. It does not receive the issue, gold repair, reference test, or existing
-tests. The evaluation checks whether a new test fails on the buggy checkout and
-passes after the hidden gold repair is applied.
+Oracle Lab studies a different version of a task from a SWE-bench-style
+dataset. A test writer receives the buggy repository checkout and a general
+instruction to write tests. It does not receive the issue, gold repair,
+reference test, or existing tests. The evaluation checks whether a new test fails
+on the buggy checkout and passes after the hidden gold repair is applied.
 
-This rubric classifies the SWE-bench task itself: its nature, defect mechanism,
-the setup needed to reproduce it, and the evidence available to infer correct
-behavior. It does not judge whether a particular generated test is good.
+This rubric classifies the task itself: its nature, defect mechanism, the setup
+needed to reproduce it, and the evidence available to infer correct behavior.
+It does not judge whether a particular generated test is good.
 
-## SWE-bench instance fields
+## Task record
 
-The buggy repository checkout is your working directory. The complete SWE-bench
-instance record is available at `/oracle-classification/instance.json`. Its fields
-are:
+The buggy repository checkout is your working directory. The task record is
+available at `/oracle-classification/instance.json`. Its top-level fields are:
 
 - `instance_id`: the task identifier.
 - `repo`: the source repository.
-- `issue_id`, `issue_url`, and `pr_url`: links between the task, its issue, and
-  its pull request.
-- `base_commit`: the buggy revision. The judge also receives a checkout prepared
-  from this repository revision.
-- `problem_statement`: the issue text used by standard SWE-bench repair agents.
-- `patch`: the gold repair.
-- `test_patch`: the developer's reference-test changes.
+- `base_commit`: the buggy revision. Your working directory is a checkout
+  prepared from this revision.
+- `golden_patch`: the gold repair.
+- `reference_test_patch`: the developer's reference-test changes.
+- `reference_test_ids`: the reference tests expected to fail before the repair
+  and pass after it.
+- `source`: the dataset, its revision, and its split.
+- `original_record`: the dataset's own record, unchanged.
+
+The fields of `original_record` depend on `source.kind`. Both supported datasets
+share these:
+
+- `problem_statement`: the issue text given to repair agents.
+- `patch` and `test_patch`: the same gold repair and reference-test changes as
+  above.
 - `FAIL_TO_PASS`: tests expected to fail before the repair and pass after it.
 - `PASS_TO_PASS`: existing tests expected to pass both before and after the
   repair.
-- `version` and `created_at`: repository-version and task-date metadata.
-- `difficulty`: an additional SWE-bench Verified field, when present.
+- `created_at`: the task date.
 
-The judge may inspect all of these fields to understand the task and assess
-benchmark quality. Facet E has a stricter evidence rule stated in that facet.
+SWE-bench (`source.kind` is `swebench`) adds:
+
+- `hints_text`: issue comments written before the repair.
+- `version` and `environment_setup_commit`: environment metadata.
+- `difficulty`: an estimated time to fix, in SWE-bench Verified only.
+
+SWE-rebench V2 (`source.kind` is `swerebench_v2`) adds:
+
+- `pr_description`: the pull request's text.
+- `interface`: a description of the repaired code's signatures and expected
+  behavior, written from the repair.
+- `meta`: pull request metadata. `meta.llm_metadata` holds the dataset's own
+  model-generated labels, such as `pr_categories`, `intent_completeness`, and
+  `detected_issues`, with that model's reasoning.
+- `install_config`, `image_name`, `language`, and `license`: environment and
+  repository metadata.
+
+Inspect any of these fields to understand the task and assess benchmark quality.
+Treat `meta.llm_metadata` as another rater's opinion: reach your own labels
+from the evidence, and do not copy its labels. Question 5 has a stricter
+evidence rule stated in that question.
 
 ## Procedure
 
@@ -43,17 +68,19 @@ benchmark quality. Facet E has a stricter evidence rule stated in that facet.
    behavior that a valid test must fail on in the buggy checkout and pass on
    after the repair.
 2. You must inspect the buggy repository checkout, including the production
-   code relevant to that behavior. Do not classify the task from the instance
+   code relevant to that behavior. Do not classify the task from the task
    record alone.
-3. When deciding Facet E, base the label only on evidence you found in the buggy
-   checkout without tests. Do not use the issue, repair, reference test, or
-   existing tests for that facet.
-4. Classify the task using the facets below.
+3. When answering Question 5, base the label only on evidence you found in the
+   buggy checkout without tests. Do not use the task record or existing tests
+   for that question.
+4. Answer the questions below.
 5. Return the JSON object in the required format. Use the exact label strings.
 
-## Facet A: In-scope task
+## Question 1: `task_nature`
 
-Choose one label that classifies the kind of task this issue is.
+What kind of task is this?
+
+Choose one label.
 
 - `behavioral_bug`: existing behavior violates its intended contract.
 - `performance_problem`: existing behavior violates a time, memory, or other
@@ -62,13 +89,15 @@ Choose one label that classifies the kind of task this issue is.
   documentation-only change, or compatibility request without a faulty existing
   behavior.
 
-If the label is `out_of_scope`, stop here and return only `task_nature` and a
-short `rationale`.
+If the label is `out_of_scope`, stop here and return only `task_nature` and its
+justification.
 
-## Facet B: Defect mechanism
+## Question 2: `defect_mechanisms`
 
-Choose every label that directly describes what is wrong in the buggy code. You may use the provided issue to answer.
-Do not add labels merely because they are downstream effects.
+What is wrong in the buggy code?
+
+Choose every label that directly describes the defect. You may use the provided
+issue to answer. Do not add labels merely because they are downstream effects.
 
 - `control_logic`: wrong branch, condition, ordering, or loop.
 - `computation_algorithm`: wrong calculation, transformation, or algorithm.
@@ -92,9 +121,13 @@ Do not add labels merely because they are downstream effects.
   wrong.
 - `other`: none of the above fits.
 
-## Facet C: Primary assertion target
+## Question 3: `primary_assertion_target`
 
-Choose one label that describes the primary assertion target. Ask: **what does a minimal valid fail-to-pass test directly inspect to prove that buggy and repaired behavior differ?** Classify the direct subject of the assertion, not a downstream consequence.
+What does a minimal valid fail-to-pass test directly inspect to prove that
+buggy and repaired behavior differ?
+
+Choose one label. Classify the direct subject of the assertion, not a
+downstream consequence.
 
 - `return_value_or_status`: a returned value, response, result object, or
   status is wrong.
@@ -115,10 +148,11 @@ For example, an incorrect HTTP request might eventually return the wrong value.
 Use `external_interaction` if the test asserts the request, and
 `return_value_or_status` if it asserts only the returned value.
 
-## Facet D: Required test setup
+## Question 4: `required_test_setup`
 
-Choose one label that describes the setup requires to replicate the issue.
-Ask: **what special setup is needed before the test can exercise the bug?**
+What special setup is needed before the test can exercise the bug?
+
+Choose one label.
 
 - `none`: a direct call or normal use of the feature is enough.
 - `special_input`: a particular value, boundary case, invalid value, or unusual
@@ -134,14 +168,15 @@ If several labels fit, choose the most distinctive prerequisite: the condition
 without which the test cannot reach the bug. For a duplicate-email test that
 needs both an existing user and a duplicate value, choose `existing_state`.
 
-## Facet E: Code-only oracle availability
+## Question 5: `code_only_oracle_availability`
 
-Choose one label that describes where the test oracle can be ascertained.
-Ask: **from the buggy checkout and generation prompt alone,
-where can the test author learn what to assert?**
+From the buggy checkout and generation prompt alone, where can the test author
+learn what to assert?
 
-NOTE: Do not use the issue, repair, reference test, or existing tests as
-evidence. Only consider the buggy repository state without tests.
+Choose one label. Do not use anything from the task record, such as the issue,
+repair, reference test, pull request text, or `interface`, as evidence. Do not
+use existing tests either. Only consider the buggy repository state without
+tests.
 
 - `local_contract`: a signature, type, docstring, error message, or nearby
   production code states the expected behavior.
@@ -162,10 +197,11 @@ Choose the strongest source available. A task can be easy to trigger but still
 be `unavailable_or_ambiguous` if the buggy checkout does not reveal what the
 test should assert.
 
-## Facet F: Required test scope
+## Question 6: `required_test_scope`
 
-Choose one label: the broadest scope a valid test must exercise. You may refer to the
-provided golden test.
+What is the broadest scope a valid test must exercise?
+
+Choose one label. You may refer to the provided reference test.
 
 - `unit`: one function or object can be tested in isolation.
 - `component`: related behavior within one component is required.
@@ -177,13 +213,12 @@ provided golden test.
 - `performance_or_concurrency`: the test must measure resource use or exercise
   concurrent behavior.
 
-## Facet G: Benchmark-quality screen
+## Question 7: `benchmark_quality`
 
-Choose one label that describes the quality of the provided SWE-Bench instance.
-Use the `problem_statement`, `patch`, `test_patch`, `FAIL_TO_PASS`, and
-`PASS_TO_PASS` fields to judge whether the issue, repair, and reference tests
-describe one coherent task. Use the buggy checkout and generation prompt only
-for the two code-only labels below.
+Is this task sound enough to use?
+
+Choose one label. Use any available information, including your previous
+answers.
 
 - `usable`: the issue, repair, and reference tests describe one coherent task,
   and its execution is reliable.
@@ -196,18 +231,22 @@ for the two code-only labels below.
 - `solution_or_oracle_leakage`: material visible to the test writer—the buggy
   checkout or generation prompt—reveals the gold repair or the required
   assertion.
-- `not_reasonably_testable_from_code_only_context`: after using the issue,
-  repair, and reference tests to establish the target behavior, the buggy
-  checkout and generation prompt give no reasonable basis for writing a valid
-  test.
-
-In the rationale, name the specific field, code path, or execution result that
-supports a label other than `usable`.
+- `unfair_without_issue`: the correct behavior is only stated in the issue or
+  its discussion. Nothing in the buggy code suggests it, so a test writer
+  without the issue cannot know what to assert.
 
 ## Required output
 
-For an in-scope task, return JSON in this form. Keep `rationale` to one or two
-sentences and cite the concrete evidence that drove the difficult judgment.
+Return exactly one JSON object with these exact fields and label strings. Do
+not wrap it in a Markdown fence and do not include any other text.
+
+`justifications` holds one justification for each question, keyed by the
+question's field name. Each justification is at least three sentences and cites
+the concrete evidence for that answer: a field of the task record, a code path,
+or an execution result. For a `benchmark_quality` label other than `usable`,
+name the specific evidence that supports it.
+
+For an in-scope task, return:
 
 ```json
 {
@@ -218,7 +257,15 @@ sentences and cite the concrete evidence that drove the difficult judgment.
   "code_only_oracle_availability": "local_contract",
   "required_test_scope": "unit",
   "benchmark_quality": "usable",
-  "rationale": "..."
+  "justifications": {
+    "task_nature": "...",
+    "defect_mechanisms": "...",
+    "primary_assertion_target": "...",
+    "required_test_setup": "...",
+    "code_only_oracle_availability": "...",
+    "required_test_scope": "...",
+    "benchmark_quality": "..."
+  }
 }
 ```
 
@@ -227,6 +274,8 @@ For an out-of-scope task, return:
 ```json
 {
   "task_nature": "out_of_scope",
-  "rationale": "..."
+  "justifications": {
+    "task_nature": "..."
+  }
 }
 ```

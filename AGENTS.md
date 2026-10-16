@@ -35,8 +35,8 @@ Preserve these boundaries:
 - The localized target (`inputs/target.json`) is the one thing derived from the
   golden repair that the agent sees. It names existing files, functions, and
   classes only; never add patch text, changed lines, or expected behavior to it.
-- Keep human raters blinded: their workspace exposes the common input bundle
-  only, never an LLM judgment or another rater's result.
+- Human raters see the LLM judge's output and all of its evidence, but never
+  another rater's review.
 - Never mount the host Docker socket or complete host run directory into the
   generation container.
 - Run agents as the non-root `oracle` user. Docker is the isolation boundary for
@@ -82,6 +82,8 @@ Supporting these:
 - `src/oracle_lab/batch/`: sequential batch execution and its summary.
 - `src/oracle_lab/classification/`: standalone task classification, run with
   `classify` outside the run stages. Reports read the newest matching attempt.
+- `src/oracle_lab/review/`: human review of the LLM judges. `contracts.py`
+  holds the rating scale, the review, and its provenance.
 - `src/oracle_lab/spend.py`: the OpenRouter key spend measured around a run's
   model stages, saved as `cost.json`.
 - `src/oracle_lab/config.py`, `paths.py`, `results.py`: the input contract, the

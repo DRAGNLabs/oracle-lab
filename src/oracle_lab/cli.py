@@ -14,6 +14,7 @@ from oracle_lab.judge.run import judge
 from oracle_lab.paths import RunPaths
 from oracle_lab.preflight import preflight
 from oracle_lab.report import report
+from oracle_lab.review.agreement import agreement
 from oracle_lab.run import reevaluate, run
 from oracle_lab.web.server import serve
 
@@ -83,6 +84,17 @@ def _build_parser() -> argparse.ArgumentParser:
         "--no-browser", action="store_true", help="Print the URL without opening it"
     )
 
+    # Inter-rater agreement and judge quality over saved human reviews.
+    agreement_parser = sub.add_parser(
+        "agreement", help="Compute agreement between human reviews of the LLM judges"
+    )
+    agreement_parser.add_argument(
+        "paths", type=Path, nargs="+", help="Runs, classification attempts, or directories of both"
+    )
+    agreement_parser.add_argument(
+        "--output", type=Path, help="Default: agreement/<UTC timestamp>/ here"
+    )
+
     return parser
 
 
@@ -95,6 +107,9 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _preflight_all(args.configs)
     if args.command == "review":
         return serve(args.path, args.rater, port=args.port, open_browser=not args.no_browser)
+    if args.command == "agreement":
+        print(agreement(args.paths, args.output))
+        return 0
     if args.command == "run":
         output = run(load_config(args.config))
     elif args.command == "batch":

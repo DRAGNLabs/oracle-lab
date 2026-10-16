@@ -100,8 +100,17 @@ git switch -c agreement origin/main
 git merge origin/reviews/<rater-1> origin/reviews/<rater-2>
 ```
 
-Compute agreement from this branch. Do not push it, and never merge it or a rater
-branch into `main`. To refresh it later, delete it and repeat these steps.
+Compute agreement from this branch, running the command from `oracle-lab`:
+
+```sh
+uv run oracle-lab agreement ../oracle-lab-data
+```
+
+It lists any target a rater has not reviewed yet. See
+[agreement](judging.md#agreement) for what it reports.
+
+Do not push the `agreement` branch, and never merge it or a rater branch into
+`main`. To refresh it later, delete it and repeat these steps.
 
 ## For raters
 

@@ -680,6 +680,23 @@ Some files are normally empty or absent:
 To explain a missing file, read `status.json`, the relevant `execution.json`, and
 the nearest stage log.
 
+## Agreement reports
+
+`oracle-lab agreement` writes a directory, by default
+`agreement/<UTC timestamp>/`, holding:
+
+- `agreement.json`: `created_at`, the `inputs` it read, every `raters` ID, and
+  per stage (`judge`, `classification`) the number of targets and reviews and,
+  for each question with at least one rating, its `label`, `targets`,
+  `ratings` counts, `correct_share`, `acceptable_share` (`correct` or
+  `defensible`), `rater_pairs`, `pairwise_agreement`, and `alpha`. A share or
+  alpha that cannot be computed is `null`. `missing` lists each target and the
+  raters without a review of it; `unreviewable` lists each target that could not
+  be reviewed and why.
+- `agreement.md`: the same results as tables, with a note on reading alpha.
+
+See [agreement](judging.md#agreement) for what each figure means.
+
 ## Batch artifacts
 
 `oracle-lab batch` writes a batch directory with the original manifest, the

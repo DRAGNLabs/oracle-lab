@@ -75,7 +75,7 @@ The pipeline stages run in this order, and each is one module or package that
 Supporting these:
 
 - `src/oracle_lab/cli.py`: `run`, `preflight`, `batch`, `evaluate`, `judge`, `classify`,
-  `review`, and `report` command interface.
+  `review`, `agreement`, and `report` command interface.
 - `src/oracle_lab/run.py`: the stage sequence and run status.
 - `src/oracle_lab/preflight.py`: `preflight`, which runs the stages before
   generation plus an environment check, without calling a model.
@@ -86,7 +86,8 @@ Supporting these:
   holds the rating scale, the review, and its provenance; `targets.py` finds
   the judgments and classifications to review and the evidence each judge was
   shown; `sources.py` rebuilds the judge's buggy and golden views from a shallow
-  Git fetch; `store.py` saves a rater's review.
+  Git fetch; `store.py` saves a rater's review; `agreement.py` computes
+  inter-rater agreement and judge quality over saved reviews.
 - `src/oracle_lab/web/`: the local review page. `server.py` serves the review
   targets over HTTP on `127.0.0.1`; `static/` is the page, with pinned libraries
   in `static/vendor/`. It holds no review logic of its own.
@@ -141,8 +142,8 @@ When adding or changing persisted artifacts:
 3. Update `docs/results.md` and report links when applicable.
 4. Add tests for parsing, failure behavior, integrity, or rendering.
 
-Model every persisted contract in `results.py`, `judge/contracts.py`, or
-`classification/contracts.py`, and validate it where container output enters the
+Model every persisted contract in `results.py`, `judge/contracts.py`,
+`classification/contracts.py`, or `review/contracts.py`, and validate it where container output enters the
 host, not at each reader. Test fixtures for these artifacts belong in
 `tests/fixtures.py` so one schema change breaks in one place.
 

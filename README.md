@@ -91,6 +91,9 @@ uv run oracle-lab classify configs/classification/example.yaml
 # See docs/human-review.md for sharing review sets with raters.
 uv run oracle-lab review ../oracle-lab-data --rater <your-id>
 
+# Agreement between raters, and how often they found the LLM judges right.
+uv run oracle-lab agreement ../oracle-lab-data
+
 # Rebuild report.md from saved data. The session log is never regenerated.
 uv run oracle-lab report runs/<run-id>
 

@@ -44,6 +44,17 @@ def read_review(target: ReviewTarget, rater: str) -> Review | None:
     return Review.model_validate(read_json(path)) if path.is_file() else None
 
 
+def read_all_reviews(target: ReviewTarget) -> dict[str, Review]:
+    """Every rater's saved review of the target. Only agreement reads these."""
+    reviews = {}
+    if target.reviews.is_dir():
+        for directory in sorted(target.reviews.iterdir()):
+            path = directory / "review.json"
+            if RATER_ID.match(directory.name) and path.is_file():
+                reviews[directory.name] = Review.model_validate(read_json(path))
+    return reviews
+
+
 def review_directory(target: ReviewTarget, rater: str) -> Path:
     if not RATER_ID.match(rater):
         raise ValueError(f"Rater IDs are letters, digits, '-' and '_', not {rater!r}")

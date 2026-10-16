@@ -59,3 +59,51 @@ def parse_review(raw: str, questions: Collection[str]) -> Review:
             f"not {sorted(review.ratings)}"
         )
     return review
+
+
+Share = Annotated[float, Field(ge=0, le=1)]
+
+
+class QuestionAgreement(StrictModel):
+    """How raters rated one question of one stage, across every target."""
+
+    label: str
+    targets: int  # targets with at least one rating of this question
+    ratings: dict[Rating, int]
+    correct_share: Share | None  # None when there are no ratings
+    acceptable_share: Share | None  # correct or defensible
+    rater_pairs: int  # pairs of raters who rated the same target
+    pairwise_agreement: Share | None  # None without a pair
+    # Krippendorff's alpha for ordinal data; None without pairs or without variation.
+    alpha: Annotated[float, Field(le=1)] | None
+
+
+class StageAgreement(StrictModel):
+    targets: int
+    reviews: int
+    questions: dict[str, QuestionAgreement]
+
+
+class MissingReviews(StrictModel):
+    """A target some raters reviewed and these did not."""
+
+    target: str
+    stage: Literal["judge", "classification"]
+    raters: list[str]
+
+
+class UnreviewableTarget(StrictModel):
+    target: str
+    stage: Literal["judge", "classification"]
+    reason: str
+
+
+class AgreementReport(StrictModel):
+    """Inter-rater agreement and judge quality over a set of reviewed targets."""
+
+    created_at: str
+    inputs: list[str]
+    raters: list[str]
+    stages: dict[Literal["judge", "classification"], StageAgreement]
+    missing: list[MissingReviews]
+    unreviewable: list[UnreviewableTarget]

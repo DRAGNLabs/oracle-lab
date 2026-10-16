@@ -75,3 +75,39 @@ review under `reviews/<rater>/` beside the output it rates (`judge/reviews/` in 
 run); saving again moves the earlier review to `reviews-history/<rater>/`. The page reads only the current rater's
 reviews, never another rater's. Rerunning the judge moves the reviews into
 `judge-history/` with the judgment they rated.
+
+## Agreement
+
+Once raters have reviewed, compute agreement over the reviewed set:
+
+```sh
+uv run oracle-lab agreement ../oracle-lab-data
+```
+
+It takes one or more runs, classification attempts, or directories holding
+`runs/` and `classifications/`, and reads every rater's review. It writes
+`agreement.json` and `agreement.md` to `--output`, or by default to
+`agreement/<UTC timestamp>/` in the current directory. It needs no Docker,
+network, or credentials.
+
+The two stages are reported separately. For each question it reports:
+
+- **Rating counts:** how many `correct`, `defensible`, and `incorrect` ratings
+  the question received across every target and rater.
+- **Judge quality:** the share of ratings that are `correct`, and the share that
+  are `correct` or `defensible`.
+- **Raw agreement:** of every pair of raters who rated the same target, the share
+  that gave the same rating.
+- **Krippendorff's alpha:** agreement beyond what chance would produce, treating
+  the ratings as ordered: `correct`, `defensible`, `incorrect`. So two raters a
+  step apart disagree less than two raters at opposite ends. 1 is perfect
+  agreement and 0 is chance level.
+
+Read alpha beside raw agreement. When nearly every rating is the same, alpha is
+low or undefined even if raters agree, because there is little variation to
+agree on; raw agreement shows that case. Alpha needs at least two raters on some
+target and some variation in the ratings; otherwise it is reported as missing.
+
+Every rater is expected to review every target, so the report also lists each
+target that lacks a review from any rater who reviewed something, and each
+target that could not be reviewed with the reason.

@@ -20,9 +20,9 @@ from oracle_lab.judge.workspace import JUDGE_ROOT, judge_evidence
 from oracle_lab.paths import RunPaths
 from oracle_lab.results import (
     InstanceRecord,
-    SubmissionManifest,
     read_evaluation_result,
     read_instance_record,
+    read_submission_manifest,
 )
 
 Stage = Literal["judge", "classification"]
@@ -79,9 +79,7 @@ class ReviewTarget:
         with TemporaryDirectory(prefix="oracle-review-evidence-") as staging:
             if self.stage == "judge":
                 paths = RunPaths.open(self.root)
-                manifest = SubmissionManifest.model_validate(
-                    read_json(paths.submission / "manifest.json")
-                )
+                manifest = read_submission_manifest(paths.submission / "manifest.json")
                 evaluation = read_evaluation_result(paths.results)
                 rows = judge_evidence(paths, Path(staging), self.instance, evaluation, manifest)
                 workspace = JUDGE_ROOT

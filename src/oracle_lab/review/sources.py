@@ -16,10 +16,9 @@ from tempfile import TemporaryDirectory
 from typing import Literal
 
 from oracle_lab.config import repo_path
-from oracle_lab.io import read_json
 from oracle_lab.localization.patches import parse_patch
 from oracle_lab.paths import RunPaths
-from oracle_lab.results import SubmissionManifest
+from oracle_lab.results import read_submission_manifest
 from oracle_lab.review.targets import ReviewTarget
 
 Touch = Literal["repair", "reference_tests", "submission"]
@@ -58,7 +57,7 @@ def open_views(
     modes: dict[str, int] = {}
     if target.stage == "judge":
         submission = RunPaths.open(target.root).submission
-        manifest = SubmissionManifest.model_validate(read_json(submission / "manifest.json"))
+        manifest = read_submission_manifest(submission / "manifest.json")
         for name, info in manifest.files.items():
             files[name] = (submission / "files" / repo_path(name)).read_bytes()
             modes[name] = info.mode
@@ -103,12 +102,16 @@ def fetch(
         _git(git_dir, "config", "gc.auto", "0")
 
     ref = f"refs/oracle-lab/{base_commit}"
-    if not _has_ref(git_dir, ref):
+    resolve = ("rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}")
+    try:
+        fetched = _git(git_dir, *resolve)
+    except SourceError:
+        # Not cached yet.
         url = remote or f"https://github.com/{repo}"
         _git(git_dir, "fetch", "--quiet", "--depth", "1", "--no-tags", url, f"{base_commit}:{ref}")
-    fetched = _git(git_dir, "rev-parse", "--verify", f"{ref}^{{commit}}").decode().strip()
-    if fetched != base_commit:
-        raise SourceError(f"Fetched {fetched} from {repo}, not {base_commit}")
+        fetched = _git(git_dir, *resolve)
+    if fetched.decode().strip() != base_commit:
+        raise SourceError(f"Fetched {fetched.decode().strip()} from {repo}, not {base_commit}")
     return git_dir
 
 
@@ -161,11 +164,6 @@ def _list_blobs(git_dir: Path, tree: str) -> dict[str, str]:
         if kind == "blob":
             blobs[path] = object_id
     return blobs
-
-
-def _has_ref(git_dir: Path, ref: str) -> bool:
-    command = ["git", "--git-dir", str(git_dir), "show-ref", "--verify", "--quiet", ref]
-    return subprocess.run(command, check=False).returncode == 0
 
 
 def _git(

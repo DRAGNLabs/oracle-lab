@@ -384,6 +384,10 @@ def read_instance_record(path: Path) -> InstanceRecord:
     return InstanceRecord.model_validate(read_json(path))
 
 
+def read_submission_manifest(path: Path) -> SubmissionManifest:
+    return SubmissionManifest.model_validate(read_json(path))
+
+
 def read_localized_target(path: Path) -> LocalizedTarget:
     return LocalizedTarget.model_validate(read_json(path))
 

@@ -25,6 +25,7 @@ from oracle_lab.results import (
     InstanceRecord,
     SubmissionFile,
     SubmissionManifest,
+    read_submission_manifest,
     write_result,
 )
 
@@ -153,7 +154,7 @@ def _files_digest(files: dict[str, SubmissionFile]) -> str:
 def verify_bundle(paths: RunPaths) -> SubmissionManifest:
     """Validate the external bundle before transferring it to either code version."""
     generated = paths.submission
-    manifest = SubmissionManifest.model_validate(read_json(generated / "manifest.json"))
+    manifest = read_submission_manifest(generated / "manifest.json")
     if _files_digest(manifest.files) != manifest.sha256:
         raise ValueError("Generated manifest checksum mismatch")
     root = generated / "files"

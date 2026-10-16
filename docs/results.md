@@ -66,7 +66,9 @@ runs/<run-id>/
 │   ├── prompt.md
 │   ├── judgment.raw.txt
 │   ├── judgment.json
-│   └── agent/{command.json,version.txt,trace.jsonl,stderr.log,final.txt,result.json}
+│   ├── agent/{command.json,version.txt,trace.jsonl,stderr.log,final.txt,result.json}
+│   ├── reviews/<rater>/{review.json,provenance.json} (after human review)
+│   └── reviews-history/<rater>/<UTC timestamp>/ (replaced reviews)
 ├── judge-history/<archived judge attempts>/
 ├── generation-history/<archived interrupted generation attempts>/
 └── evaluation-history/<archived reevaluations>/
@@ -134,10 +136,16 @@ classifications/<instance-id>/<timestamp>-<id>/
 ├── classification.raw.txt
 ├── classification.json
 ├── cost.json
-└── status.json
+├── status.json
+├── reviews/<rater>/{review.json,provenance.json} (after human review)
+└── reviews-history/<rater>/<UTC timestamp>/ (replaced reviews)
 ```
 
-Every `classify` call creates a new attempt, and attempts are never changed.
+Every `classify` call creates a new attempt. The classifier's files are never
+changed; human reviews are added beside them, in the same format as
+[`judge/reviews/`](#judgereviews). Their provenance names
+`classification.json` as the reviewed output and the classifier's harness and
+model from `agent/result.json`.
 
 A run's report finds its classification like this:
 
@@ -343,6 +351,21 @@ to its justification; a question answered `null` has none. The raw response is k
 and `rubric.md` are the exact instructions it got. `agent/result.json` records
 the status, usage, duration, harness, provider, model, CLI version, and wall-time
 limit. The other files in `agent/` match their namesakes under `generation/`.
+
+### `judge/reviews/`
+
+One directory per human rater, written by `oracle-lab review`. See
+[human review](judging.md#human-review).
+
+- `review.json`: `{"ratings": {question: rating}}`, one of `correct`,
+  `defensible`, or `incorrect` for exactly the questions the judge answered.
+- `provenance.json`: what the review was based on. `stage`, `rater`, the
+  reviewed output's path (`judge/judgment.json`) and SHA-256, the judge's
+  harness and model from `agent/result.json`, and the SHA-256 of the stage
+  rubric and of `workspace-spec.json`.
+
+Saving again moves the earlier pair to `reviews-history/<rater>/<UTC
+timestamp>/`.
 
 ## Inputs and reproducibility
 

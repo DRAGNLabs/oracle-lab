@@ -44,7 +44,7 @@ class SourceView:
     def read(self, path: str) -> bytes:
         """One file's contents. Only paths in this view's own listing can be read."""
         if path not in self._blobs:
-            raise SourceError(f"No such file in this view: {path}")
+            raise LookupError(f"No such file in this view: {path}")
         return _git(self._git_dir, "cat-file", "blob", self._blobs[path])
 
 

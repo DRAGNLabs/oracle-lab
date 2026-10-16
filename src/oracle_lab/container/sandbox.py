@@ -30,7 +30,6 @@ class Profile(Enum):
     REFERENCE = "reference"
     JUDGE = "judge"
     CLASSIFICATION = "classification"
-    HUMAN_JUDGE = "human-judge"
 
 
 @dataclass

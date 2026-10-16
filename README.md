@@ -87,6 +87,10 @@ uv run oracle-lab judge runs/<run-id>
 # Classify one problem independently of a benchmark run.
 uv run oracle-lab classify configs/classification/example.yaml
 
+# Rate the LLM judges' answers in a local web page. No Docker or model calls.
+# See docs/human-review.md for sharing review sets with raters.
+uv run oracle-lab review ../oracle-lab-data --rater <your-id>
+
 # Rebuild report.md from saved data. The session log is never regenerated.
 uv run oracle-lab report runs/<run-id>
 

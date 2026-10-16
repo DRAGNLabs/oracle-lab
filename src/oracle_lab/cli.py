@@ -15,6 +15,7 @@ from oracle_lab.paths import RunPaths
 from oracle_lab.preflight import preflight
 from oracle_lab.report import report
 from oracle_lab.run import reevaluate, run
+from oracle_lab.web.server import serve
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -71,6 +72,17 @@ def _build_parser() -> argparse.ArgumentParser:
     report_parser = sub.add_parser("report", help="Render saved results without executing code")
     report_parser.add_argument("run_dir", type=Path)
 
+    # Rate the LLM judges' answers in a local web page. No model calls, no Docker.
+    review_parser = sub.add_parser("review", help="Review LLM judge answers in the browser")
+    review_parser.add_argument(
+        "path", type=Path, help="A run, a classification attempt, or a directory of both"
+    )
+    review_parser.add_argument("--rater", required=True, help="Your rater ID")
+    review_parser.add_argument("--port", type=int, default=0, help="Default: any free port")
+    review_parser.add_argument(
+        "--no-browser", action="store_true", help="Print the URL without opening it"
+    )
+
     return parser
 
 
@@ -81,6 +93,8 @@ def _dispatch(args: argparse.Namespace) -> int:
 
     if args.command == "preflight":
         return _preflight_all(args.configs)
+    if args.command == "review":
+        return serve(args.path, args.rater, port=args.port, open_browser=not args.no_browser)
     if args.command == "run":
         output = run(load_config(args.config))
     elif args.command == "batch":

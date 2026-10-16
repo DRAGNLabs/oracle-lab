@@ -1,72 +1,33 @@
 """Raters browse the judge's buggy and golden views, rebuilt from a shallow Git fetch."""
 
-import dataclasses
-import subprocess
-
 import pytest
-from fixtures import classified_attempt, instance_record, judged_run
+from fixtures import classified_attempt, instance_record, judged_run, upstream_repository
 
 from oracle_lab.review.sources import SourceError, fetch, open_views
 from oracle_lab.review.targets import classification_target, judge_target
 
 GENERATED = "oracle_tests/test_generated.py"
-
-
-def git(directory, *args):
-    command = [
-        "git",
-        "-C",
-        str(directory),
-        "-c",
-        "user.name=Test",
-        "-c",
-        "user.email=t@example.com",
-    ]
-    command += ["-c", "commit.gpgsign=false", *args]
-    return subprocess.run(command, check=True, capture_output=True, text=True).stdout.strip()
+REFERENCE_TESTS = (
+    "diff --git a/tests/test_core.py b/tests/test_core.py\n"
+    "--- a/tests/test_core.py\n+++ b/tests/test_core.py\n@@ -0,0 +1 @@\n+x\n"
+)
 
 
 @pytest.fixture
 def upstream(tmp_path):
-    """An upstream repository at the base commit, and the repair as a Git diff."""
-    repo = tmp_path / "upstream"
-    (repo / "package").mkdir(parents=True)
-    (repo / "package/core.py").write_text("old\n")
-    (repo / "package/gone.py").write_text("removed by the repair\n")
-    (repo / "README.md").write_text("project\n")
-    git(tmp_path, "init", "--quiet", "--initial-branch=main", str(repo))
-    git(repo, "add", ".")
-    git(repo, "commit", "--quiet", "-m", "base")
-    base = git(repo, "rev-parse", "HEAD")
-
-    # Write the repair on a branch, take its diff, and leave main at the base commit.
-    git(repo, "switch", "--quiet", "-c", "fixed")
-    (repo / "package/core.py").write_text("new\n")
-    (repo / "package/added.py").write_text("created by the repair\n")
-    (repo / "package/gone.py").unlink()
-    git(repo, "add", "-A")
-    git(repo, "commit", "--quiet", "-m", "fix")
-    repair = git(repo, "diff", base, "HEAD") + "\n"
-    git(repo, "switch", "--quiet", "main")
-    return repo, base, repair
+    return upstream_repository(tmp_path / "upstream")
 
 
 def remote(upstream):
-    return "file://" + str(upstream[0])
+    return upstream[0]
 
 
 def judged(tmp_path, upstream):
     _, base, repair = upstream
     instance = instance_record(
-        base_commit=base,
-        golden_patch=repair,
-        reference_test_patch=(
-            "diff --git a/tests/test_core.py b/tests/test_core.py\n"
-            "--- a/tests/test_core.py\n+++ b/tests/test_core.py\n@@ -0,0 +1 @@\n+x\n"
-        ),
+        base_commit=base, golden_patch=repair, reference_test_patch=REFERENCE_TESTS
     )
-    target = judge_target(judged_run(tmp_path / "run"))
-    return dataclasses.replace(target, instance=instance)
+    return judge_target(judged_run(tmp_path / "run", instance=instance))
 
 
 def test_the_buggy_view_is_the_base_commit_plus_the_submission(tmp_path, upstream):
@@ -96,8 +57,8 @@ def test_the_golden_view_also_has_the_repair(tmp_path, upstream):
 
 def test_a_classification_has_only_the_buggy_base_commit(tmp_path, upstream):
     _, base, _ = upstream
-    target = classification_target(classified_attempt(tmp_path / "attempt"))
-    target = dataclasses.replace(target, instance=instance_record(base_commit=base))
+    instance = instance_record(base_commit=base)
+    target = classification_target(classified_attempt(tmp_path / "attempt", instance=instance))
 
     views = open_views(target, remote=remote(upstream), cache=tmp_path / "c")
 
@@ -109,7 +70,7 @@ def test_a_classification_has_only_the_buggy_base_commit(tmp_path, upstream):
 def test_only_files_in_the_view_can_be_read(tmp_path, upstream, path):
     views = open_views(judged(tmp_path, upstream), remote=remote(upstream), cache=tmp_path / "c")
 
-    with pytest.raises(SourceError, match="No such file"):
+    with pytest.raises(LookupError, match="No such file"):
         views["buggy"].read(path)
 
 

@@ -50,6 +50,7 @@ class ReviewTarget:
     reviewed_output: Path
     stage_rubric: Path
     workspace_spec: Path
+    agent_result: Path  # the judge turn's result, which names its harness and model
     reviews: Path
     instance: InstanceRecord
     answers: Answers
@@ -111,6 +112,7 @@ def judge_target(paths: RunPaths) -> ReviewTarget:
         reviewed_output=paths.judge.judgment,
         stage_rubric=paths.judge.rubric,
         workspace_spec=paths.judge.workspace_spec,
+        agent_result=paths.judge.result,
         reviews=paths.judge.reviews,
         instance=read_instance_record(paths.instance),
         answers=answers,
@@ -137,6 +139,7 @@ def classification_target(attempt: Path) -> ReviewTarget:
         reviewed_output=output,
         stage_rubric=attempt / "inputs/rubric.md",
         workspace_spec=attempt / "workspace-spec.json",
+        agent_result=attempt / "agent/result.json",
         reviews=attempt / "reviews",
         instance=instance,
         answers=saved.result,

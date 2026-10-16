@@ -12,8 +12,7 @@ dependencies, and the configured Python interpreter. Image preparation then:
    container helpers.
 
 Every container a run starts uses the result: generation, reference, evaluation,
-the judge, and the human-judge workspace. Each run records the image inputs and
-resolved IDs. Tags are derived from content, so an identical build reuses the
+and the judge. Each run records the image inputs and resolved IDs. Tags are derived from content, so an identical build reuses the
 local Docker cache.
 
 ## Trust boundary

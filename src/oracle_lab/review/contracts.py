@@ -14,8 +14,15 @@ from oracle_lab.results import StrictModel
 RATER_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 Rating = Literal["correct", "defensible", "incorrect"]
 RATINGS = get_args(Rating)
-# What the draft holds for each question until the rater chooses.
-PLACEHOLDER = "CHOOSE: " + " | ".join(RATINGS)
+# What each rating means, shown to raters beside its button.
+RATING_DEFINITIONS: dict[Rating, str] = {
+    "correct": "You would give the same answer.",
+    "defensible": (
+        "You would answer differently, but the judge's answer is reasonable given the "
+        "evidence and the stage rubric."
+    ),
+    "incorrect": "The evidence or the stage rubric contradicts the judge's answer.",
+}
 
 
 class Review(StrictModel):
@@ -29,7 +36,6 @@ class ReviewProvenance(StrictModel):
 
     stage: Literal["judge", "classification"]
     rater: Annotated[str, Field(pattern=RATER_ID.pattern)]
-    container: Annotated[str, Field(min_length=1)]
     # Relative to the run or classification attempt directory.
     reviewed_output: Annotated[str, Field(min_length=1)]
     reviewed_output_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
@@ -39,23 +45,12 @@ class ReviewProvenance(StrictModel):
     workspace_spec_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 
 
-def draft_review(questions: Collection[str]) -> dict:
-    """The file a rater fills in: every question still set to the placeholder."""
-    return {"ratings": {question: PLACEHOLDER for question in questions}}
-
-
 def parse_review(raw: str, questions: Collection[str]) -> Review:
-    """Validate a filled-in draft against the questions the LLM judge answered."""
+    """Validate submitted ratings against the questions the LLM judge answered."""
     try:
         value = json.loads(raw)
     except json.JSONDecodeError as error:
         raise ValueError(f"Invalid review JSON: {error}") from error
-
-    ratings = value.get("ratings") if isinstance(value, dict) else None
-    if isinstance(ratings, dict):
-        unrated = sorted(question for question, rating in ratings.items() if rating == PLACEHOLDER)
-        if unrated:
-            raise ValueError(f"Rate these questions before collecting: {unrated}")
 
     review = Review.model_validate(value)
     if set(review.ratings) != set(questions):

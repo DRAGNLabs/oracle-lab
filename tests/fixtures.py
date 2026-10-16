@@ -5,6 +5,7 @@ place instead of drifting silently across suites.
 """
 
 import json
+import subprocess
 from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -275,10 +276,12 @@ REPAIR = (
 )
 
 
-def judged_run(root: Path, judgment: dict | None = None) -> RunPaths:
+def judged_run(
+    root: Path, judgment: dict | None = None, instance: InstanceRecord | None = None
+) -> RunPaths:
     """A run on disk with its judgment and a workspace spec matching its evidence."""
     paths = RunPaths.create(root)
-    instance = instance_record(golden_patch=REPAIR)
+    instance = instance or instance_record(golden_patch=REPAIR)
     write_result(paths.instance, instance)
     paths.config.write_text("instance: owner__project-1\n")
     paths.judge.rubric.write_text("# Judge rubric\n")
@@ -319,18 +322,21 @@ def judged_run(root: Path, judgment: dict | None = None) -> RunPaths:
             "artifacts": artifacts,
         },
     )
+    write_json(paths.judge.result, judge_attempt())
     write_json(paths.judge.judgment, completed_judgment() if judgment is None else judgment)
     return paths
 
 
-def classified_attempt(root: Path, result: dict | None = None) -> Path:
+def classified_attempt(
+    root: Path, result: dict | None = None, instance: InstanceRecord | None = None
+) -> Path:
     """A classification attempt on disk with its result and workspace spec."""
-    instance = instance_record()
+    instance = instance or instance_record()
     (root / "inputs").mkdir(parents=True)
     write_result(root / "inputs/instance.json", instance)
     (root / "inputs/config.resolved.yaml").write_text("source: owner__project-1\n")
     (root / "inputs/rubric.md").write_text("# Classification rubric\n")
-    (root / "agent").mkdir()
+    write_json(root / "agent/result.json", judge_attempt(model="classifier-model"))
     rows = classification_evidence(root)
     write_json(
         root / "workspace-spec.json",
@@ -361,3 +367,37 @@ def _exposed(source: Path, destination: str) -> dict:
         "destination": destination,
         "sha256": digest(source.read_bytes()),
     }
+
+
+def git(directory: Path, *args: str) -> str:
+    """Run Git in `directory` as a test author, ignoring the user's signing settings."""
+    identity = ["-c", "user.name=Test", "-c", "user.email=t@example.com"]
+    command = ["git", "-C", str(directory), *identity, "-c", "commit.gpgsign=false", *args]
+    return subprocess.run(command, check=True, capture_output=True, text=True).stdout.strip()
+
+
+def upstream_repository(repo: Path) -> tuple[str, str, str]:
+    """A local upstream at the base commit: its URL, the base commit, and a repair diff.
+
+    The repair changes `package/core.py`, creates `package/added.py`, and deletes
+    `package/gone.py`.
+    """
+    (repo / "package").mkdir(parents=True)
+    (repo / "package/core.py").write_text("old\n")
+    (repo / "package/gone.py").write_text("removed by the repair\n")
+    (repo / "README.md").write_text("project\n")
+    git(repo, "init", "--quiet", "--initial-branch=main")
+    git(repo, "add", ".")
+    git(repo, "commit", "--quiet", "-m", "base")
+    base = git(repo, "rev-parse", "HEAD")
+
+    # Write the repair on a branch, take its diff, and leave main at the base commit.
+    git(repo, "switch", "--quiet", "-c", "fixed")
+    (repo / "package/core.py").write_text("new\n")
+    (repo / "package/added.py").write_text("created by the repair\n")
+    (repo / "package/gone.py").unlink()
+    git(repo, "add", "-A")
+    git(repo, "commit", "--quiet", "-m", "fix")
+    repair = git(repo, "diff", base, "HEAD") + "\n"
+    git(repo, "switch", "--quiet", "main")
+    return "file://" + str(repo), base, repair

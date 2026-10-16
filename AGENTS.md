@@ -14,7 +14,8 @@ Read these references before changing related behavior:
 - `README.md` for the user workflow and CLI overview.
 - `docs/configuration.md` for the complete YAML interface.
 - `docs/results.md` for the run artifact contracts.
-- `docs/judging.md` for the LLM judge.
+- `docs/judging.md` for the LLM judge and the human review page.
+- `docs/human-review.md` for sharing review sets with raters.
 - `docs/containers.md` for Docker transport and image builds.
 
 ## Architecture and trust boundaries
@@ -42,8 +43,7 @@ Preserve these boundaries:
 - Run agents as the non-root `oracle` user. Docker is the isolation boundary for
   agent permission-bypass flags.
 - Keep every disposable profile on Docker's ordinary outbound bridge network, so
-  reference and final evaluation match the generation environment. Only the
-  interactive human-judge workspace runs without networking.
+  reference and final evaluation match the generation environment.
 - Evaluate only captured new regular files under `task.generated_dir`.
 - Record edits outside the generated directory as forbidden changes and mark the
   result diagnostic-only. Do not silently discard or normalize them.
@@ -75,7 +75,7 @@ The pipeline stages run in this order, and each is one module or package that
 Supporting these:
 
 - `src/oracle_lab/cli.py`: `run`, `preflight`, `batch`, `evaluate`, `judge`, `classify`,
-  and `report` command interface.
+  `review`, and `report` command interface.
 - `src/oracle_lab/run.py`: the stage sequence and run status.
 - `src/oracle_lab/preflight.py`: `preflight`, which runs the stages before
   generation plus an environment check, without calling a model.
@@ -86,7 +86,10 @@ Supporting these:
   holds the rating scale, the review, and its provenance; `targets.py` finds
   the judgments and classifications to review and the evidence each judge was
   shown; `sources.py` rebuilds the judge's buggy and golden views from a shallow
-  Git fetch.
+  Git fetch; `store.py` saves a rater's review.
+- `src/oracle_lab/web/`: the local review page. `server.py` serves the review
+  targets over HTTP on `127.0.0.1`; `static/` is the page, with pinned libraries
+  in `static/vendor/`. It holds no review logic of its own.
 - `src/oracle_lab/spend.py`: the OpenRouter key spend measured around a run's
   model stages, saved as `cost.json`.
 - `src/oracle_lab/config.py`, `paths.py`, `results.py`: the input contract, the

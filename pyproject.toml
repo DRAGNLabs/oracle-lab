@@ -33,6 +33,8 @@ oracle_lab = [
     "container/docker/*.md",
     "judge/templates/*.md",
     "judge/templates/*.json",
+    "web/static/*",
+    "web/static/vendor/*",
 ]
 
 [tool.pytest.ini_options]

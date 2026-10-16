@@ -121,3 +121,12 @@ def test_preflight_checks_every_config_and_fails_if_any_fails(tmp_path, monkeypa
     output = capsys.readouterr().out
     assert "failed  bad.yaml  reference pair did not reproduce" in output
     assert f"passed  good.yaml  {tmp_path / 'good'}" in output
+
+
+def test_review_serves_the_page_without_loading_credentials(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "load_dotenv", lambda *a, **k: pytest.fail("No credentials"))
+    monkeypatch.setattr(cli, "serve", lambda *args, **kwargs: calls.append((args, kwargs)) or 0)
+
+    assert cli.main(["review", str(tmp_path), "--rater", "rater-1", "--no-browser"]) == 0
+    assert calls == [((tmp_path, "rater-1"), {"port": 0, "open_browser": False})]

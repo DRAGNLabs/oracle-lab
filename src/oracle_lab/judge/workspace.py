@@ -42,9 +42,9 @@ def build_judge_workspace(
 ) -> WorkspaceSpec:
     """Assemble /oracle-judge in the container: two repo checkouts plus the evidence.
 
-    The `evidence` table below is the whole exposure contract. Nothing outside it is
-    uploaded, and the returned spec records every file so a reader can check what the
-    judge was shown.
+    `judge_evidence` is the whole exposure contract. Nothing outside it is uploaded,
+    and the returned spec records every file so a reader can check what the judge
+    was shown.
     """
     config.require_judge()
     runtime = config.require_runtime()
@@ -54,54 +54,17 @@ def build_judge_workspace(
     with TemporaryDirectory(prefix="oracle-judge-bundle-") as temporary:
         staging = Path(temporary)
 
-        # 1. Evidence that is not already a file on disk. Written to a throwaway
-        #    directory so it never lands in the run.
-        reference_patch = staging / "reference-tests.patch"
-        metadata = staging / "metadata.json"
-        instructions = staging / "instructions.md"
-        submission_manifest = staging / "submission-manifest.json"
-        original = instance.original_record
-        reference_patch.write_text(instance.reference_test_patch)
-        write_json(
-            metadata,
-            {
-                "instance_id": instance.instance_id,
-                "repo": instance.repo,
-                "base_commit": base_commit,
-                "FAIL_TO_PASS": _normalized_test_ids(original.get("FAIL_TO_PASS", [])),
-                "PASS_TO_PASS": _normalized_test_ids(original.get("PASS_TO_PASS", [])),
-                "reference_test_ids": instance.reference_test_ids,
-            },
-        )
-        write_result(submission_manifest, manifest)
-        instructions.write_text(_workspace_instructions(instance, manifest, evaluation))
-
-        # 2. Every file the judge may read, and where it lands in the container.
-        #    Adding a row here is the only way to expose something new.
+        evidence = judge_evidence(paths, staging, instance, evaluation, manifest)
         rubric = paths.judge.rubric
         fix = paths.ground_truth / "fix.patch"
         fix_in_container = JUDGE_ROOT + "/instance/fix.patch"
-        evidence = [
-            (rubric, JUDGE_ROOT + "/rubric.md"),
-            (paths.ground_truth / "issue.md", JUDGE_ROOT + "/instance/issue.md"),
-            (fix, fix_in_container),
-            (reference_patch, JUDGE_ROOT + "/instance/reference-tests.patch"),
-            (metadata, JUDGE_ROOT + "/instance/metadata.json"),
-            (instructions, JUDGE_ROOT + "/instructions.md"),
-            (submission_manifest, JUDGE_ROOT + "/evidence/submission-manifest.json"),
-            (paths.generation / "session.log", JUDGE_ROOT + "/evidence/agent-session.log"),
-            (paths.generation / "workspace.diff", JUDGE_ROOT + "/evidence/workspace.diff"),
-            (paths.results, JUDGE_ROOT + "/evidence/paired-results.json"),
-            (paths.evaluation / "buggy/tests.json", JUDGE_ROOT + "/evidence/buggy-tests.json"),
-            (paths.evaluation / "buggy/output.log", JUDGE_ROOT + "/evidence/buggy-output.log"),
-            (paths.evaluation / "golden/tests.json", JUDGE_ROOT + "/evidence/golden-tests.json"),
-            (paths.evaluation / "golden/output.log", JUDGE_ROOT + "/evidence/golden-output.log"),
-        ]
+        reference_patch = staging / "reference-tests.patch"
+
         # images.json is read at the end for the spec, not shown to the judge.
         images = paths.build / "images.json"
         require_files([source for source, _ in evidence] + [images], "Judge workspace inputs")
 
-        # 3. Reset the checkout to the instance's base commit, then cut two views of it.
+        # 1. Reset the checkout to the instance's base commit, then cut two views of it.
         #    Worktrees are cheap, so try those first and copy the directory only if the
         #    image's Git cannot add one.
         sandbox.run(["mkdir", "-p", JUDGE_ROOT + "/instance", JUDGE_ROOT + "/evidence"])
@@ -126,17 +89,17 @@ def build_judge_workspace(
             ]
             sandbox.run(commands[0], timeout=config.limits.setup_seconds)
 
-        # 4. Upload the table, recording each file as it goes.
+        # 2. Upload the evidence, recording each file as it goes.
         for source, destination in evidence:
             sandbox.upload(source, destination)
             artifacts.append(_exposed(paths.root, source, destination))
 
-        # 5. The repair goes into the golden view only. The buggy view stays broken.
+        # 3. The repair goes into the golden view only. The buggy view stays broken.
         apply = ["git", "-C", JUDGE_ROOT + "/golden", "apply"]
         sandbox.run([*apply, "--check", fix_in_container], timeout=config.limits.setup_seconds)
         sandbox.run([*apply, fix_in_container], timeout=config.limits.setup_seconds)
 
-        # 6. The same submission goes into both views, so the judge reads one set of
+        # 4. The same submission goes into both views, so the judge reads one set of
         #    tests against two versions of the code.
         for view in VIEWS:
             sandbox.upload(paths.submission / "files", view, contents=True)
@@ -144,7 +107,7 @@ def build_judge_workspace(
                 source = paths.submission / "files" / repo_path(name)
                 artifacts.append(_exposed(paths.root, source, f"{view}/{name}", info.sha256))
 
-        # 7. Trust the container over our own copy: make it hash what it actually holds
+        # 5. Trust the container over our own copy: make it hash what it actually holds
         #    in both views, and refuse to judge if either disagrees with the manifest.
         expected = {name: info.sha256 for name, info in manifest.files.items()}
         settings = staging / "verify.json"
@@ -182,6 +145,57 @@ def build_judge_workspace(
         write_json(paths.judge.bundle_manifest, BundleManifest(artifacts=artifacts).model_dump())
         write_json(paths.judge.workspace_spec, spec.model_dump())
     return spec
+
+
+def judge_evidence(
+    paths: RunPaths,
+    staging: Path,
+    instance: InstanceRecord,
+    evaluation: EvaluationResult,
+    manifest: SubmissionManifest,
+) -> list[tuple[Path, str]]:
+    """Every file the judge may read, and where it lands in the container.
+
+    Adding a row here is the only way to expose something new. Evidence that is not
+    already a file in the run is written to `staging`, so it never lands in the run.
+    Human review shows the same rows.
+    """
+    reference_patch = staging / "reference-tests.patch"
+    metadata = staging / "metadata.json"
+    instructions = staging / "instructions.md"
+    submission_manifest = staging / "submission-manifest.json"
+    original = instance.original_record
+    reference_patch.write_text(instance.reference_test_patch)
+    write_json(
+        metadata,
+        {
+            "instance_id": instance.instance_id,
+            "repo": instance.repo,
+            "base_commit": instance.base_commit,
+            "FAIL_TO_PASS": _normalized_test_ids(original.get("FAIL_TO_PASS", [])),
+            "PASS_TO_PASS": _normalized_test_ids(original.get("PASS_TO_PASS", [])),
+            "reference_test_ids": instance.reference_test_ids,
+        },
+    )
+    write_result(submission_manifest, manifest)
+    instructions.write_text(_workspace_instructions(instance, manifest, evaluation))
+
+    return [
+        (paths.judge.rubric, JUDGE_ROOT + "/rubric.md"),
+        (paths.ground_truth / "issue.md", JUDGE_ROOT + "/instance/issue.md"),
+        (paths.ground_truth / "fix.patch", JUDGE_ROOT + "/instance/fix.patch"),
+        (reference_patch, JUDGE_ROOT + "/instance/reference-tests.patch"),
+        (metadata, JUDGE_ROOT + "/instance/metadata.json"),
+        (instructions, JUDGE_ROOT + "/instructions.md"),
+        (submission_manifest, JUDGE_ROOT + "/evidence/submission-manifest.json"),
+        (paths.generation / "session.log", JUDGE_ROOT + "/evidence/agent-session.log"),
+        (paths.generation / "workspace.diff", JUDGE_ROOT + "/evidence/workspace.diff"),
+        (paths.results, JUDGE_ROOT + "/evidence/paired-results.json"),
+        (paths.evaluation / "buggy/tests.json", JUDGE_ROOT + "/evidence/buggy-tests.json"),
+        (paths.evaluation / "buggy/output.log", JUDGE_ROOT + "/evidence/buggy-output.log"),
+        (paths.evaluation / "golden/tests.json", JUDGE_ROOT + "/evidence/golden-tests.json"),
+        (paths.evaluation / "golden/output.log", JUDGE_ROOT + "/evidence/golden-output.log"),
+    ]
 
 
 def _exposed(

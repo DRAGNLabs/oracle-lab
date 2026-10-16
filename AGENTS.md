@@ -83,7 +83,9 @@ Supporting these:
 - `src/oracle_lab/classification/`: standalone task classification, run with
   `classify` outside the run stages. Reports read the newest matching attempt.
 - `src/oracle_lab/review/`: human review of the LLM judges. `contracts.py`
-  holds the rating scale, the review, and its provenance.
+  holds the rating scale, the review, and its provenance; `targets.py` finds
+  the judgments and classifications to review and the evidence each judge was
+  shown.
 - `src/oracle_lab/spend.py`: the OpenRouter key spend measured around a run's
   model stages, saved as `cost.json`.
 - `src/oracle_lab/config.py`, `paths.py`, `results.py`: the input contract, the

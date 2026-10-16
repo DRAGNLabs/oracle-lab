@@ -160,6 +160,10 @@ class JudgePaths:
         return self.root / "judgment.raw.txt"
 
     @property
+    def reviews(self) -> Path:
+        return self.root / "reviews"
+
+    @property
     def agent(self) -> Path:
         return self.root / "agent"
 

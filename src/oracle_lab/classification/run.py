@@ -182,12 +182,8 @@ def build_classification_workspace(
     )
     sandbox.run(["mkdir", "-p", CLASSIFICATION_ROOT])
 
-    evidence = [
-        (attempt / "inputs/instance.json", CLASSIFICATION_ROOT + "/instance.json"),
-        (attempt / "inputs/rubric.md", CLASSIFICATION_ROOT + "/rubric.md"),
-    ]
     artifacts = []
-    for source, destination in evidence:
+    for source, destination in classification_evidence(attempt):
         sandbox.upload(source, destination)
         artifacts.append(
             ExposedArtifact(
@@ -201,3 +197,14 @@ def build_classification_workspace(
     spec = WorkspaceSpec(image=image, base_commit=instance.base_commit, artifacts=artifacts)
     write_json(attempt / "workspace-spec.json", spec.model_dump())
     return spec
+
+
+def classification_evidence(attempt: Path) -> list[tuple[Path, str]]:
+    """Every file the classifier may read besides the checkout, and where it lands.
+
+    Human review shows the same rows.
+    """
+    return [
+        (attempt / "inputs/instance.json", CLASSIFICATION_ROOT + "/instance.json"),
+        (attempt / "inputs/rubric.md", CLASSIFICATION_ROOT + "/rubric.md"),
+    ]

@@ -7,14 +7,23 @@ place instead of drifting silently across suites.
 import json
 from contextlib import contextmanager
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import oracle_lab.container
 from oracle_lab.classification.contracts import CLASSIFICATION_LABELS
+from oracle_lab.classification.run import classification_evidence
 from oracle_lab.config import RunConfig, RuntimeConfig, load_config
 from oracle_lab.io import digest, write_json
 from oracle_lab.judge.contracts import JUDGMENT_LABEL_KEYS
+from oracle_lab.judge.workspace import JUDGE_ROOT, judge_evidence
 from oracle_lab.paths import RunPaths
-from oracle_lab.results import MATRIX_CELLS, InstanceRecord, SubmissionManifest
+from oracle_lab.results import (
+    MATRIX_CELLS,
+    InstanceRecord,
+    SubmissionManifest,
+    read_evaluation_result,
+    write_result,
+)
 
 # The run config tests start from, independent of the sample configs.
 RUN_CONFIG = Path(__file__).parent / "run-config.yaml"
@@ -258,3 +267,97 @@ def context_of(value):
         yield value
 
     return factory
+
+
+REPAIR = (
+    "diff --git a/package/core.py b/package/core.py\n"
+    "--- a/package/core.py\n+++ b/package/core.py\n@@ -1 +1 @@\n-old\n+new\n"
+)
+
+
+def judged_run(root: Path, judgment: dict | None = None) -> RunPaths:
+    """A run on disk with its judgment and a workspace spec matching its evidence."""
+    paths = RunPaths.create(root)
+    instance = instance_record(golden_patch=REPAIR)
+    write_result(paths.instance, instance)
+    paths.config.write_text("instance: owner__project-1\n")
+    paths.judge.rubric.write_text("# Judge rubric\n")
+    (paths.ground_truth / "issue.md").write_text("# Issue\n\nIncorrect result.\n")
+    (paths.ground_truth / "fix.patch").write_text(REPAIR)
+    (paths.generation / "session.log").write_text("agent session\n")
+    (paths.generation / "workspace.diff").write_text("generated diff\n")
+    manifest = write_submission(paths)
+    write_json(paths.results, detecting_result())
+    for version in ("buggy", "golden"):
+        (paths.evaluation / version).mkdir(parents=True, exist_ok=True)
+        write_json(paths.evaluation / version / "tests.json", {"status": "completed"})
+        (paths.evaluation / version / "output.log").write_text(version + " output\n")
+
+    evaluation = read_evaluation_result(paths.results)
+    with TemporaryDirectory() as staging:
+        rows = judge_evidence(paths, Path(staging), instance, evaluation, manifest)
+        artifacts = [_exposed(source, destination) for source, destination in rows]
+    artifacts += [
+        {
+            "source": f"submission/files/{name}",
+            "destination": f"{view}/{name}",
+            "sha256": info.sha256,
+        }
+        for name, info in manifest.files.items()
+        for view in (JUDGE_ROOT + "/buggy", JUDGE_ROOT + "/golden")
+    ]
+    write_json(
+        paths.judge.workspace_spec,
+        {
+            "prepared_image": {"reference": "example/runtime", "image_id": "id", "digests": []},
+            "base_commit": instance.base_commit,
+            "repair_patch_sha256": digest(REPAIR.encode()),
+            "reference_test_patch_sha256": digest(instance.reference_test_patch.encode()),
+            "rubric_sha256": digest(paths.judge.rubric.read_bytes()),
+            "workspace_method": "git_worktree",
+            "reconstruction_commands": [],
+            "artifacts": artifacts,
+        },
+    )
+    write_json(paths.judge.judgment, completed_judgment() if judgment is None else judgment)
+    return paths
+
+
+def classified_attempt(root: Path, result: dict | None = None) -> Path:
+    """A classification attempt on disk with its result and workspace spec."""
+    instance = instance_record()
+    (root / "inputs").mkdir(parents=True)
+    write_result(root / "inputs/instance.json", instance)
+    (root / "inputs/config.resolved.yaml").write_text("source: owner__project-1\n")
+    (root / "inputs/rubric.md").write_text("# Classification rubric\n")
+    (root / "agent").mkdir()
+    rows = classification_evidence(root)
+    write_json(
+        root / "workspace-spec.json",
+        {
+            "image": "example/runtime",
+            "base_commit": instance.base_commit,
+            "artifacts": [_exposed(source, destination) for source, destination in rows],
+        },
+    )
+    if result is None:
+        result = {"status": "completed", **in_scope_classification()}
+    write_json(
+        root / "classification.json",
+        {
+            "instance_id": instance.instance_id,
+            "base_commit": instance.base_commit,
+            "source_record_sha256": instance.source.record_sha256,
+            "rubric_sha256": digest((root / "inputs/rubric.md").read_bytes()),
+            "result": result,
+        },
+    )
+    return root
+
+
+def _exposed(source: Path, destination: str) -> dict:
+    return {
+        "source": source.name,
+        "destination": destination,
+        "sha256": digest(source.read_bytes()),
+    }

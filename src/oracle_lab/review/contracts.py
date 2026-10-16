@@ -1,4 +1,4 @@
-"""Strict contracts for a human review of one LLM judge output."""
+"""Strict contracts for human reviews of the LLM judges, and their agreement report."""
 
 from __future__ import annotations
 
@@ -9,7 +9,10 @@ from typing import Annotated, Literal, get_args
 
 from pydantic import Field
 
-from oracle_lab.results import StrictModel
+from oracle_lab.results import Sha256, StrictModel
+
+# The two LLM judges a review can rate: the generated-test judge and the classifier.
+Stage = Literal["judge", "classification"]
 
 RATER_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 Rating = Literal["correct", "defensible", "incorrect"]
@@ -24,6 +27,15 @@ RATING_DEFINITIONS: dict[Rating, str] = {
     "incorrect": "The evidence or the stage rubric contradicts the judge's answer.",
 }
 
+Share = Annotated[float, Field(ge=0, le=1)]
+
+
+def require_rater(rater: str) -> str:
+    """Return the rater ID, refusing one that could name another directory."""
+    if not RATER_ID.fullmatch(rater):
+        raise ValueError(f"Rater IDs are letters, digits, '-' and '_', not {rater!r}")
+    return rater
+
 
 class Review(StrictModel):
     """One rating for each question the LLM judge answered."""
@@ -34,15 +46,15 @@ class Review(StrictModel):
 class ReviewProvenance(StrictModel):
     """What a review was based on: the output it rated and what the rater was shown."""
 
-    stage: Literal["judge", "classification"]
+    stage: Stage
     rater: Annotated[str, Field(pattern=RATER_ID.pattern)]
     # Relative to the run or classification attempt directory.
     reviewed_output: Annotated[str, Field(min_length=1)]
-    reviewed_output_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    reviewed_output_sha256: Sha256
     judge_harness: Annotated[str, Field(min_length=1)]
     judge_model: Annotated[str, Field(min_length=1)]
-    stage_rubric_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
-    workspace_spec_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    stage_rubric_sha256: Sha256
+    workspace_spec_sha256: Sha256
 
 
 def parse_review(raw: str, questions: Collection[str]) -> Review:
@@ -61,17 +73,14 @@ def parse_review(raw: str, questions: Collection[str]) -> Review:
     return review
 
 
-Share = Annotated[float, Field(ge=0, le=1)]
-
-
 class QuestionAgreement(StrictModel):
     """How raters rated one question of one stage, across every target."""
 
     label: str
     targets: int  # targets with at least one rating of this question
     ratings: dict[Rating, int]
-    correct_share: Share | None  # None when there are no ratings
-    acceptable_share: Share | None  # correct or defensible
+    correct_share: Share
+    acceptable_share: Share  # correct or defensible
     rater_pairs: int  # pairs of raters who rated the same target
     pairwise_agreement: Share | None  # None without a pair
     # Krippendorff's alpha for ordinal data; None without pairs or without variation.
@@ -84,26 +93,14 @@ class StageAgreement(StrictModel):
     questions: dict[str, QuestionAgreement]
 
 
-class MissingReviews(StrictModel):
-    """A target some raters reviewed and these did not."""
-
-    target: str
-    stage: Literal["judge", "classification"]
-    raters: list[str]
-
-
-class UnreviewableTarget(StrictModel):
-    target: str
-    stage: Literal["judge", "classification"]
-    reason: str
-
-
 class AgreementReport(StrictModel):
     """Inter-rater agreement and judge quality over a set of reviewed targets."""
 
     created_at: str
     inputs: list[str]
     raters: list[str]
-    stages: dict[Literal["judge", "classification"], StageAgreement]
-    missing: list[MissingReviews]
-    unreviewable: list[UnreviewableTarget]
+    stages: dict[Stage, StageAgreement]
+    # Each target some raters did not review, and those raters.
+    missing: dict[str, list[str]]
+    # Each target that could not be reviewed, and why.
+    unreviewable: dict[str, str]

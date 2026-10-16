@@ -13,20 +13,19 @@ from docker.errors import DockerException
 from oracle_lab.classification.contracts import (
     ClassificationResult,
     SavedClassification,
-    WorkspaceSpec,
     parse_classification,
     read_saved_classification,
 )
+from oracle_lab.classification.workspace import build_classification_workspace
 from oracle_lab.config import ClassificationConfig
 from oracle_lab.container.images import prepare_image
-from oracle_lab.container.sandbox import Profile, Sandbox, docker_client, open_sandbox
+from oracle_lab.container.sandbox import Profile, docker_client, open_sandbox
 from oracle_lab.harnesses import provenance, run_turn, turn_request
 from oracle_lab.harnesses.launch import require_credential
 from oracle_lab.harnesses.retry import with_retries
 from oracle_lab.instance import resolve_source
 from oracle_lab.io import archive_files, digest, utc_stamp, write_json
 from oracle_lab.results import (
-    ExposedArtifact,
     InstanceRecord,
     failed_turn,
     last_error_message,
@@ -34,8 +33,6 @@ from oracle_lab.results import (
     write_status,
 )
 from oracle_lab.spend import measure_spend
-
-CLASSIFICATION_ROOT = "/oracle-classification"
 
 
 def classify(config: ClassificationConfig) -> Path:
@@ -165,46 +162,3 @@ def _save_classification(
         result=result,
     )
     write_json(attempt / "classification.json", saved.model_dump(mode="json"))
-
-
-def build_classification_workspace(
-    sandbox: Sandbox,
-    config: ClassificationConfig,
-    attempt: Path,
-    image: str,
-    instance: InstanceRecord,
-) -> WorkspaceSpec:
-    """Reset the checkout and expose exactly the private evidence named here."""
-    runtime = config.require_runtime()
-    sandbox.run(
-        ["git", "-C", runtime.workdir, "reset", "--hard", instance.base_commit],
-        timeout=config.limits.setup_seconds,
-    )
-    sandbox.run(["mkdir", "-p", CLASSIFICATION_ROOT])
-
-    artifacts = []
-    for source, destination in classification_evidence(attempt):
-        sandbox.upload(source, destination)
-        artifacts.append(
-            ExposedArtifact(
-                source=source.relative_to(attempt).as_posix(),
-                destination=destination,
-                sha256=digest(source.read_bytes()),
-            )
-        )
-    sandbox.run(["chmod", "-R", "a+rX", CLASSIFICATION_ROOT])
-
-    spec = WorkspaceSpec(image=image, base_commit=instance.base_commit, artifacts=artifacts)
-    write_json(attempt / "workspace-spec.json", spec.model_dump())
-    return spec
-
-
-def classification_evidence(attempt: Path) -> list[tuple[Path, str]]:
-    """Every file the classifier may read besides the checkout, and where it lands.
-
-    Human review shows the same rows.
-    """
-    return [
-        (attempt / "inputs/instance.json", CLASSIFICATION_ROOT + "/instance.json"),
-        (attempt / "inputs/rubric.md", CLASSIFICATION_ROOT + "/rubric.md"),
-    ]

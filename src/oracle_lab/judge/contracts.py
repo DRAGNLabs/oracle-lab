@@ -15,8 +15,10 @@ from pydantic import (
 from oracle_lab.io import read_json, write_json
 from oracle_lab.paths import RunPaths
 from oracle_lab.results import (
+    CommitId,
     ExposedArtifact,
     Justification,
+    Sha256,
     StrictModel,
     UnsuccessfulTurn,
     parse_json_object,
@@ -114,10 +116,10 @@ class PreparedImage(StrictModel):
 
 class WorkspaceSpec(StrictModel):
     prepared_image: PreparedImage
-    base_commit: Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
-    repair_patch_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
-    reference_test_patch_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
-    rubric_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    base_commit: CommitId
+    repair_patch_sha256: Sha256
+    reference_test_patch_sha256: Sha256
+    rubric_sha256: Sha256
     workspace_method: Literal["git_worktree", "directory_copy"]
     reconstruction_commands: list[list[str]]
     artifacts: list[ExposedArtifact]

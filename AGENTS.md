@@ -74,23 +74,28 @@ The pipeline stages run in this order, and each is one module or package that
 
 Supporting these:
 
-- `src/oracle_lab/cli.py`: `run`, `preflight`, `batch`, `evaluate`, `judge`, `classify`,
-  `review`, `agreement`, and `report` command interface.
+- `src/oracle_lab/cli.py`: the command interface: `run`, `preflight`, `batch`,
+  `evaluate`, `judge`, `classify`, `review`, `agreement`, and `report`.
 - `src/oracle_lab/run.py`: the stage sequence and run status.
 - `src/oracle_lab/preflight.py`: `preflight`, which runs the stages before
   generation plus an environment check, without calling a model.
 - `src/oracle_lab/batch/`: sequential batch execution and its summary.
 - `src/oracle_lab/classification/`: standalone task classification, run with
-  `classify` outside the run stages. Reports read the newest matching attempt.
-- `src/oracle_lab/review/`: human review of the LLM judges. `contracts.py`
-  holds the rating scale, the review, and its provenance; `targets.py` finds
-  the judgments and classifications to review and the evidence each judge was
-  shown; `sources.py` rebuilds the judge's buggy and golden views from a shallow
-  Git fetch; `store.py` saves a rater's review; `agreement.py` computes
-  inter-rater agreement and judge quality over saved reviews.
-- `src/oracle_lab/web/`: the local review page. `server.py` serves the review
-  targets over HTTP on `127.0.0.1`; `static/` is the page, with pinned libraries
-  in `static/vendor/`. It holds no review logic of its own.
+  `classify` outside the run stages. Its `contracts.py`, `workspace.py`, and
+  `run.py` mirror `judge/`. Reports read the newest matching attempt.
+- `src/oracle_lab/review/`: human review of the LLM judges.
+  - `contracts.py`: the rating scale, the review, its provenance, and the
+    agreement report.
+  - `targets.py`: `JudgmentTarget` and `ClassificationTarget`, which hold
+    everything particular to each stage, and finding them on disk.
+  - `sources.py`: the judge's buggy and golden views, rebuilt from a shallow Git
+    fetch.
+  - `store.py`: saving and reading reviews.
+  - `agreement.py`: inter-rater agreement and judge quality.
+- `src/oracle_lab/web/`: the local review page. `session.py` answers what the
+  page asks, `server.py` serves it over HTTP on `127.0.0.1`, and `static/` is the
+  page itself: one ES module per view, with pinned libraries in `static/vendor/`.
+  It holds no review logic of its own.
 - `src/oracle_lab/spend.py`: the OpenRouter key spend measured around a run's
   model stages, saved as `cost.json`.
 - `src/oracle_lab/config.py`, `paths.py`, `results.py`: the input contract, the
@@ -143,9 +148,9 @@ When adding or changing persisted artifacts:
 4. Add tests for parsing, failure behavior, integrity, or rendering.
 
 Model every persisted contract in `results.py`, `judge/contracts.py`,
-`classification/contracts.py`, or `review/contracts.py`, and validate it where container output enters the
-host, not at each reader. Test fixtures for these artifacts belong in
-`tests/fixtures.py` so one schema change breaks in one place.
+`classification/contracts.py`, or `review/contracts.py`, and validate it where
+container output enters the host, not at each reader. Test fixtures for these
+artifacts belong in `tests/fixtures.py` so one schema change breaks in one place.
 
 Two conventions keep call sites predictable: `RunPaths` is the handle for a run,
 and only `cli.py` builds one from a user-supplied path; container-side logic is a

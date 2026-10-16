@@ -335,7 +335,8 @@ The normalized judgment. A completed one has `status`, `tests_issue`,
 `attempt_detail`, `no_attempt_reason`, `cheating`, and `justifications`. A
 conditional field that does not apply is saved as JSON `null`, even when the
 response used the string `"null"`. `justifications` maps each answered question
-to its justification; a question answered `null` has none. The raw response is kept as well. The other states:
+to its justification; a question answered `null` has none. The raw response is
+kept as well. The other states:
 
 | Status | Meaning |
 |---|---|
@@ -690,9 +691,9 @@ the nearest stage log.
   for each question with at least one rating, its `label`, `targets`,
   `ratings` counts, `correct_share`, `acceptable_share` (`correct` or
   `defensible`), `rater_pairs`, `pairwise_agreement`, and `alpha`. A share or
-  alpha that cannot be computed is `null`. `missing` lists each target and the
-  raters without a review of it; `unreviewable` lists each target that could not
-  be reviewed and why.
+  alpha that cannot be computed is `null`. `missing` maps each target that some
+  rater did not review to those raters; `unreviewable` maps each target that
+  could not be reviewed to the reason.
 - `agreement.md`: the same results as tables, with a note on reading alpha.
 
 See [agreement](judging.md#agreement) for what each figure means.

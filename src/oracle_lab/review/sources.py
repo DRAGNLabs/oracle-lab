@@ -15,18 +15,17 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Literal
 
-from oracle_lab.config import repo_path
 from oracle_lab.localization.patches import parse_patch
-from oracle_lab.paths import RunPaths
-from oracle_lab.results import read_submission_manifest
-from oracle_lab.review.targets import ReviewTarget
+from oracle_lab.results import InstanceRecord
+from oracle_lab.review.targets import ReviewTarget, SubmittedFile
 
+# What changed a file: the repair, the reference-test patch, or the submission.
 Touch = Literal["repair", "reference_tests", "submission"]
-REPO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+REPO = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 
 
 class SourceError(RuntimeError):
-    """The repository could not be fetched, or a view could not be built or read."""
+    """The repository could not be fetched, or a view could not be built."""
 
 
 class SourceView:
@@ -38,7 +37,7 @@ class SourceView:
         self._touched = touched
 
     def tree(self) -> dict[str, tuple[Touch, ...]]:
-        """Every file path, with what touched it: the repair, the reference tests, the submission."""
+        """Every file path, with what touched it."""
         return {path: self._touched.get(path, ()) for path in sorted(self._blobs)}
 
     def read(self, path: str) -> bytes:
@@ -51,36 +50,16 @@ class SourceView:
 def open_views(
     target: ReviewTarget, *, remote: str | None = None, cache: Path | None = None
 ) -> dict[str, SourceView]:
-    """Fetch the target's base commit if needed, then build each view it names."""
-    git_dir = fetch(target.repo, target.base_commit, remote=remote, cache=cache)
-    files: dict[str, bytes] = {}
-    modes: dict[str, int] = {}
-    if target.stage == "judge":
-        submission = RunPaths.open(target.root).submission
-        manifest = read_submission_manifest(submission / "manifest.json")
-        for name, info in manifest.files.items():
-            files[name] = (submission / "files" / repo_path(name)).read_bytes()
-            modes[name] = info.mode
-
-    patches: list[tuple[Touch, str]] = [
-        ("repair", target.instance.golden_patch),
-        ("reference_tests", target.instance.reference_test_patch),
-    ]
-    touched: dict[str, list[Touch]] = {}
-    for touch, patch in patches:
-        for diff in parse_patch(patch):
-            for path in dict.fromkeys((diff.old_path, diff.new_path)):
-                if path is not None:
-                    touched.setdefault(path, []).append(touch)
-    for name in files:
-        touched.setdefault(name, []).append("submission")
-    flags = {path: tuple(touches) for path, touches in touched.items()}
-
+    """Fetch the target's base commit if needed, then build each view its judge read."""
+    instance = target.instance
+    git_dir = fetch(instance.repo, instance.base_commit, remote=remote, cache=cache)
+    submitted = target.submitted_files()
+    touched = _touched(instance, submitted)
     views = {}
     for view in target.views:
-        repair = target.instance.golden_patch if view == "golden" else None
-        tree = _build_tree(git_dir, target.base_commit, repair, files, modes)
-        views[view] = SourceView(git_dir, tree, flags)
+        repair = instance.golden_patch if view == "golden" else None
+        tree = _build_tree(git_dir, instance.base_commit, repair, submitted)
+        views[view] = SourceView(git_dir, tree, touched)
     return views
 
 
@@ -92,9 +71,9 @@ def fetch(
     `remote` defaults to the repository on GitHub. The commit is kept under its own
     ref, so it stays reachable and is fetched only once.
     """
-    if not REPO.match(repo) or ".." in repo.split("/"):
+    if not REPO.fullmatch(repo) or {".", ".."} & set(repo.split("/")):
         raise SourceError(f"Not an owner/name repository: {repo}")
-    git_dir = (cache or cache_root()) / repo
+    git_dir = (cache or _cache_root()) / repo
     if not (git_dir / "HEAD").is_file():
         git_dir.mkdir(parents=True, exist_ok=True)
         _git(git_dir, "init", "--bare", "--quiet")
@@ -104,28 +83,43 @@ def fetch(
     ref = f"refs/oracle-lab/{base_commit}"
     resolve = ("rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}")
     try:
-        fetched = _git(git_dir, *resolve)
+        fetched = _git_line(git_dir, *resolve)
     except SourceError:
         # Not cached yet.
         url = remote or f"https://github.com/{repo}"
         _git(git_dir, "fetch", "--quiet", "--depth", "1", "--no-tags", url, f"{base_commit}:{ref}")
-        fetched = _git(git_dir, *resolve)
-    if fetched.decode().strip() != base_commit:
-        raise SourceError(f"Fetched {fetched.decode().strip()} from {repo}, not {base_commit}")
+        fetched = _git_line(git_dir, *resolve)
+    if fetched != base_commit:
+        raise SourceError(f"Fetched {fetched} from {repo}, not {base_commit}")
     return git_dir
 
 
-def cache_root() -> Path:
+def _cache_root() -> Path:
     base = os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache"
     return Path(base) / "oracle-lab/repos"
 
 
+def _touched(
+    instance: InstanceRecord, submitted: dict[str, SubmittedFile]
+) -> dict[str, tuple[Touch, ...]]:
+    """What touched each path, for every path something touched."""
+    patches: list[tuple[Touch, str]] = [
+        ("repair", instance.golden_patch),
+        ("reference_tests", instance.reference_test_patch),
+    ]
+    touched: dict[str, list[Touch]] = {}
+    for touch, patch in patches:
+        for diff in parse_patch(patch):
+            for path in {diff.old_path, diff.new_path}:
+                if path is not None:
+                    touched.setdefault(path, []).append(touch)
+    for name in submitted:
+        touched.setdefault(name, []).append("submission")
+    return {path: tuple(touches) for path, touches in touched.items()}
+
+
 def _build_tree(
-    git_dir: Path,
-    base_commit: str,
-    repair: str | None,
-    files: dict[str, bytes],
-    modes: dict[str, int],
+    git_dir: Path, base_commit: str, repair: str | None, submitted: dict[str, SubmittedFile]
 ) -> str:
     """Write one view as a Git tree using a throwaway index, and return its ID.
 
@@ -137,20 +131,14 @@ def _build_tree(
         if repair is not None:
             _git(git_dir, "apply", "--cached", "-", input=repair.encode(), env=env)
         entries = []
-        for name, content in files.items():
-            blob = _git(git_dir, "hash-object", "-w", "--stdin", input=content).decode().strip()
-            mode = "100755" if modes[name] & 0o111 else "100644"
+        for name, file in submitted.items():
+            blob = _git_line(git_dir, "hash-object", "-w", "--stdin", input=file.content)
+            mode = "100755" if file.mode & 0o111 else "100644"
             entries.append(f"{mode} {blob}\t{name}\n")
         if entries:
-            _git(
-                git_dir,
-                "update-index",
-                "--add",
-                "--index-info",
-                input="".join(entries).encode(),
-                env=env,
-            )
-        return _git(git_dir, "write-tree", env=env).decode().strip()
+            index_info = "".join(entries).encode()
+            _git(git_dir, "update-index", "--add", "--index-info", input=index_info, env=env)
+        return _git_line(git_dir, "write-tree", env=env)
 
 
 def _list_blobs(git_dir: Path, tree: str) -> dict[str, str]:
@@ -182,3 +170,10 @@ def _git(
         message = result.stderr.decode(errors="replace").strip()
         raise SourceError(f"git {args[0]} failed: {message}")
     return result.stdout
+
+
+def _git_line(
+    git_dir: Path, *args: str, input: bytes | None = None, env: dict[str, str] | None = None
+) -> str:
+    """A Git command whose output is one line, such as an object ID."""
+    return _git(git_dir, *args, input=input, env=env).decode().strip()

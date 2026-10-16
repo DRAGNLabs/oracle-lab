@@ -10,48 +10,46 @@ from fixtures import (
 
 from oracle_lab.paths import RunPaths
 from oracle_lab.review.targets import (
+    ClassificationTarget,
+    JudgmentTarget,
     TargetError,
-    classification_target,
     find_targets,
-    judge_target,
 )
 
 FAILED = {"status": "failed", "error": "The harness crashed."}
 
 
 def test_a_judgment_is_reviewed_on_the_questions_it_answered(tmp_path):
-    target = judge_target(judged_run(tmp_path))
+    target = JudgmentTarget.load(judged_run(tmp_path).root)
 
-    assert target.stage == "judge"
-    assert target.views == ("buggy", "golden")
     assert target.reviews == tmp_path / "judge/reviews"
+    assert target.review_history == tmp_path / "judge/reviews-history"
     assert target.answered_questions() == ["tests_issue", "attempt_detail", "cheating"]
 
 
 def test_a_null_judge_answer_is_not_reviewed(tmp_path):
-    paths = judged_run(tmp_path, completed_judgment(tests_issue="unsure", attempt_detail=None))
+    judgment = completed_judgment(tests_issue="unsure", attempt_detail=None)
+    target = JudgmentTarget.load(judged_run(tmp_path, judgment).root)
 
-    assert judge_target(paths).answered_questions() == ["tests_issue", "cheating"]
+    assert target.answered_questions() == ["tests_issue", "cheating"]
 
 
 def test_an_in_scope_classification_is_reviewed_on_all_seven_questions(tmp_path):
-    target = classification_target(classified_attempt(tmp_path))
+    target = ClassificationTarget.load(classified_attempt(tmp_path))
 
-    assert target.stage == "classification"
-    assert target.views == ("buggy",)
     assert target.reviews == tmp_path / "reviews"
     assert len(target.answered_questions()) == 7
 
 
 def test_an_out_of_scope_classification_is_reviewed_on_one_question(tmp_path):
     result = {"status": "completed", **out_of_scope_classification()}
-    target = classification_target(classified_attempt(tmp_path, result))
+    target = ClassificationTarget.load(classified_attempt(tmp_path, result))
 
     assert target.answered_questions() == ["task_nature"]
 
 
 def test_judge_evidence_is_what_the_judge_was_shown_without_the_views(tmp_path):
-    evidence = {file.name: file.content for file in judge_target(judged_run(tmp_path)).evidence()}
+    evidence = JudgmentTarget.load(judged_run(tmp_path).root).evidence()
 
     assert evidence["evidence/agent-session.log"] == b"agent session\n"
     assert "instance/reference-tests.patch" in evidence
@@ -60,14 +58,31 @@ def test_judge_evidence_is_what_the_judge_was_shown_without_the_views(tmp_path):
 
 
 def test_classification_evidence_is_the_record_and_the_rubric(tmp_path):
-    evidence = classification_target(classified_attempt(tmp_path)).evidence()
+    evidence = ClassificationTarget.load(classified_attempt(tmp_path)).evidence()
 
-    assert [file.name for file in evidence] == ["instance.json", "rubric.md"]
+    assert list(evidence) == ["instance.json", "rubric.md"]
+
+
+def test_each_target_reads_the_issue_its_judge_read(tmp_path):
+    judgment = JudgmentTarget.load(judged_run(tmp_path / "run").root)
+    classification = ClassificationTarget.load(classified_attempt(tmp_path / "attempt"))
+
+    assert judgment.issue() == "# Issue\n\nIncorrect result.\n"
+    assert classification.issue() == "Broken behavior."
+
+
+def test_a_judgment_adds_its_submission_to_the_views(tmp_path):
+    judgment = JudgmentTarget.load(judged_run(tmp_path / "run").root)
+    classification = ClassificationTarget.load(classified_attempt(tmp_path / "attempt"))
+
+    (generated,) = judgment.submitted_files().values()
+    assert generated.content == b"def test_generated(): pass\n"
+    assert classification.submitted_files() == {}
 
 
 def test_missing_evidence_is_refused(tmp_path):
     paths = judged_run(tmp_path)
-    target = judge_target(paths)
+    target = JudgmentTarget.load(paths.root)
     (paths.evaluation / "buggy/output.log").unlink()
 
     with pytest.raises(TargetError, match="missing"):
@@ -84,12 +99,12 @@ def test_missing_evidence_is_refused(tmp_path):
 )
 def test_a_judgment_that_is_not_completed_is_refused(tmp_path, judgment, reason):
     with pytest.raises(TargetError, match=reason):
-        judge_target(judged_run(tmp_path, judgment))
+        JudgmentTarget.load(judged_run(tmp_path, judgment).root)
 
 
 def test_a_failed_classification_is_refused(tmp_path):
     with pytest.raises(TargetError, match="failed, not completed"):
-        classification_target(classified_attempt(tmp_path, FAILED))
+        ClassificationTarget.load(classified_attempt(tmp_path, FAILED))
 
 
 def test_find_targets_lists_a_data_repository(tmp_path):
@@ -98,35 +113,35 @@ def test_find_targets_lists_a_data_repository(tmp_path):
     classified_attempt(tmp_path / "classifications/owner__project-1/attempt-1")
     classified_attempt(tmp_path / "classifications/owner__project-1/attempt-2", FAILED)
 
-    targets, skipped = find_targets(tmp_path)
+    targets, unreviewable = find_targets(tmp_path)
 
-    assert [(t.stage, t.root.name) for t in targets] == [
-        ("judge", "run-a"),
-        ("classification", "attempt-1"),
+    assert [(type(t), t.root.name) for t in targets] == [
+        (JudgmentTarget, "run-a"),
+        (ClassificationTarget, "attempt-1"),
     ]
-    assert [(s.stage, s.root.name) for s in skipped] == [
+    assert [(item.stage, item.root.name) for item in unreviewable] == [
         ("judge", "run-b"),
         ("classification", "attempt-2"),
     ]
-    assert all("failed, not completed" in s.reason for s in skipped)
+    assert all("failed, not completed" in item.reason for item in unreviewable)
 
 
 def test_find_targets_accepts_one_run_or_one_attempt(tmp_path):
     run = judged_run(tmp_path / "run").root
     attempt = classified_attempt(tmp_path / "attempt")
 
-    assert [t.stage for t in find_targets(run)[0]] == ["judge"]
-    assert [t.stage for t in find_targets(attempt)[0]] == ["classification"]
+    assert [type(t) for t in find_targets(run)[0]] == [JudgmentTarget]
+    assert [type(t) for t in find_targets(attempt)[0]] == [ClassificationTarget]
 
 
-def test_a_run_without_a_judgment_is_skipped_with_its_reason(tmp_path):
+def test_a_run_without_a_judgment_is_unreviewable_with_its_reason(tmp_path):
     paths = judged_run(tmp_path / "runs/run-a")
     paths.judge.judgment.unlink()
 
-    targets, skipped = find_targets(tmp_path)
+    targets, unreviewable = find_targets(tmp_path)
 
     assert targets == []
-    assert skipped[0].reason == "The run has no judgment"
+    assert unreviewable[0].reason == "The run has no judgment"
 
 
 def test_find_targets_refuses_a_directory_without_targets(tmp_path):

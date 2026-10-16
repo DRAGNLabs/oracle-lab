@@ -13,11 +13,10 @@ from fixtures import (
 )
 
 from oracle_lab.classification.contracts import OutOfScopeClassification
-from oracle_lab.classification.run import (
+from oracle_lab.classification.run import _classification_stage, classify
+from oracle_lab.classification.workspace import (
     CLASSIFICATION_ROOT,
-    _classification_stage,
     build_classification_workspace,
-    classify,
 )
 from oracle_lab.config import ClassificationConfig
 from oracle_lab.io import read_json, write_json

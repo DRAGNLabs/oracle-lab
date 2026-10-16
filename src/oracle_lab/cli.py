@@ -107,9 +107,6 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _preflight_all(args.configs)
     if args.command == "review":
         return serve(args.path, args.rater, port=args.port, open_browser=not args.no_browser)
-    if args.command == "agreement":
-        print(agreement(args.paths, args.output))
-        return 0
     if args.command == "run":
         output = run(load_config(args.config))
     elif args.command == "batch":
@@ -123,6 +120,8 @@ def _dispatch(args: argparse.Namespace) -> int:
         output = report(paths)
     elif args.command == "classify":
         output = classify(load_classification_config(args.config))
+    elif args.command == "agreement":
+        output = agreement(args.paths, args.output)
     else:  # report
         output = report(RunPaths.open(args.run_dir.resolve()))
 

@@ -18,6 +18,9 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
 from oracle_lab.io import read_json, write_json
 
+Sha256 = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+CommitId = Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
+
 
 class MatrixCellName(StrEnum):
     """One binary paired outcome, including its execution and display meanings."""
@@ -66,7 +69,7 @@ class SourceProvenance(ArtifactModel):
     revision: str
     split: str
     upstream_revision: str
-    record_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    record_sha256: Sha256
 
 
 class InstanceRecord(ArtifactModel):
@@ -78,7 +81,7 @@ class InstanceRecord(ArtifactModel):
 
     instance_id: str
     repo: str
-    base_commit: Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
+    base_commit: CommitId
     golden_patch: str
     reference_test_patch: str
     reference_test_ids: list[str]
@@ -87,7 +90,7 @@ class InstanceRecord(ArtifactModel):
 
 
 class SubmissionFile(ArtifactModel):
-    sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    sha256: Sha256
     mode: int
 
 
@@ -102,7 +105,7 @@ class SubmissionManifest(ArtifactModel):
     forbidden_changes: list[str]  # edits outside the generated directory
     compliant: bool
     empty: bool
-    sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    sha256: Sha256
 
 
 class TargetFile(ArtifactModel):
@@ -322,7 +325,7 @@ class ExposedArtifact(StrictModel):
 
     source: str
     destination: str
-    sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    sha256: Sha256
 
 
 def failed_turn(error: str, *, timed_out: bool = False) -> UnsuccessfulTurn:

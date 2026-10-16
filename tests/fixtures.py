@@ -8,23 +8,15 @@ import json
 import subprocess
 from contextlib import contextmanager
 from pathlib import Path
-from tempfile import TemporaryDirectory
+from typing import NamedTuple
 
 import oracle_lab.container
 from oracle_lab.classification.contracts import CLASSIFICATION_LABELS
-from oracle_lab.classification.run import classification_evidence
 from oracle_lab.config import RunConfig, RuntimeConfig, load_config
 from oracle_lab.io import digest, write_json
 from oracle_lab.judge.contracts import JUDGMENT_LABEL_KEYS
-from oracle_lab.judge.workspace import JUDGE_ROOT, judge_evidence
 from oracle_lab.paths import RunPaths
-from oracle_lab.results import (
-    MATRIX_CELLS,
-    InstanceRecord,
-    SubmissionManifest,
-    read_evaluation_result,
-    write_result,
-)
+from oracle_lab.results import MATRIX_CELLS, InstanceRecord, SubmissionManifest, write_result
 
 # The run config tests start from, independent of the sample configs.
 RUN_CONFIG = Path(__file__).parent / "run-config.yaml"
@@ -279,47 +271,32 @@ REPAIR = (
 def judged_run(
     root: Path, judgment: dict | None = None, instance: InstanceRecord | None = None
 ) -> RunPaths:
-    """A run on disk with its judgment and a workspace spec matching its evidence."""
+    """A judged run on disk, holding every file its judge read."""
     paths = RunPaths.create(root)
     instance = instance or instance_record(golden_patch=REPAIR)
     write_result(paths.instance, instance)
     paths.config.write_text("instance: owner__project-1\n")
     paths.judge.rubric.write_text("# Judge rubric\n")
     (paths.ground_truth / "issue.md").write_text("# Issue\n\nIncorrect result.\n")
-    (paths.ground_truth / "fix.patch").write_text(REPAIR)
+    (paths.ground_truth / "fix.patch").write_text(instance.golden_patch)
     (paths.generation / "session.log").write_text("agent session\n")
     (paths.generation / "workspace.diff").write_text("generated diff\n")
-    manifest = write_submission(paths)
+    write_submission(paths)
     write_json(paths.results, detecting_result())
     for version in ("buggy", "golden"):
-        (paths.evaluation / version).mkdir(parents=True, exist_ok=True)
         write_json(paths.evaluation / version / "tests.json", {"status": "completed"})
         (paths.evaluation / version / "output.log").write_text(version + " output\n")
-
-    evaluation = read_evaluation_result(paths.results)
-    with TemporaryDirectory() as staging:
-        rows = judge_evidence(paths, Path(staging), instance, evaluation, manifest)
-        artifacts = [_exposed(source, destination) for source, destination in rows]
-    artifacts += [
-        {
-            "source": f"submission/files/{name}",
-            "destination": f"{view}/{name}",
-            "sha256": info.sha256,
-        }
-        for name, info in manifest.files.items()
-        for view in (JUDGE_ROOT + "/buggy", JUDGE_ROOT + "/golden")
-    ]
     write_json(
         paths.judge.workspace_spec,
         {
             "prepared_image": {"reference": "example/runtime", "image_id": "id", "digests": []},
             "base_commit": instance.base_commit,
-            "repair_patch_sha256": digest(REPAIR.encode()),
+            "repair_patch_sha256": digest(instance.golden_patch.encode()),
             "reference_test_patch_sha256": digest(instance.reference_test_patch.encode()),
             "rubric_sha256": digest(paths.judge.rubric.read_bytes()),
             "workspace_method": "git_worktree",
             "reconstruction_commands": [],
-            "artifacts": artifacts,
+            "artifacts": [],
         },
     )
     write_json(paths.judge.result, judge_attempt())
@@ -330,24 +307,16 @@ def judged_run(
 def classified_attempt(
     root: Path, result: dict | None = None, instance: InstanceRecord | None = None
 ) -> Path:
-    """A classification attempt on disk with its result and workspace spec."""
+    """A classification attempt on disk, holding every file its classifier read."""
     instance = instance or instance_record()
-    (root / "inputs").mkdir(parents=True)
     write_result(root / "inputs/instance.json", instance)
     (root / "inputs/config.resolved.yaml").write_text("source: owner__project-1\n")
     (root / "inputs/rubric.md").write_text("# Classification rubric\n")
     write_json(root / "agent/result.json", judge_attempt(model="classifier-model"))
-    rows = classification_evidence(root)
     write_json(
         root / "workspace-spec.json",
-        {
-            "image": "example/runtime",
-            "base_commit": instance.base_commit,
-            "artifacts": [_exposed(source, destination) for source, destination in rows],
-        },
+        {"image": "example/runtime", "base_commit": instance.base_commit, "artifacts": []},
     )
-    if result is None:
-        result = {"status": "completed", **in_scope_classification()}
     write_json(
         root / "classification.json",
         {
@@ -355,18 +324,10 @@ def classified_attempt(
             "base_commit": instance.base_commit,
             "source_record_sha256": instance.source.record_sha256,
             "rubric_sha256": digest((root / "inputs/rubric.md").read_bytes()),
-            "result": result,
+            "result": result or {"status": "completed", **in_scope_classification()},
         },
     )
     return root
-
-
-def _exposed(source: Path, destination: str) -> dict:
-    return {
-        "source": source.name,
-        "destination": destination,
-        "sha256": digest(source.read_bytes()),
-    }
 
 
 def git(directory: Path, *args: str) -> str:
@@ -376,8 +337,16 @@ def git(directory: Path, *args: str) -> str:
     return subprocess.run(command, check=True, capture_output=True, text=True).stdout.strip()
 
 
-def upstream_repository(repo: Path) -> tuple[str, str, str]:
-    """A local upstream at the base commit: its URL, the base commit, and a repair diff.
+class Upstream(NamedTuple):
+    """A local stand-in for a task's GitHub repository."""
+
+    url: str
+    base_commit: str
+    repair: str  # a Git diff from the base commit
+
+
+def upstream_repository(repo: Path) -> Upstream:
+    """A local upstream at its base commit, and a repair for it.
 
     The repair changes `package/core.py`, creates `package/added.py`, and deletes
     `package/gone.py`.
@@ -400,4 +369,16 @@ def upstream_repository(repo: Path) -> tuple[str, str, str]:
     git(repo, "commit", "--quiet", "-m", "fix")
     repair = git(repo, "diff", base, "HEAD") + "\n"
     git(repo, "switch", "--quiet", "main")
-    return "file://" + str(repo), base, repair
+    return Upstream("file://" + str(repo), base, repair)
+
+
+REVIEWED_RUN = "runs/run-a"
+
+
+def review_set(root: Path, upstream: Upstream) -> Path:
+    """A review data repository: a judged run on `upstream`, a failed run, and a classification."""
+    instance = instance_record(base_commit=upstream.base_commit, golden_patch=upstream.repair)
+    judged_run(root / REVIEWED_RUN, instance=instance)
+    judged_run(root / "runs/run-b", {"status": "failed", "error": "Crashed."})
+    classified_attempt(root / "classifications/owner__project-1/attempt-1")
+    return root

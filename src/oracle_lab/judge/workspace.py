@@ -18,6 +18,7 @@ from oracle_lab.results import (
     EvaluationResult,
     ExposedArtifact,
     InstanceRecord,
+    MatrixCellName,
     SubmissionManifest,
     write_result,
 )
@@ -26,6 +27,7 @@ JUDGE_ROOT = "/oracle-judge"
 HELPER = "/judge_workspace.py"
 # The judge compares these two checkouts of the same repository.
 VIEWS = (JUDGE_ROOT + "/buggy", JUDGE_ROOT + "/golden")
+REPAIR = JUDGE_ROOT + "/instance/fix.patch"
 INSTRUCTIONS_TEMPLATE = Path(__file__).resolve().parent / "templates/workspace-instructions.md"
 
 
@@ -53,12 +55,7 @@ def build_judge_workspace(
     artifacts: list[ExposedArtifact] = []
     with TemporaryDirectory(prefix="oracle-judge-bundle-") as temporary:
         staging = Path(temporary)
-
         evidence = judge_evidence(paths, staging, instance, evaluation, manifest)
-        rubric = paths.judge.rubric
-        fix = paths.ground_truth / "fix.patch"
-        fix_in_container = JUDGE_ROOT + "/instance/fix.patch"
-        reference_patch = staging / "reference-tests.patch"
 
         # images.json is read at the end for the spec, not shown to the judge.
         images = paths.build / "images.json"
@@ -96,8 +93,8 @@ def build_judge_workspace(
 
         # 3. The repair goes into the golden view only. The buggy view stays broken.
         apply = ["git", "-C", JUDGE_ROOT + "/golden", "apply"]
-        sandbox.run([*apply, "--check", fix_in_container], timeout=config.limits.setup_seconds)
-        sandbox.run([*apply, fix_in_container], timeout=config.limits.setup_seconds)
+        sandbox.run([*apply, "--check", REPAIR], timeout=config.limits.setup_seconds)
+        sandbox.run([*apply, REPAIR], timeout=config.limits.setup_seconds)
 
         # 4. The same submission goes into both views, so the judge reads one set of
         #    tests against two versions of the code.
@@ -121,7 +118,6 @@ def build_judge_workspace(
         observed = read_json(observed_path)
         if set(observed) != set(VIEWS) or any(files != expected for files in observed.values()):
             raise ValueError("Generated tests differ between the saved bundle and judge views")
-        reference_patch_sha256 = digest(reference_patch.read_bytes())
 
     sandbox.run(["chmod", "-R", "a+rX", JUDGE_ROOT])
     artifacts.sort(key=lambda artifact: (artifact.destination, artifact.source))
@@ -133,9 +129,9 @@ def build_judge_workspace(
     spec = WorkspaceSpec(
         prepared_image=image_record,
         base_commit=base_commit,
-        repair_patch_sha256=digest(fix.read_bytes()),
-        reference_test_patch_sha256=reference_patch_sha256,
-        rubric_sha256=digest(rubric.read_bytes()),
+        repair_patch_sha256=digest((paths.ground_truth / "fix.patch").read_bytes()),
+        reference_test_patch_sha256=digest(instance.reference_test_patch.encode()),
+        rubric_sha256=digest(paths.judge.rubric.read_bytes()),
         workspace_method=method,
         reconstruction_commands=commands,
         artifacts=artifacts,
@@ -183,7 +179,7 @@ def judge_evidence(
     return [
         (paths.judge.rubric, JUDGE_ROOT + "/rubric.md"),
         (paths.ground_truth / "issue.md", JUDGE_ROOT + "/instance/issue.md"),
-        (paths.ground_truth / "fix.patch", JUDGE_ROOT + "/instance/fix.patch"),
+        (paths.ground_truth / "fix.patch", REPAIR),
         (reference_patch, JUDGE_ROOT + "/instance/reference-tests.patch"),
         (metadata, JUDGE_ROOT + "/instance/metadata.json"),
         (instructions, JUDGE_ROOT + "/instructions.md"),
@@ -246,10 +242,10 @@ def _workspace_instructions(
         for row in evaluation.tests
     ]
     matrix_names = (
-        "fail_on_buggy_pass_on_golden",
-        "pass_on_both",
-        "fail_on_both",
-        "pass_on_buggy_fail_on_golden",
+        MatrixCellName.FAIL_ON_BUGGY_PASS_ON_GOLDEN,
+        MatrixCellName.PASS_ON_BOTH,
+        MatrixCellName.FAIL_ON_BOTH,
+        MatrixCellName.PASS_ON_BUGGY_FAIL_ON_GOLDEN,
     )
     values = {
         "repair_files": "\n".join(f"- `{path}`" for path in _patch_paths(instance.golden_patch)),

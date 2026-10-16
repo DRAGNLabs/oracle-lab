@@ -47,8 +47,8 @@ uv run oracle-lab review <dir> --rater <id>
 ```
 
 `<dir>` is a run, a classification attempt, or a directory holding `runs/` and
-`classifications/`, such as a review data repository. The command starts a local web
-server on `127.0.0.1` and opens the browser. `--port` picks the port and
+`classifications/`, such as a review data repository. The command starts a local
+web server on `127.0.0.1` and opens the browser. `--port` picks the port and
 `--no-browser` prints the URL instead of opening it. Press Ctrl+C to stop.
 
 The page needs no Docker, credentials, or model calls. It does need Git and
@@ -72,9 +72,9 @@ The page shows the rater what the judge had:
 
 Unsaved ratings stay in the browser until the rater saves. Saving writes the
 review under `reviews/<rater>/` beside the output it rates (`judge/reviews/` in a
-run); saving again moves the earlier review to `reviews-history/<rater>/`. The page reads only the current rater's
-reviews, never another rater's. Rerunning the judge moves the reviews into
-`judge-history/` with the judgment they rated.
+run); saving again moves the earlier review to `reviews-history/<rater>/`. The
+page reads only the current rater's reviews, never another rater's. Rerunning
+the judge moves the reviews into `judge-history/` with the judgment they rated.
 
 ## Agreement
 

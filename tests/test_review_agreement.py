@@ -93,10 +93,9 @@ def test_one_rater_gives_judge_quality_but_no_agreement(data):
 def test_missing_and_unreviewable_targets_are_listed(data):
     report = compute_agreement([data])
 
-    assert [(item.target, item.raters) for item in report.missing] == [
-        ((data / "classifications/owner__project-1/attempt-1").as_posix(), ["bob"])
-    ]
-    assert [item.target for item in report.unreviewable] == [(data / "runs/run-c").as_posix()]
+    attempt = (data / "classifications/owner__project-1/attempt-1").as_posix()
+    assert report.missing == {attempt: ["bob"]}
+    assert list(report.unreviewable) == [(data / "runs/run-c").as_posix()]
 
 
 def test_agreement_is_saved_as_json_and_markdown(data, tmp_path):

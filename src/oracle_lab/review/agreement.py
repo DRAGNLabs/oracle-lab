@@ -13,25 +13,20 @@ from datetime import datetime, timezone
 from itertools import combinations
 from pathlib import Path
 
-from oracle_lab.classification.contracts import CLASSIFICATION_LABELS
 from oracle_lab.io import utc_stamp, write_json
-from oracle_lab.judge.contracts import JUDGMENT_LABELS
 from oracle_lab.review.contracts import (
     RATINGS,
     AgreementReport,
-    MissingReviews,
     QuestionAgreement,
     Rating,
+    Review,
+    Stage,
     StageAgreement,
-    UnreviewableTarget,
 )
 from oracle_lab.review.store import read_all_reviews
-from oracle_lab.review.targets import Stage, find_targets
+from oracle_lab.review.targets import TARGET_KINDS, find_targets
 
-STAGES: dict[Stage, tuple[str, dict[str, str]]] = {
-    "judge": ("Test judgments", JUDGMENT_LABELS),
-    "classification": ("Task classifications", CLASSIFICATION_LABELS),
-}
+TITLES: dict[Stage, str] = {"judge": "Test judgments", "classification": "Task classifications"}
 
 
 def agreement(paths: Sequence[Path], output: Path | None = None) -> Path:
@@ -46,50 +41,27 @@ def agreement(paths: Sequence[Path], output: Path | None = None) -> Path:
 
 def compute_agreement(paths: Sequence[Path]) -> AgreementReport:
     targets = []
-    unreviewable = []
+    unreviewable = {}
     for path in paths:
-        found, skipped = find_targets(path)
+        found, cannot = find_targets(path)
         targets += found
-        unreviewable += [
-            UnreviewableTarget(target=item.root.as_posix(), stage=item.stage, reason=item.reason)
-            for item in skipped
-        ]
+        unreviewable |= {item.root.as_posix(): item.reason for item in cannot}
 
     reviews = {target.root: read_all_reviews(target) for target in targets}
     raters = sorted({rater for by_rater in reviews.values() for rater in by_rater})
 
     stages = {}
-    for stage, (_, labels) in STAGES.items():
-        in_stage = [target for target in targets if target.stage == stage]
-        if not in_stage:
-            continue
-        questions = {}
-        for key, label in labels.items():
-            units = [
-                [
-                    review.ratings[key]
-                    for review in reviews[target.root].values()
-                    if key in review.ratings
-                ]
-                for target in in_stage
-            ]
-            units = [unit for unit in units if unit]
-            if units:
-                questions[key] = _question(label, units)
-        stages[stage] = StageAgreement(
-            targets=len(in_stage),
-            reviews=sum(len(reviews[target.root]) for target in in_stage),
-            questions=questions,
-        )
+    for kind in TARGET_KINDS:
+        in_stage = [reviews[target.root] for target in targets if isinstance(target, kind)]
+        if in_stage:
+            stages[kind.stage] = _stage(in_stage, kind.labels)
 
     # Every rater is expected to review every target.
-    missing = []
+    missing = {}
     for target in targets:
         absent = [rater for rater in raters if rater not in reviews[target.root]]
         if absent:
-            missing.append(
-                MissingReviews(target=target.root.as_posix(), stage=target.stage, raters=absent)
-            )
+            missing[target.root.as_posix()] = absent
 
     return AgreementReport(
         created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -147,13 +119,10 @@ def render_agreement(report: AgreementReport) -> str:
         "",
         f"Raters: {', '.join(report.raters) if report.raters else 'none'}.",
     ]
-    for stage, (title, _) in STAGES.items():
-        if stage not in report.stages:
-            continue
-        summary = report.stages[stage]
+    for stage, summary in report.stages.items():
         lines += [
             "",
-            f"## {title}",
+            f"## {TITLES[stage]}",
             "",
             f"{_count(summary.targets, 'target')}, {_count(summary.reviews, 'review')}.",
         ]
@@ -188,15 +157,39 @@ def render_agreement(report: AgreementReport) -> str:
         lines.append("No reviews yet.")
     elif report.missing:
         lines += ["| Target | Raters without a review |", "|---|---|"]
-        lines += [f"| `{item.target}` | {', '.join(item.raters)} |" for item in report.missing]
+        lines += [
+            f"| `{target}` | {', '.join(raters)} |" for target, raters in report.missing.items()
+        ]
     else:
         lines.append("Every rater reviewed every target.")
     if report.unreviewable:
         lines += ["", "## Not reviewable", "", "| Target | Reason |", "|---|---|"]
         lines += [
-            f"| `{item.target}` | {item.reason.splitlines()[0]} |" for item in report.unreviewable
+            f"| `{target}` | {reason.splitlines()[0]} |"
+            for target, reason in report.unreviewable.items()
         ]
     return "\n".join(lines) + "\n"
+
+
+def _stage(reviews: list[dict[str, Review]], labels: dict[str, str]) -> StageAgreement:
+    """Agreement for one stage, from each of its targets' reviews by rater."""
+    questions = {}
+    for key, label in labels.items():
+        # One unit per target: the ratings its raters gave this question.
+        units: list[list[Rating]] = []
+        for by_rater in reviews:
+            unit: list[Rating] = [
+                review.ratings[key] for review in by_rater.values() if key in review.ratings
+            ]
+            if unit:
+                units.append(unit)
+        if units:
+            questions[key] = _question(label, units)
+    return StageAgreement(
+        targets=len(reviews),
+        reviews=sum(len(by_rater) for by_rater in reviews),
+        questions=questions,
+    )
 
 
 def _question(label: str, units: list[list[Rating]]) -> QuestionAgreement:

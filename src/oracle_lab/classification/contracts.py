@@ -10,9 +10,11 @@ from pydantic import Field, ValidationError, field_validator, model_validator
 
 from oracle_lab.io import read_json
 from oracle_lab.results import (
+    CommitId,
     ExposedArtifact,
     InstanceRecord,
     Justification,
+    Sha256,
     StrictModel,
     UnsuccessfulTurn,
     parse_json_object,
@@ -130,15 +132,15 @@ class SavedClassification(StrictModel):
     """A classification plus immutable identity used by later benchmark runs."""
 
     instance_id: str
-    base_commit: Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
-    source_record_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
-    rubric_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    base_commit: CommitId
+    source_record_sha256: Sha256
+    rubric_sha256: Sha256
     result: ClassificationResult
 
 
 class WorkspaceSpec(StrictModel):
     image: str
-    base_commit: Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
+    base_commit: CommitId
     artifacts: list[ExposedArtifact]
 
 

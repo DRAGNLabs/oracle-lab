@@ -18,6 +18,7 @@ dependencies = [
 dataset = ["datasets>=3,<4"]
 dev = ["pytest>=8,<9", "ruff>=0.11,<1"]
 analysis = ["matplotlib>=3.8,<4", "ipykernel>=6,<7"]
+trace = ["tree-sitter>=0.23,<1", "tree-sitter-bash>=0.23,<1"]
 
 [project.scripts]
 oracle-lab = "oracle_lab.cli:main"
@@ -35,6 +36,7 @@ oracle_lab = [
     "judge/templates/*.json",
     "web/static/*",
     "web/static/vendor/*",
+    "trace/static/*",
 ]
 
 [tool.pytest.ini_options]

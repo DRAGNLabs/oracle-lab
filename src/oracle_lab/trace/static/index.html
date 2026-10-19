@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Oracle Lab traces</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/vendor/github.min.css" media="(prefers-color-scheme: light)">
+  <link rel="stylesheet" href="/vendor/github-dark.min.css" media="(prefers-color-scheme: dark)">
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/vendor/highlight.min.js"></script>
+  <script src="/static/app.js" type="module"></script>
+</head>
+<body>
+  <header class="topbar">
+    <select id="run-picker" aria-label="Run"></select>
+    <span class="spacer"></span>
+    <label><input type="checkbox" id="lanes-by-file"> Lanes by file</label>
+    <label><input type="checkbox" id="show-outcomes"> Show outcomes</label>
+  </header>
+  <section id="run-header"></section>
+  <main class="layout">
+    <div id="timeline"></div>
+    <aside id="detail"></aside>
+    <aside id="tests"></aside>
+  </main>
+</body>
+</html>

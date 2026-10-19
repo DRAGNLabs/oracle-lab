@@ -13,7 +13,11 @@ from oracle_lab.harnesses.launch import (
     run_agent_turn,
     turn_status,
 )
+from oracle_lab.harnesses.steps import Step
 from oracle_lab.results import Usage
+
+# Whether `read_steps` reasoning is the model's own text or a CLI-written summary.
+REASONING = "raw"
 
 
 def parse_trace(path: Path) -> dict:
@@ -42,6 +46,16 @@ def parse_trace(path: Path) -> dict:
         "turn_failed": bool(errors),
         "final_text": final_text,
     }
+
+
+def read_steps(path: Path) -> list[Step]:
+    """The run's steps. Each `tool` part is one step.
+
+    Its `reasoning_details` text becomes a reasoning step placed just before it.
+    `text` parts become message steps. Aborted `unknown` calls and `invalid`
+    retries are kept as failed tool steps.
+    """
+    raise NotImplementedError
 
 
 def _usage(steps: list[dict]) -> dict | None:

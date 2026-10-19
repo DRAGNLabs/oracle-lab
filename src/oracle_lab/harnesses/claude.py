@@ -12,7 +12,11 @@ from oracle_lab.harnesses.launch import (
     run_agent_turn,
     turn_status,
 )
+from oracle_lab.harnesses.steps import Step
 from oracle_lab.results import Usage
+
+# Whether `read_steps` reasoning is the model's own text or a CLI-written summary.
+REASONING = "summary"
 
 
 def parse_trace(path: Path) -> dict:
@@ -37,6 +41,15 @@ def parse_trace(path: Path) -> dict:
         "unparsed_trace_lines": malformed,
         "final_text": result.get("result", "") if result else "",
     }
+
+
+def read_steps(path: Path) -> list[Step]:
+    """The run's steps. `tool_use` and `tool_result` blocks pair up by id.
+
+    `thinking` and `text` blocks become reasoning and message steps. The many
+    `system/thinking_tokens` progress events are dropped.
+    """
+    raise NotImplementedError
 
 
 def _usage(raw: dict | None) -> dict | None:

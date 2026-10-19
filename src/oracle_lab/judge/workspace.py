@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import shlex
 from pathlib import Path
 from string import Template
 from tempfile import TemporaryDirectory
@@ -13,6 +12,7 @@ from oracle_lab.config import RunConfig, repo_path
 from oracle_lab.container.sandbox import Sandbox
 from oracle_lab.io import digest, read_json, require_files, write_json
 from oracle_lab.judge.contracts import BundleManifest, PreparedImage, WorkspaceSpec
+from oracle_lab.localization.patches import parse_patch
 from oracle_lab.paths import RunPaths
 from oracle_lab.results import (
     EvaluationResult,
@@ -222,15 +222,7 @@ def _normalized_test_ids(value: object) -> list[str]:
 
 
 def _patch_paths(patch: str) -> list[str]:
-    paths = set()
-    for line in patch.splitlines():
-        if not line.startswith("diff --git "):
-            continue
-        fields = shlex.split(line)
-        if len(fields) != 4 or not fields[3].startswith("b/"):
-            raise ValueError(f"Cannot interpret patch path: {line}")
-        paths.add(repo_path(fields[3][2:]))
-    return sorted(paths)
+    return sorted({path for diff in parse_patch(patch) for path in diff.paths})
 
 
 def _workspace_instructions(

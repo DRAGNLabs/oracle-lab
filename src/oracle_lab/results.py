@@ -220,7 +220,7 @@ class PairedResult(ArtifactModel):
     @property
     def has_fail_on_buggy_pass_on_golden(self) -> bool:
         """Whether any completed test distinguishes the pair in the expected direction."""
-        return self.matrix["fail_on_buggy_pass_on_golden"].count > 0
+        return self.matrix[MatrixCellName.FAIL_ON_BUGGY_PASS_ON_GOLDEN].count > 0
 
 
 class EvaluationResult(PairedResult):

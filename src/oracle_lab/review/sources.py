@@ -110,9 +110,8 @@ def _touched(
     touched: dict[str, list[Touch]] = {}
     for touch, patch in patches:
         for diff in parse_patch(patch):
-            for path in {diff.old_path, diff.new_path}:
-                if path is not None:
-                    touched.setdefault(path, []).append(touch)
+            for path in diff.paths:
+                touched.setdefault(path, []).append(touch)
     for name in submitted:
         touched.setdefault(name, []).append("submission")
     return {path: tuple(touches) for path, touches in touched.items()}

@@ -21,6 +21,11 @@ class FileDiff:
     new_path: str | None  # None when the repair deletes the file
     hunks: list[Hunk] = field(default_factory=list)
 
+    @property
+    def paths(self) -> set[str]:
+        """Every path this file's diff names, before and after."""
+        return {path for path in (self.old_path, self.new_path) if path is not None}
+
 
 def parse_patch(patch: str) -> list[FileDiff]:
     """Split a unified diff into files and hunks, counting lines to find hunk ends."""

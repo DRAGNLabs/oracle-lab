@@ -1,6 +1,6 @@
 """Inter-rater agreement and judge quality over saved human reviews.
 
-Raters rate each LLM answer `correct`, `defensible`, or `incorrect`. Agreement
+Raters agree or disagree with each LLM answer and failure-mode decision. Agreement
 between raters says how far those ratings can be trusted; the ratings themselves
 say how often the judge is right. The two stages are reported separately.
 """
@@ -71,6 +71,12 @@ def compute_agreement(paths: Sequence[Path]) -> AgreementReport:
         missing=missing,
         unreviewable=unreviewable,
     )
+
+
+def _added_labels(targets, reviews) -> tuple[list, dict[str, int]]:
+    """Every judge-added failure mode with its ratings, and the raters' own labels
+    counted by name."""
+    raise NotImplementedError
 
 
 def krippendorff_alpha(

@@ -50,7 +50,7 @@ function onKey(event) {
     event.preventDefault();
   } else if (state.target && event.key === "?") {
     showHelp();
-  } else if (state.target && ["1", "2", "3"].includes(event.key)) {
+  } else if (state.target && ["1", "2"].includes(event.key)) {
     event.preventDefault();
     rate(state.selected, RATINGS[Number(event.key) - 1], { advance: true });
   } else if (state.target && event.key === "j") {

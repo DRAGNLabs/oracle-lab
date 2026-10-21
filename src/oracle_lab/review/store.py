@@ -22,7 +22,7 @@ def save_review(target: ReviewTarget, rater: str, raw: str) -> Review:
     A rater's earlier review of the same target moves to `reviews-history/` first.
     """
     directory = target.reviews / require_rater(rater)
-    review = parse_review(raw, target.answered_questions())
+    review = parse_review(raw, target.rating_keys())
     provenance = _provenance(target, rater)
     if directory.exists():
         history = target.review_history / rater / utc_stamp()

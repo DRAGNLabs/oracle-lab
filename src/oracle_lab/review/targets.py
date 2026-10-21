@@ -99,9 +99,15 @@ class ReviewTarget(ABC):
     def submitted_files(self) -> dict[str, SubmittedFile]:
         """Generated test files added to the judge's repository views."""
 
-    def answered_questions(self) -> list[str]:
-        """The questions the LLM answered. A `null` answer is not reviewed."""
-        return [key for key in self.labels if getattr(self.answers, key, None) is not None]
+    def rating_keys(self) -> list[str]:
+        """Every item a rater rates, in rail order: the questions the LLM answered (a
+        `null` answer is not reviewed), then for a judgment each start-list failure
+        mode as `failure_modes.<key>` and each added one as `added_failure_modes.<index>`."""
+        raise NotImplementedError
+
+    def rating_label(self, key: str) -> str:
+        """What the rail and the agreement report call one rating item."""
+        raise NotImplementedError
 
     def evidence(self) -> dict[str, bytes]:
         """The files the judge read besides the repository views, by path in its workspace.

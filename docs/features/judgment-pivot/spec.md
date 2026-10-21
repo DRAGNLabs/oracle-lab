@@ -120,3 +120,101 @@ Home → classification rating → run rating → run rating → next problem's 
    The trace-viewer spec is marked as superseded.
 7. Drive the page in headless Chromium across both stages and the three
    harnesses, and fix what looks wrong.
+
+# Cycle 2: failure modes
+
+Plan steps 4–5. The generation judge reads the agent's trace and decides each
+start-list failure mode, and raters agree or disagree with every decision. Ratings
+become agree or disagree everywhere. This changes three persisted contracts:
+`judgment.json`, a new `judge/trace.json`, and `review.json`. Old judgments and
+reviews stop validating; rejudge and re-review.
+
+## What the judge does
+
+One turn, one rubric, one `judgment.json`. Besides the four submission questions:
+
+- **`failure_modes`**: every start-list label, each `present` or `absent`. A present
+  label carries `steps` (trace step numbers, at least one) and a `justification`.
+  An absent label carries nothing else.
+- **`added_failure_modes`**: the judge's own labels for failure modes outside the
+  start list, each with `name`, `definition`, `steps`, and `justification`. May
+  be empty.
+
+The start list is the ten labels in `docs/research-framing.md`, as keys:
+`never_saw_bug`, `saw_bug_untested`, `copied_buggy_output`,
+`copied_existing_tests`, `ignored_available_docs`, `contradicted_read_docs`,
+`changed_test_to_pass`, `doubted_moved_on`, `explained_bug_away`, `flagged_bug`.
+The rubric gives each its apply and don't-apply rules, the four tests a label
+must pass, and says the trace's facts are evidence, not labels.
+
+## What the judge sees
+
+Workspace construction builds the trace on the host and saves it as
+`judge/trace.json` (`RunTrace.to_json()`). The judge gets:
+
+- `evidence/agent-trace.md`: the summarized view a rater sees: one line per event
+  (step, action type, description, tags such as patched lines and edit facts,
+  pytest counts) and the test file versions. Rendered from `judge/trace.json`.
+- `evidence/agent-trace.json`: `judge/trace.json`, every event with its full
+  input and output.
+- `evidence/agent-session.log`, as before.
+
+If the trace cannot be built, neither file exists; the judge gets the raw
+harness trace as `evidence/agent-trace.jsonl`, and its steps are that file's line
+numbers. The review page then shows the Agent trace tab as unavailable.
+
+## What the rater does
+
+- **Agree or disagree** with every answered submission question, every start
+  label's decision, and every judge-added label. Keys `1` and `2`.
+- **Other labels**: optional failure modes outside the start list the judge
+  missed, each with a name, a one-line description, and the trace steps.
+- **Rail**: a Submission section (full cards), a Failure modes section (present
+  labels as full cards with step links, then absent labels as one-line rows), then
+  "Your other labels" with an add form. `j`/`k` and `1`/`2` run through every item
+  in order.
+
+## Agreement
+
+Each submission question and each start label is a question. Judge-added labels
+are pooled into one question. The report also lists every judge-added label with
+its ratings, and counts the raters' other labels by name. "Judge quality" is the
+share of agree ratings; alpha is computed over the two ratings.
+
+## Structure (cycle 2)
+
+- `judge/contracts.py`: `FAILURE_MODES` (key → title), `PresentFailureMode`,
+  `AbsentFailureMode`, `FailureModeDecision`, `AddedFailureMode`.
+  `JudgmentLabels` gains `failure_modes` (exactly the start-list keys) and
+  `added_failure_modes`.
+- `paths.py`: `JudgePaths.trace` (`judge/trace.json`).
+- `trace/markdown.py`: `trace_markdown(trace: dict) -> str`, the summarized view
+  from saved trace JSON.
+- `judge/workspace.py`: `save_trace(paths)` builds and saves `judge/trace.json`,
+  or reports that it could not. `judge_evidence` exposes the two trace files, or
+  the raw trace.
+- `judge/templates/workspace-instructions.md` and
+  `prompts/judge/generated-test-evaluation-rubric.md`: the trace files and the
+  failure-mode section and output.
+- `review/contracts.py`: `Rating` is `agree` or `disagree`. `RaterFailureMode`
+  (name, description, steps). `Review` gains `other_failure_modes`.
+- `review/targets.py`: `ReviewTarget.rating_keys()` replaces
+  `answered_questions()` (submission keys, `failure_modes.<key>`,
+  `added_failure_modes.<index>`); `ReviewTarget.rating_label(key)`.
+- `review/agreement.py`: start labels as questions, pooled added labels, the
+  added-label list, and rater label counts. `AgreementReport` gains
+  `added_labels` and `rater_labels`.
+- `web/session.py`: `overview` gives each rating item its `section`, decision,
+  steps, and justification. `trace` reads `judge/trace.json`.
+- `web/static/rail.js`: the sections, compact absent rows, the other-labels form,
+  and two ratings.
+- `report.py`: failure modes in the judgment section.
+
+## Steps (cycle 2)
+
+1. Contracts: judgment, `JudgePaths.trace`, review. Fixtures and contract tests.
+2. `trace/markdown.py`, `save_trace`, and the evidence rows, with tests.
+3. Rubric and workspace instructions.
+4. Review targets, store, and agreement, with tests.
+5. Session, rail, help text, and the trace tab reading `judge/trace.json`.
+6. Report, `docs/results.md`, `docs/judging.md`, and the demo set.

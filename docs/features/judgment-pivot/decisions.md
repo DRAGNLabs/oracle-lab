@@ -65,3 +65,16 @@ The plan is `implementation.md`. Research reasons are in `docs/research-framing.
 - **The Event tab is always shown on Generation Judgment pages** (`review.showSideTab`), reading "Event" with a hint until an event is selected. A tab that appeared on selection and never left was jarring (demo feedback).
 - **The sidebar starts at 480px** (`review.sidebarWidth`).
 
+
+## Pre (cycle 2: failure modes)
+
+- **One judge turn answers both the submission questions and the failure modes.** One rubric, one `judgment.json`. The judge reads the tests and trace once, and the failure modes can lean on its reading of the submission.
+- **The start list is the ten labels in `docs/research-framing.md`, as written**, including "Flagged the bug". Each becomes a fixed key with its apply and don't-apply rules in the rubric.
+- **Raters' own labels are failure modes outside the start list only**, each with a name, a one-line description, and the trace steps it rests on. Disagreeing with a start label is a rating of its decision.
+- **Each label the judge marks present carries a justification and the trace steps it rests on** (at least one step number, as the timeline shows them). Step links in the rating card open that event.
+- **Ratings are agree or disagree everywhere; "defensible" is removed.** It was not well defined. This changes the submission and classification ratings too, and saved reviews stop validating.
+- **The judge does not justify absent labels.** Absent decisions carry only the decision.
+- **The judge gets the trace twice, with the same step numbers:** `evidence/agent-trace.md`, the summarized view a rater sees (one line per event with its tags, and the test file versions), and `evidence/agent-trace.json`, every event with its full input and output (the saved `judge/trace.json`). The session log stays.
+- **The rail has sections: Submission, then Failure modes (present labels as full cards, absent labels as one-line rows), then the rater's own labels.** Keys and `j`/`k` run through every item in order.
+- **If the trace cannot be built, the judge gets the raw harness trace instead** (`evidence/agent-trace.jsonl`) and judging continues. Its cited steps are then that file's line numbers.
+- **Agreement reports each start label as its own question, the judge-added labels pooled as one question, and a list of every judge-added label with its ratings.** Judge-added names differ per run, so they cannot be grouped by name.

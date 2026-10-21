@@ -1,12 +1,15 @@
-// The question rail: each answer the judge gave, the rater's rating of it, saving,
-// and Next task once everything is saved.
+// The question rail: each answer and failure-mode decision the judge gave, the
+// rater's agree or disagree, the rater's own failure-mode labels, saving, and Next
+// task once everything is saved. Sections: Submission (or the classification's
+// questions), Failure modes (present labels as cards, absent as one-line rows), and
+// Your other labels.
 
 import { nextTask } from "./listing.js";
 import { esc, linkify } from "./render.js";
 import { api, state } from "./state.js";
 
-export const RATINGS = ["correct", "defensible", "incorrect"];
-export const RATING_NAMES = { correct: "Correct", defensible: "Defensible", incorrect: "Incorrect" };
+export const RATINGS = ["agree", "disagree"];
+export const RATING_NAMES = { agree: "Agree", disagree: "Disagree" };
 
 // Start rating the open target from where the rater left off.
 export function startRail(target) {
@@ -39,7 +42,19 @@ export function rate(index, rating, { advance = false } = {}) {
   renderFoot();
 }
 
+// One section's items: full cards for questions and present failure modes, a
+// one-line row for an absent start label.
+function itemHtml(item, index) {
+  throw new Error("not implemented");
+}
+
+// "Your other labels": the rater's own failure modes, and the form that adds one.
+function renderOtherLabels() {
+  throw new Error("not implemented");
+}
+
 function renderQuestions() {
+  // TODO: group target.questions by section, using itemHtml.
   const { target, ratings, selected } = state;
   const definitions = state.listing.rating_definitions;
   document.getElementById("questions").innerHTML = target.questions.map((question, index) => {

@@ -152,6 +152,11 @@ class JudgePaths:
         return self.root / "image.json"
 
     @property
+    def trace(self) -> Path:
+        """The agent's trace as built when the judge's workspace was, for the judge and raters."""
+        return self.root / "trace.json"
+
+    @property
     def judgment(self) -> Path:
         return self.root / "judgment.json"
 

@@ -118,15 +118,10 @@ class ReviewSession:
             "stage": target.stage,
             "instance_id": target.instance.instance_id,
             "views": list(target.views),
-            "questions": [
-                {
-                    "key": key,
-                    "label": target.labels[key],
-                    "answer": answers[key],
-                    "justification": answers["justifications"][key],
-                }
-                for key in target.answered_questions()
-            ],
+            # Every rating item in rail order, with its section ("submission",
+            # "failure_modes", or "added_failure_modes"), the judge's answer or
+            # decision, its steps for a failure mode, and its justification.
+            "questions": _rating_items(target, answers),
             "review": review.ratings if review else None,
             "stage_rubric": target.stage_rubric.read_text(),
             "evidence": sorted(self._evidence_of(target_id)),
@@ -151,12 +146,16 @@ class ReviewSession:
         return {"name": name, **_text(evidence[name])}
 
     def trace(self, target_id: str) -> dict:
-        """A judged run's agent trace, as `RunTrace.to_json()`. Built once per session."""
+        """A judged run's agent trace as saved when it was judged (`judge/trace.json`).
+
+        Read once per session. A run whose trace could not be built has none.
+        """
         target = self._target(target_id)
         if not isinstance(target, JudgmentTarget):
             raise LookupError(f"{target_id} has no agent trace")
         with self._lock:
             if target_id not in self._traces:
+                # TODO: read target.paths.judge.trace; LookupError when it is absent.
                 self._traces[target_id] = build_run_trace(target.paths).to_json()
             return self._traces[target_id]
 
@@ -172,7 +171,7 @@ class ReviewSession:
             "stage": target.stage,
             "instance_id": target.instance.instance_id,
             "run": _run_label(target) if isinstance(target, JudgmentTarget) else None,
-            "questions": target.answered_questions(),
+            "questions": target.rating_keys(),
             "reviewed": read_review(target, self.rater) is not None,
         }
 
@@ -220,6 +219,10 @@ def _judgment_details(target: JudgmentTarget) -> dict:
             "compliant": manifest.compliant,
         },
     }
+
+
+def _rating_items(target: ReviewTarget, answers: dict) -> list[dict]:
+    raise NotImplementedError
 
 
 def _run_label(target: JudgmentTarget) -> dict:

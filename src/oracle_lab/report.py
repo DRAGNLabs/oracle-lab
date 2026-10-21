@@ -208,6 +208,7 @@ def _judge_lines(judgment: dict) -> list[str]:
             "| " + " | ".join(judgment[key] or "—" for key in JUDGMENT_LABELS) + " |",
             "",
             *_justification_lines(judgment["justifications"]),
+            *_failure_mode_lines(judgment),
         ]
     elif status == "stale":
         lines += [f"Stale: {judgment['reason']}", ""]
@@ -223,6 +224,12 @@ def _judge_lines(judgment: dict) -> list[str]:
     else:
         lines += ["Disabled.", ""]
     return lines
+
+
+def _failure_mode_lines(judgment: dict) -> list[str]:
+    """The failure modes the judge found, with their steps and justifications, and the
+    start-list labels it found absent."""
+    raise NotImplementedError
 
 
 def _classification(paths: RunPaths) -> tuple[dict, Path | None]:

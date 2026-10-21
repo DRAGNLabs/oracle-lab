@@ -12,6 +12,8 @@ execution evidence without assigning rubric labels.
 3. Use the paired-outcome table below to see what each generated test did on
    both repository versions.
 4. Read `evidence/agent-session.log` when answering the cheating question.
+<!-- Build: read evidence/agent-trace.md for the failure modes, and
+evidence/agent-trace.json (or agent-trace.jsonl) for any step in full. -->
 5. Open the detailed JSON or raw logs when the summary is insufficient.
 
 ## Workspace folders

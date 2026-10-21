@@ -55,6 +55,7 @@ def build_judge_workspace(
     artifacts: list[ExposedArtifact] = []
     with TemporaryDirectory(prefix="oracle-judge-bundle-") as temporary:
         staging = Path(temporary)
+        # TODO: save_trace(paths) first, so the evidence can expose it.
         evidence = judge_evidence(paths, staging, instance, evaluation, manifest)
 
         # images.json is read at the end for the spec, not shown to the judge.
@@ -143,6 +144,12 @@ def build_judge_workspace(
     return spec
 
 
+def save_trace(paths: RunPaths) -> bool:
+    """Build the agent's trace and save it as `judge/trace.json`. False when it cannot be
+    built, in which case the judge reads the raw harness trace instead."""
+    raise NotImplementedError
+
+
 def judge_evidence(
     paths: RunPaths,
     staging: Path,
@@ -185,6 +192,8 @@ def judge_evidence(
         (instructions, JUDGE_ROOT + "/instructions.md"),
         (submission_manifest, JUDGE_ROOT + "/evidence/submission-manifest.json"),
         (paths.generation / "session.log", JUDGE_ROOT + "/evidence/agent-session.log"),
+        # TODO: agent-trace.md (staged from trace_markdown) and agent-trace.json from
+        # paths.judge.trace, or the raw trace.jsonl as agent-trace.jsonl without it.
         (paths.generation / "workspace.diff", JUDGE_ROOT + "/evidence/workspace.diff"),
         (paths.results, JUDGE_ROOT + "/evidence/paired-results.json"),
         (paths.evaluation / "buggy/tests.json", JUDGE_ROOT + "/evidence/buggy-tests.json"),

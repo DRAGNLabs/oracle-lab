@@ -94,6 +94,10 @@ uv run oracle-lab review ../oracle-lab-data --rater <your-id>
 # Agreement between raters, and how often they found the LLM judges right.
 uv run oracle-lab agreement ../oracle-lab-data
 
+# Browse saved agent traces as annotated timelines. Demo; needs `uv sync --extra trace`.
+# See docs/features/trace-viewer/spec.md.
+uv run oracle-lab trace runs
+
 # Rebuild report.md from saved data. The session log is never regenerated.
 uv run oracle-lab report runs/<run-id>
 

@@ -155,7 +155,23 @@ def _serve_traces(path: Path, *, port: int, open_browser: bool) -> int:
 
     The viewer needs the optional `trace` extra, so it is imported only here.
     """
-    raise NotImplementedError
+    try:
+        from oracle_lab.trace.server import serve as serve_traces
+    except ImportError as error:
+        raise RuntimeError(
+            f"The trace viewer needs the trace extra ({error.name} is missing): "
+            "uv sync --extra trace"
+        ) from error
+    root = path.resolve()
+    candidates = [root] if (root / "generation").is_dir() else sorted(root.iterdir())
+    runs = [
+        RunPaths.open(candidate)
+        for candidate in candidates
+        if (candidate / "generation" / "trace.jsonl").is_file()
+    ]
+    if not runs:
+        raise ValueError(f"No runs with a saved agent trace under {path}")
+    return serve_traces(runs, port=port, open_browser=open_browser)
 
 
 def _preflight_all(configs: list[Path]) -> int:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
+from datetime import UTC, datetime
 from pathlib import Path
 
 from oracle_lab.container.sandbox import Sandbox
@@ -13,7 +14,17 @@ from oracle_lab.harnesses.launch import (
     run_agent_turn,
     turn_status,
 )
-from oracle_lab.harnesses.steps import Step
+from oracle_lab.harnesses.steps import (
+    Action,
+    EditFile,
+    OtherTool,
+    ReadFile,
+    Search,
+    Shell,
+    Step,
+    WriteFile,
+    numbered_events,
+)
 from oracle_lab.results import Usage
 
 # Whether `read_steps` reasoning is the model's own text or a CLI-written summary.
@@ -53,9 +64,77 @@ def read_steps(path: Path) -> list[Step]:
 
     Its `reasoning_details` text becomes a reasoning step placed just before it.
     `text` parts become message steps. Aborted `unknown` calls and `invalid`
-    retries are kept as failed tool steps.
+    retries are kept as failed tool steps. Calls in one model message can repeat the
+    same reasoning, so each message's reasoning is kept once.
     """
-    raise NotImplementedError
+    steps: list[Step] = []
+    reasoned: set[tuple[str, str]] = set()
+    for line, event in numbered_events(path):
+        part = event.get("part")
+        if not isinstance(part, dict):
+            continue
+        stamp = _iso(event.get("timestamp"))
+        message_id = part.get("messageID", "")
+        kind = part.get("type")
+        if kind == "reasoning" and part.get("text"):
+            reasoned.add((message_id, part["text"]))
+            steps.append(Step("reasoning", line, text=part["text"], timestamp=stamp))
+        elif kind == "text" and part.get("text"):
+            steps.append(Step("message", line, text=part["text"], timestamp=stamp))
+        elif kind == "tool":
+            details = ((part.get("metadata") or {}).get("openrouter") or {}).get(
+                "reasoning_details"
+            ) or []
+            for detail in details:
+                text = detail.get("text") if isinstance(detail, dict) else None
+                if text and (message_id, text) not in reasoned:
+                    reasoned.add((message_id, text))
+                    steps.append(Step("reasoning", line, text=text, timestamp=stamp))
+            steps.append(_tool_step(line, part, stamp))
+    return steps
+
+
+def _tool_step(line: int, part: dict, stamp: str | None) -> Step:
+    state = part.get("state") or {}
+    name = part.get("tool", "")
+    arguments = state.get("input") or {}
+    metadata = state.get("metadata") or {}
+    failed = state.get("status") != "completed" or name in {"unknown", "invalid"}
+    output = state.get("output") or state.get("error") or ""
+    exit_code = metadata.get("exit") if name == "bash" else None
+    return Step(
+        "tool",
+        line,
+        action=_action(name, arguments),
+        output=output,
+        exit_code=exit_code,
+        failed=failed,
+        timestamp=stamp,
+    )
+
+
+def _action(name: str, arguments: dict) -> Action:
+    path = arguments.get("filePath", "")
+    if name == "read":
+        offset, limit = arguments.get("offset"), arguments.get("limit")
+        start = offset if offset is not None else (1 if limit else None)
+        end = start + limit - 1 if start is not None and limit else None
+        return ReadFile(path, start, end)
+    if name == "grep":
+        return Search(arguments.get("pattern", ""), arguments.get("path"))
+    if name == "write":
+        return WriteFile(path, arguments.get("content", ""))
+    if name == "edit":
+        return EditFile(path, arguments.get("oldString"), arguments.get("newString"))
+    if name == "bash":
+        return Shell(arguments.get("command", ""))
+    return OtherTool(name, arguments)
+
+
+def _iso(milliseconds: object) -> str | None:
+    if not isinstance(milliseconds, int):
+        return None
+    return datetime.fromtimestamp(milliseconds / 1000, UTC).isoformat()
 
 
 def _usage(steps: list[dict]) -> dict | None:

@@ -31,12 +31,12 @@ def run_turn(sandbox: Sandbox, request: AgentTurnRequest) -> dict:
 
 def read_steps(harness: str, path: Path) -> list[Step]:
     """A saved trace's steps, read by the adapter of the harness that wrote it."""
-    raise NotImplementedError
+    return HARNESSES[harness].read_steps(path)
 
 
 def reasoning_kind(harness: str) -> str:
     """Whether the harness's reasoning steps are raw model text or summaries."""
-    raise NotImplementedError
+    return HARNESSES[harness].REASONING
 
 
 def provenance(request: AgentTurnRequest) -> dict:

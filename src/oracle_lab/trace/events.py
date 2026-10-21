@@ -6,7 +6,7 @@ rather than artifact contracts.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 
 from oracle_lab.harnesses.steps import EditFile, WriteFile
@@ -72,6 +72,8 @@ class Event:
     step: int
     part: int
     action: ActionType
+    # One line built mechanically from the action, e.g. `Read requests/models.py L220–400`.
+    description: str
     trace_line: int
     touches: list[Touch] = field(default_factory=list)
     command: str = ""
@@ -86,33 +88,33 @@ class Event:
     # The change an edit event made, for rebuilding test file versions.
     change: WriteFile | EditFile | PatchFile | None = None
 
-    @property
-    def description(self) -> str:
-        """A one-line description built from the fields above, never by an LLM.
-
-        E.g. `Read requests/models.py L220–400` or `pytest oracle_tests -q → 47 passed, 1 failed`.
-        """
-        raise NotImplementedError
-
 
 @dataclass
-class TestFileVersion:
+class FileVersion:
     """One version of a generated test file and what happened since the previous one."""
 
     step: int
+    part: int  # the edit's sub-command, so a run chained after it in the same step follows it
     diff: str
     content: str | None  # None when only the edit is known
     partial: bool
-    runs_before: list[tuple[int, PytestSummary]]  # (step, summary) since the previous version
+    runs_after: list[tuple[int, PytestSummary]]  # (step, summary) before the next version
     # Final outcome by test id, for tests this version introduced. Hidden on the page by default.
     outcomes: dict[str, str] = field(default_factory=dict)
+    # Edit facts, also hidden by default. A run between the previous version and this one
+    # reported failures or errors; the FAILED ids among them that are in this file.
+    follows_failed_run: bool = False
+    follows_failures: list[str] = field(default_factory=list)
+    skip_marks_added: list[str] = field(default_factory=list)  # added skip/xfail lines
 
 
 @dataclass
-class TestFileHistory:
+class GeneratedFile:
     path: str
-    versions: list[TestFileVersion]
+    versions: list[FileVersion]
     matches_submission: bool | None  # None when the final content is unknown
+    # Ids in a FAILED line of some run whose test the submitted file no longer defines.
+    failed_then_absent: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -139,10 +141,13 @@ class RunTrace:
     run: RunSummary
     reasoning: str  # "raw" or "summary"
     events: list[Event]
-    test_files: list[TestFileHistory]
+    generated_files: list[GeneratedFile]
     defect: DefectSummary
     outcomes_available: bool
 
     def to_json(self) -> dict:
-        """The page's view of the run, event descriptions included."""
-        raise NotImplementedError
+        """The page's view of the run. Edit contents stay out; test versions carry them."""
+        data = asdict(self)
+        for event in data["events"]:
+            del event["change"]
+        return data

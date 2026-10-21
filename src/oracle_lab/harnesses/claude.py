@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
+import re
+from dataclasses import asdict, replace
 from pathlib import Path
 
 from oracle_lab.container.sandbox import Sandbox
@@ -12,7 +13,17 @@ from oracle_lab.harnesses.launch import (
     run_agent_turn,
     turn_status,
 )
-from oracle_lab.harnesses.steps import Step
+from oracle_lab.harnesses.steps import (
+    Action,
+    EditFile,
+    OtherTool,
+    ReadFile,
+    Search,
+    Shell,
+    Step,
+    WriteFile,
+    numbered_events,
+)
 from oracle_lab.results import Usage
 
 # Whether `read_steps` reasoning is the model's own text or a CLI-written summary.
@@ -47,9 +58,75 @@ def read_steps(path: Path) -> list[Step]:
     """The run's steps. `tool_use` and `tool_result` blocks pair up by id.
 
     `thinking` and `text` blocks become reasoning and message steps. The many
-    `system/thinking_tokens` progress events are dropped.
+    `system/thinking_tokens` progress events are dropped. A tool result marked as an
+    error is a failed call, except for Bash, where it means a nonzero exit.
     """
-    raise NotImplementedError
+    steps: list[Step] = []
+    calls: dict[str, int] = {}  # tool_use id -> index in steps
+    for line, event in numbered_events(path):
+        message = event.get("message")
+        if event.get("type") not in {"assistant", "user"} or not isinstance(message, dict):
+            continue
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        stamp = event.get("timestamp")
+        for block in content:
+            kind = block.get("type") if isinstance(block, dict) else None
+            if kind == "thinking" and block.get("thinking"):
+                steps.append(Step("reasoning", line, text=block["thinking"], timestamp=stamp))
+            elif kind == "text" and event["type"] == "assistant" and block.get("text"):
+                steps.append(Step("message", line, text=block["text"], timestamp=stamp))
+            elif kind == "tool_use":
+                calls[block.get("id")] = len(steps)
+                action = _action(block.get("name", ""), block.get("input") or {})
+                steps.append(Step("tool", line, action=action, timestamp=stamp))
+            elif kind == "tool_result" and block.get("tool_use_id") in calls:
+                index = calls.pop(block["tool_use_id"])
+                steps[index] = _with_result(steps[index], block, event.get("tool_use_result"))
+    return steps
+
+
+def _action(name: str, arguments: dict) -> Action:
+    path = arguments.get("file_path", "")
+    if name == "Read":
+        return ReadFile(path)  # the result gives the exact lines shown
+    if name == "Grep":
+        return Search(arguments.get("pattern", ""), arguments.get("path"))
+    if name == "Write":
+        return WriteFile(path, arguments.get("content", ""))
+    if name == "Edit":
+        return EditFile(path, arguments.get("old_string"), arguments.get("new_string"))
+    if name == "Bash":
+        return Shell(arguments.get("command", ""))
+    return OtherTool(name, arguments)
+
+
+def _with_result(step: Step, block: dict, result: object) -> Step:
+    output = _result_text(block.get("content"))
+    exit_code = None
+    failed = bool(block.get("is_error"))
+    if isinstance(step.action, Shell):
+        failed = False
+        exit_code = 0
+        if block.get("is_error"):
+            match = re.match(r"Error: Exit code (\d+)", output)
+            exit_code = int(match.group(1)) if match else None
+    action = step.action
+    if isinstance(action, ReadFile) and isinstance(result, dict):
+        shown = result.get("file") or {}
+        if shown.get("startLine") and shown.get("numLines") is not None:
+            start = shown["startLine"]
+            action = replace(action, start=start, end=start + max(shown["numLines"] - 1, 0))
+    return replace(step, action=action, output=output, exit_code=exit_code, failed=failed)
+
+
+def _result_text(content: object) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n".join(block.get("text", "") for block in content if isinstance(block, dict))
+    return ""
 
 
 def _usage(raw: dict | None) -> dict | None:

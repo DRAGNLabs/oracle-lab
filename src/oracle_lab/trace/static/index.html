@@ -13,16 +13,23 @@
 </head>
 <body>
   <header class="topbar">
+    <b>Oracle Lab traces</b>
     <select id="run-picker" aria-label="Run"></select>
     <span class="spacer"></span>
     <label><input type="checkbox" id="lanes-by-file"> Lanes by file</label>
-    <label><input type="checkbox" id="show-outcomes"> Show outcomes</label>
+    <label title="Mechanical facts about test edits: failures reported before an edit, added skip/xfail marks, and failed tests absent from the final file. Hidden by default so the trace is read first."><input type="checkbox" id="show-edit-facts"> Show edit facts</label>
+    <label title="Final buggy/golden results per test. Hidden by default so the trace is read before the outcome is known."><input type="checkbox" id="show-outcomes"> Show outcomes</label>
   </header>
   <section id="run-header"></section>
   <main class="layout">
     <div id="timeline"></div>
-    <aside id="detail"></aside>
-    <aside id="tests"></aside>
+    <aside class="panel">
+      <nav class="tabs">
+        <button type="button" data-panel="event">Event</button>
+        <button type="button" data-panel="tests">Test files</button>
+      </nav>
+      <div id="panel-body"></div>
+    </aside>
   </main>
 </body>
 </html>

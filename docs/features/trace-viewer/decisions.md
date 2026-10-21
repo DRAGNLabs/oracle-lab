@@ -27,4 +27,32 @@
 - **Read ranges.** They come from `offset`/`limit`, `sed -n 'a,bp'`, `head`/`tail`, and grep `N:` output. `cat` counts as the whole file.
 - **Page uses plain ES modules and a CSS grid, and reuses the vendored `highlight.js`.**
 
+### Build
+
+- **"Patched lines shown" needs the line's text in the output, not just a covering range** (`facts.PatchedRegions.shown_lines`). Line ranges alone would count truncated output. Changed lines are removed lines, plus the lines either side of a pure insertion. Blank lines are left out.
+- **Edits and hitless searches never get the strong "patched lines" mark** (`build._event.touch`). Where they land in the file is unknown, so they get the file-level mark at most. Whole-file reads do get it.
+- **Patched names are qualified `Class.method` when the patch shows the class** (`facts._patched_names`). Git strips indentation from hunk headers, so a header like `def reset` usually can't be placed in its class, and names such as `clear` or `messages` stay bare and match loosely.
+- **A script the agent wrote with `cat > x.py` and then ran with `python x.py` is shown as that probe's code** (`build._script_file`).
+- **`python --version` and `pytest --version`/`--help` are "run other", not probe code or test runs** (`shell._python`, `shell._pytest`).
+- **Writes to files outside the repository (scratch scripts in `/tmp`) are "run other", not "edit source"** (`build._event`).
+- **A chained command's exit code is shown once, on its last part** (`static/timeline.js`). It belongs to the whole chain.
+- **`cd` is not tracked** (`shell.split`). Relative paths after a `cd` are read as relative to the repository root.
+- **Renamed `TestFileHistory`/`TestFileVersion`/`test_histories` to `GeneratedFile`/`FileVersion`/`generated_files`.** Pytest collects `Test*`/`test_*` names imported into test modules. The new names also fit better, since the directory holds `conftest.py` and `.rst` fixtures too. `FileVersion.runs_before` became `runs_after`: a version is followed by the runs before the next one.
+- **`Event.description` is a field set by `build`, not a property** (`events.Event`). It needs the search pattern and edit sizes, which only the builder has.
+- **The right panel has two tabs, Event and Test files** (`static/app.js`), and `static/html.js` holds shared helpers. Selected reasoning rows expand inline. `j`/`k` move between events.
+
+
+## Pre (cycle 2: edit facts)
+
+- **Add three sequence facts behind an off-by-default toggle:** failures reported before an edit, skip/xfail marks added, and failed tests absent from the submission. They are cheap and low-noise, built from data the viewer already has, and they miss cases rather than invent them. Reworded as facts, they separate signal from failure-mode labels.
+- **Leave out literal provenance** (a test literal that also appears in earlier output). Output formats rarely match test literals, and short values match everywhere, so it would be noisy without tuning.
+- **Assertion strength and "noticed" keywords stay out.** They judge, even when reworded.
+
+## Model-decided (cycle 2)
+
+- **`FileVersion.part`, and runs ordered by `(step, part)`** (`facts._attach_runs`). Codex chains `apply_patch ... && pytest` in one step; step-only ordering dropped those runs.
+- **A failure is attributed to a file when the FAILED id's path equals the file or is a suffix of it** (`facts._in_file`), so runs from inside the generated directory still match.
+- **A first version's skip marks count as "added"** (`facts._attach_edit_facts`). It's literally true; the toggle's tag doesn't claim the mark came after a failure.
+- **Fixed: `_defines` now matches diff lines** (`+def name`). Before, outcomes for partial versions always fell through to the file's last version.
+
 ## Review

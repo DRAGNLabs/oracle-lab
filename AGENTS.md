@@ -75,7 +75,7 @@ The pipeline stages run in this order, and each is one module or package that
 Supporting these:
 
 - `src/oracle_lab/cli.py`: the command interface: `run`, `preflight`, `batch`,
-  `evaluate`, `judge`, `classify`, `review`, `agreement`, and `report`.
+  `evaluate`, `judge`, `classify`, `review`, `agreement`, `trace`, and `report`.
 - `src/oracle_lab/run.py`: the stage sequence and run status.
 - `src/oracle_lab/preflight.py`: `preflight`, which runs the stages before
   generation plus an environment check, without calling a model.
@@ -96,6 +96,11 @@ Supporting these:
   page asks, `server.py` serves it over HTTP on `127.0.0.1`, and `static/` is the
   page itself: one ES module per view, with pinned libraries in `static/vendor/`.
   It holds no review logic of its own.
+- `src/oracle_lab/trace/`: a standalone demo viewer for saved agent traces
+  (`oracle-lab trace`), outside the run stages. Harness adapters turn traces into
+  shared steps (`harnesses/steps.py`); `shell.py` classifies shell commands with
+  tree-sitter-bash; `facts.py` adds patch overlap and test file versions. It reads
+  old runs loosely on purpose; see `docs/features/trace-viewer/decisions.md`.
 - `src/oracle_lab/spend.py`: the OpenRouter key spend measured around a run's
   model stages, saved as `cost.json`.
 - `src/oracle_lab/config.py`, `paths.py`, `results.py`: the input contract, the

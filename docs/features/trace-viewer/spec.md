@@ -28,6 +28,11 @@ Decisions and their reasons are in `decisions.md`.
   results of runs between versions.
 - **Outcome.** A toggle, off by default, reveals each test's final evaluation
   result, attached to the version that introduced it.
+- **Edit facts.** A second toggle, off by default, shows three facts about test
+  edits. (1) A run between the previous version and this one reported failures,
+  and which FAILED ids are in this file. (2) The edit added a skip/xfail mark.
+  (3) Tests reported as FAILED that the submitted file no longer defines. They are
+  sequence facts, worded neutrally, and never named as failure modes.
 - **Run picker.** Runs grouped by instance, showing harness and model.
 
 The viewer annotates facts only: where the agent was, what it saw, and what
@@ -86,10 +91,10 @@ harness name (`read_steps`, `reasoning_kind`).
 - `facts.py`: `Repository` (workdir and generated directory, which give relative
   paths and file categories), `PatchedRegions` (hunks, changed lines, and names
   from the patch and target; overlap and name matching), `grep_hits`,
-  `parse_pytest`, and `test_histories`.
+  `parse_pytest`, and `generated_files`.
 - `events.py`: `ActionType`, `FileCategory`, `DefectOverlap`, `Touch`,
-  `PytestSummary`, `Event` (with a `description` property and the `change` an edit
-  made), `TestFileVersion`, `TestFileHistory`, `DefectSummary`, `RunSummary`, and
+  `PytestSummary`, `Event` (with its mechanical `description` and the `change` an
+  edit made), `FileVersion`, `GeneratedFile`, `DefectSummary`, `RunSummary`, and
   `RunTrace.to_json()`.
 - `build.py`: `read_run_facts(paths)` reads the run summary, repository, and
   per-test outcomes **loosely from raw YAML/JSON. This is demo only**: most demo
@@ -99,8 +104,8 @@ harness name (`read_steps`, `reasoning_kind`).
 - `server.py`: `serve(runs)` and `TraceServer` serve `static/`, `highlight.js` from
   `web/static/vendor/` under `/vendor/`, `GET /api/runs`, and `GET /api/run?id=`.
   Traces are built on first request and cached in memory.
-- `static/`: `index.html`, `app.js` (picker, toggles, state), `timeline.js`,
-  `detail.js`, `tests.js`, `app.css`.
+- `static/`: `index.html`, `app.js` (picker, toggles, panel tabs, state),
+  `timeline.js`, `detail.js`, `tests.js`, `html.js` (shared helpers), `app.css`.
 
 ### CLI
 
@@ -123,9 +128,10 @@ it are skipped when it is absent.
 - `cat`, and a Read with no limit, cover the whole file. A whole file overlaps any
   hunk in it.
 - Hunks use old-side (buggy) line numbers, which match the checkout the agent saw.
-- The share of patched lines shown counts old-side changed lines covered by a read
-  or grep range. CLI truncation can hide output, so this is a lower bound and the
-  page says so.
+- The share of patched lines shown counts changed buggy-side lines that fall inside
+  a read or grep range *and* whose text appears in that event's output. Truncated
+  output does not count, so this is a lower bound, and the page says so.
+- Edits and searches without line numbers get at most the file-level mark.
 
 ## Test file versions
 
@@ -151,7 +157,17 @@ The final version is compared with `submission/files/` and marked if it differs.
    reasoning previews, outcome toggle.
 7. Open several runs from each harness in the browser and fix what looks wrong.
 
+## Cycle 2: edit facts
+
+`FileVersion` gains `part`, `follows_failed_run`, `follows_failures`, and
+`skip_marks_added`; `GeneratedFile` gains `failed_then_absent`. All are computed
+in `facts.generated_files` from the versions, runs, and submission it already has.
+No new trace parsing. Runs are ordered by `(step, part)`, so a run chained after an
+edit in the same command follows it. The page shows them only with "Show edit
+facts": tags on edit rows and versions, plus the ids in the Test files panel.
+
 ## Out of scope
 
 Notes or codes on events, side-by-side runs, LLM summaries, failure-mode labels,
+literal provenance (where a test's expected value came from), assertion strength,
 and any change to the run pipeline or its artifacts.

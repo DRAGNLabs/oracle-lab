@@ -7,6 +7,7 @@ they did is worked out by `oracle_lab.trace.shell`, the same way for every harne
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -79,4 +80,14 @@ class Step:
 
 def numbered_events(path: Path) -> list[tuple[int, dict]]:
     """A trace's JSON object events with their 1-based line numbers. Other lines are skipped."""
-    raise NotImplementedError
+    events = []
+    if not path.exists():
+        return events
+    for number, line in enumerate(path.read_text(errors="replace").splitlines(), start=1):
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(event, dict):
+            events.append((number, event))
+    return events

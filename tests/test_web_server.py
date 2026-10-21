@@ -47,6 +47,12 @@ def test_the_page_and_api_are_served(port):
     status, body = request(port, "/api/targets")
     assert status == 200 and json.loads(body)["rater"] == "rater-1"
 
+    status, body = request(port, "/api/problem?instance=owner__project-1")
+    assert status == 200 and json.loads(body)["issue"] == "Broken behavior."
+
+    status, body = request(port, "/api/trace?id=classifications/owner__project-1/attempt-1")
+    assert status == 404
+
 
 def test_a_review_is_posted_as_json(port, data):
     body = json.dumps({"ratings": RATINGS}).encode()

@@ -145,9 +145,11 @@ From `oracle-lab`:
 uv run oracle-lab review ../oracle-lab-data --rater <your-id>
 ```
 
-The page opens in your browser. It lists every target with your progress. Read
-the "How to review" dialog the first time, then work through the list. Press
-Ctrl+C in the terminal to stop the server.
+The page opens in your browser. It lists every problem with its tasks and your
+progress. Work one problem at a time: open its classification first, then each
+run. Read the Problem tab, with the issue and the fix, before you start rating,
+and the "How to review" dialog on your first rating page.
+Press Ctrl+C in the terminal to stop the server.
 
 The first time you open a target, the page fetches that repository at the
 task's commit from GitHub. That takes a few seconds and is cached under

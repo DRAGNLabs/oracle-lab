@@ -1,7 +1,7 @@
 // HTML shared by every view: escaping, Markdown, highlighted code, diffs, and links
 // to evidence. `hljs` and `marked` are the vendored libraries loaded before the page.
 
-export const STAGE_NAMES = { judge: "Test judgment", classification: "Task classification" };
+export const STAGE_NAMES = { judge: "Generation Judgment", classification: "Problem Classification" };
 
 const HIGHLIGHT_LIMIT = 400_000; // Larger files are shown without syntax colors.
 const LANGUAGES = {
@@ -55,7 +55,7 @@ marked.use({
 });
 
 export function markdown(text) {
-  return marked.parse(text || "");
+  return marked.parse((text || "").replaceAll("\r\n", "\n")); // dataset issues often use CRLF
 }
 
 // ---------- Code ----------
@@ -67,6 +67,26 @@ function languageOf(path) {
 
 function highlight(text, language) {
   return language ? hljs.highlight(text, { language, ignoreIllegals: true }).value : esc(text);
+}
+
+// Highlighted code, or escaped text when highlight.js does not know the language.
+export function code(text, language) {
+  return highlight(text, language && hljs.getLanguage(language) ? language : null);
+}
+
+// A diff the trace recorded as text, such as one test file version's change or an
+// apply_patch body, with added and removed lines marked.
+export function plainDiffHtml(diff) {
+  return diff
+    .split("\n")
+    .map((line) => {
+      const kind = line.startsWith("diff --git") ? "file"
+        : line.startsWith("+") && !line.startsWith("+++") ? "added"
+        : line.startsWith("-") && !line.startsWith("---") ? "removed"
+        : line.startsWith("@@") ? "hunk" : "";
+      return `<span class="diff-line ${kind}">${esc(line) || " "}</span>`;
+    })
+    .join("");
 }
 
 // A file with line numbers, or a note that it is binary.
@@ -145,7 +165,8 @@ function diffPath(text, prefix) {
   return path.startsWith(prefix) ? path.slice(prefix.length) : path;
 }
 
-// Each file's hunks, one column of changes. Its name opens the file in `views`.
+// Each file's hunks, one column of changes. Its name opens the file in `views`, when
+// there are views to open it in.
 export function diffHtml(files, views) {
   if (!files.length) return `<p>No changes.</p>`;
   return files.map((file) => {
@@ -168,6 +189,7 @@ function diffName(file, views) {
   const name = file.oldPath && file.newPath && file.oldPath !== file.newPath
     ? `${file.oldPath} renamed to ${file.newPath}`
     : !file.oldPath ? `${path} (new file)` : !file.newPath ? `${path} (deleted)` : path;
+  if (!views.length) return esc(name);
   const [view, target] = file.newPath && views.includes("golden") ? ["golden", file.newPath] : ["buggy", file.oldPath];
   return target ? fileLink(target, view, esc(name)) : esc(name);
 }
@@ -217,17 +239,6 @@ export function splitDiffHtml(files) {
 // ---------- Links to evidence ----------
 
 // Each kind of link names what it opens; the review page follows them all.
-// A diff the trace recorded as text, such as one test file version's change or an
-// apply_patch body, with added and removed lines marked.
-export function plainDiffHtml(diff) {
-  throw new Error("not implemented");
-}
-
-// Highlighted code, or escaped text when highlight.js does not know the language.
-export function code(text, language) {
-  throw new Error("not implemented");
-}
-
 export function fileLink(path, view, label, line = "") {
   return `<button type="button" class="link-like" data-open-file="${esc(path)}" data-view="${view}" data-line="${line}">${label}</button>`;
 }

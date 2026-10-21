@@ -9,6 +9,7 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
+from oracle_lab.results import InstanceRecord
 from oracle_lab.review.contracts import RATING_DEFINITIONS, require_rater
 from oracle_lab.review.sources import SourceView, open_views
 from oracle_lab.review.store import read_review, save_review
@@ -20,6 +21,7 @@ from oracle_lab.review.targets import (
     find_problems,
     find_targets,
 )
+from oracle_lab.trace.build import build_run_trace
 
 # The task record's readable texts beside the issue, by dataset field, in page order.
 RECORD_TEXTS = {
@@ -44,6 +46,7 @@ class ReviewSession:
         self.unreviewable: dict[str, UnreviewableTarget] = {
             _target_id(root, item.root): item for item in unreviewable
         }
+        self._ids = {target.root: target_id for target_id, target in self.targets.items()}
         self.problems: dict[str, Problem] = {
             problem.instance_id: problem for problem in find_problems(targets)
         }
@@ -59,14 +62,49 @@ class ReviewSession:
         every target that cannot be reviewed.
 
         Each task carries its stage, its label (harness, model, and scope for a run),
-        its number of questions, and whether this rater has saved a review.
+        its question keys, and whether this rater has saved a review.
         """
-        raise NotImplementedError
+        return {
+            "rater": self.rater,
+            "rating_definitions": RATING_DEFINITIONS,
+            "problems": [
+                {
+                    "instance_id": problem.instance_id,
+                    "repo": problem.instance.repo,
+                    "title": _issue_title(problem.instance),
+                    "tasks": [self._task(self._ids[target.root]) for target in problem.tasks],
+                }
+                for problem in self.problems.values()
+            ],
+            "unreviewable": [
+                {"id": target_id, "stage": item.stage, "reason": item.reason}
+                for target_id, item in self.unreviewable.items()
+            ],
+        }
 
     def problem(self, instance_id: str) -> dict:
-        """What the problem page and every Problem tab show: the instance, the issue, the
-        record's other texts, the golden patch, the reference tests, and its tasks."""
-        raise NotImplementedError
+        """What every rating page's Problem tab shows: the instance, the issue, the
+        record's other texts, the golden patch, and the reference tests."""
+        if instance_id not in self.problems:
+            raise LookupError(f"No such problem: {instance_id}")
+        problem = self.problems[instance_id]
+        instance = problem.instance
+        record = instance.original_record
+        return {
+            "instance_id": instance_id,
+            "repo": instance.repo,
+            "dataset": instance.source.name,
+            "base_commit": instance.base_commit,
+            "issue": problem.issue(),
+            "record_texts": [
+                {"title": title, "text": record[field]}
+                for field, title in RECORD_TEXTS.items()
+                if isinstance(record.get(field), str) and record[field].strip()
+            ],
+            "repair_patch": instance.golden_patch,
+            "reference_test_patch": instance.reference_test_patch,
+            "reference_test_ids": instance.reference_test_ids,
+        }
 
     def overview(self, target_id: str) -> dict:
         """The rating page's own data: the questions, the answers, the stage rubric, and,
@@ -114,11 +152,29 @@ class ReviewSession:
 
     def trace(self, target_id: str) -> dict:
         """A judged run's agent trace, as `RunTrace.to_json()`. Built once per session."""
-        raise NotImplementedError
+        target = self._target(target_id)
+        if not isinstance(target, JudgmentTarget):
+            raise LookupError(f"{target_id} has no agent trace")
+        with self._lock:
+            if target_id not in self._traces:
+                self._traces[target_id] = build_run_trace(target.paths).to_json()
+            return self._traces[target_id]
 
     def submit(self, target_id: str, raw: str) -> dict:
         review = save_review(self._target(target_id), self.rater, raw)
         return {"review": review.ratings}
+
+    def _task(self, target_id: str) -> dict:
+        """One target as the home page lists it, with this rater's progress."""
+        target = self._target(target_id)
+        return {
+            "id": target_id,
+            "stage": target.stage,
+            "instance_id": target.instance.instance_id,
+            "run": _run_label(target) if isinstance(target, JudgmentTarget) else None,
+            "questions": target.answered_questions(),
+            "reviewed": read_review(target, self.rater) is not None,
+        }
 
     def _target(self, target_id: str) -> ReviewTarget:
         if target_id not in self.targets:
@@ -146,7 +202,11 @@ def _judgment_details(target: JudgmentTarget) -> dict:
     """The paired outcomes and the submission the judge rated."""
     evaluation = target.evaluation()
     manifest = target.manifest()
+    prompt = target.paths.prompt
     return {
+        "run": _run_label(target),
+        "test_target": evaluation.test_target.text if evaluation.test_target else None,
+        "prompt": prompt.read_text() if prompt.is_file() else None,
         "outcomes": {
             "matrix": {cell.value: entry.count for cell, entry in evaluation.matrix.items()},
             "tests": [outcome.model_dump(mode="json") for outcome in evaluation.tests],
@@ -160,6 +220,23 @@ def _judgment_details(target: JudgmentTarget) -> dict:
             "compliant": manifest.compliant,
         },
     }
+
+
+def _run_label(target: JudgmentTarget) -> dict:
+    """What tells a problem's runs apart: the agent and the prompt's scope."""
+    config = target.config()
+    return {
+        "harness": config.agent.harness,
+        "model": config.agent.model,
+        "scope": config.task.scope,
+    }
+
+
+def _issue_title(instance: InstanceRecord) -> str:
+    """The issue's first line, as dataset issues start with their title."""
+    issue = instance.original_record.get("problem_statement")
+    lines = issue.strip().splitlines() if isinstance(issue, str) else []
+    return lines[0].lstrip("# ").strip() if lines else ""
 
 
 def _text(content: bytes) -> dict:

@@ -1,9 +1,5 @@
-import pytest
-
-pytest.importorskip("tree_sitter_bash")
-
-from oracle_lab.harnesses.steps import EditFile, WriteFile  # noqa: E402
-from oracle_lab.trace.events import (  # noqa: E402
+from oracle_lab.harnesses.steps import EditFile, WriteFile
+from oracle_lab.trace.events import (
     ActionType,
     DefectOverlap,
     Event,
@@ -11,14 +7,14 @@ from oracle_lab.trace.events import (  # noqa: E402
     PytestSummary,
     Touch,
 )
-from oracle_lab.trace.facts import (  # noqa: E402
+from oracle_lab.trace.facts import (
     PatchedRegions,
     Repository,
     generated_files,
     grep_hits,
     parse_pytest,
 )
-from oracle_lab.trace.shell import PatchFile  # noqa: E402
+from oracle_lab.trace.shell import PatchFile
 
 PATCH = """\
 diff --git a/pkg/mod.py b/pkg/mod.py

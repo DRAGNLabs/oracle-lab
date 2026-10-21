@@ -6,6 +6,7 @@ import json
 import re
 from dataclasses import asdict
 
+from oracle_lab.config import load_config
 from oracle_lab.harnesses import read_steps, reasoning_kind
 from oracle_lab.harnesses.steps import (
     Action,
@@ -18,7 +19,12 @@ from oracle_lab.harnesses.steps import (
     WriteFile,
 )
 from oracle_lab.paths import RunPaths
-from oracle_lab.results import LocalizedTarget, read_localized_target
+from oracle_lab.results import (
+    LocalizedTarget,
+    read_evaluation_result,
+    read_instance_record,
+    read_localized_target,
+)
 from oracle_lab.trace.events import (
     ActionType,
     DefectOverlap,
@@ -55,7 +61,37 @@ def build_run_trace(paths: RunPaths) -> RunTrace:
     Reads the run with the strict contracts: the resolved `RunConfig`, the
     `EvaluationResult` when the run was evaluated, and the localized target.
     """
-    raise NotImplementedError
+    config = load_config(paths.config, resolved=True)
+    assert config.runtime is not None  # a resolved config always names its runtime
+    repository = Repository(config.runtime.workdir, config.task.generated_dir)
+    steps = read_steps(config.agent.harness, paths.generation / "trace.jsonl")
+    target = read_localized_target(paths.target) if paths.target.exists() else None
+    target_names = [name for file in target.files for name in file.names] if target else []
+    regions = PatchedRegions.from_patch(
+        read_instance_record(paths.instance).golden_patch, target_names
+    )
+    events = to_events(steps, repository, regions)
+    outcomes = None
+    if paths.results.exists():
+        outcomes = {
+            outcome.test_id: outcome.cell.value
+            if outcome.cell
+            else f"{outcome.buggy} / {outcome.golden}"
+            for outcome in read_evaluation_result(paths.results).tests
+        }
+    submitted_root = paths.submission / "files"
+    submitted = {
+        file.relative_to(submitted_root).as_posix(): file.read_text(errors="replace")
+        for file in sorted(submitted_root.rglob("*"))
+        if file.is_file()
+    }
+    return RunTrace(
+        reasoning=reasoning_kind(config.agent.harness),
+        events=events,
+        generated_files=generated_files(events, submitted, outcomes),
+        defect=_defect_summary(events, regions, target),
+        outcomes_available=outcomes is not None,
+    )
 
 
 def to_events(steps: list[Step], repository: Repository, regions: PatchedRegions) -> list[Event]:

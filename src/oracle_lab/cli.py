@@ -95,7 +95,6 @@ def _build_parser() -> argparse.ArgumentParser:
         "--output", type=Path, help="Default: agreement/<UTC timestamp>/ here"
     )
 
-
     return parser
 
 

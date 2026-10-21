@@ -1,6 +1,7 @@
 // The question rail: each answer the judge gave, the rater's rating of it, saving,
 // and Next task once everything is saved.
 
+import { nextTask } from "./listing.js";
 import { esc, linkify } from "./render.js";
 import { api, state } from "./state.js";
 
@@ -78,10 +79,10 @@ function renderFoot({ justSaved = false, error = "" } = {}) {
 
   let nextLink = "";
   if (saved) {
-    const next = nextTarget();
+    const next = nextTask(target.id);
     nextLink = next
-      ? `<a class="next-link" href="#/review/${encodeURIComponent(next.id)}">Next target</a>`
-      : `<a class="next-link" href="#/">Every target is reviewed</a>`;
+      ? `<a class="next-link" href="#/review/${encodeURIComponent(next.id)}">Next task</a>`
+      : `<a class="next-link" href="#/">Every task is reviewed</a>`;
   }
 
   document.getElementById("rail-foot").innerHTML = `
@@ -105,23 +106,12 @@ async function saveReview() {
     });
     target.review = result.review;
     clearDraft();
-    const entry = state.listing.targets.find((item) => item.id === target.id);
+    const entry = state.listing.problems.flatMap((problem) => problem.tasks).find((item) => item.id === target.id);
     if (entry) entry.reviewed = true;
     renderFoot({ justSaved: true });
   } catch (error) {
     renderFoot({ error: error.message });
   }
-}
-
-// The first unreviewed target after this one, wrapping around the list.
-function nextTarget() {
-  const targets = state.listing.targets;
-  const start = targets.findIndex((item) => item.id === state.target.id);
-  for (let step = 1; step < targets.length; step++) {
-    const item = targets[(start + step) % targets.length];
-    if (!item.reviewed) return item;
-  }
-  return null;
 }
 
 function sameRatings(a, b) {
@@ -133,27 +123,33 @@ function sameRatings(a, b) {
 
 // ---------- Drafts: unsaved ratings live in this browser until saved ----------
 
-function draftKey(target) {
-  return `oracle-review:${state.listing.rater}:${target.id}`;
+function draftKey(id) {
+  return `oracle-review:${state.listing.rater}:${id}`;
 }
 
-function readDraft(target) {
+// The unsaved ratings of one task, kept only for questions it still has.
+export function draftRatings(id, questionKeys) {
   try {
-    const draft = JSON.parse(localStorage.getItem(draftKey(target)) || "null");
-    if (!draft) return null;
-    const keys = new Set(target.questions.map((q) => q.key));
+    const draft = JSON.parse(localStorage.getItem(draftKey(id)) || "null");
+    if (!draft) return {};
+    const keys = new Set(questionKeys);
     return Object.fromEntries(
       Object.entries(draft).filter(([key, value]) => keys.has(key) && RATINGS.includes(value)),
     );
   } catch {
-    return null;
+    return {};
   }
+}
+
+function readDraft(target) {
+  const draft = draftRatings(target.id, target.questions.map((q) => q.key));
+  return Object.keys(draft).length ? draft : null;
 }
 
 function writeDraft() {
   try {
     if (sameRatings(state.ratings, state.target.review)) clearDraft();
-    else localStorage.setItem(draftKey(state.target), JSON.stringify(state.ratings));
+    else localStorage.setItem(draftKey(state.target.id), JSON.stringify(state.ratings));
   } catch {
     // Without storage, ratings still work until the tab closes.
   }
@@ -161,7 +157,7 @@ function writeDraft() {
 
 function clearDraft() {
   try {
-    localStorage.removeItem(draftKey(state.target));
+    localStorage.removeItem(draftKey(state.target.id));
   } catch {
     // Nothing was stored.
   }

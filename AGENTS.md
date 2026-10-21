@@ -87,11 +87,13 @@ Supporting these:
 - `src/oracle_lab/classification/`: standalone task classification, run with
   `classify` outside the run stages. Its `contracts.py`, `workspace.py`, and
   `run.py` mirror `judge/`. Reports read the newest matching attempt.
-- `src/oracle_lab/review/`: human review of the LLM judges.
+- `src/oracle_lab/review/`: human review of the LLM judges, one problem (task
+  instance) at a time.
   - `contracts.py`: the rating scale, the review, its provenance, and the
     agreement report.
   - `targets.py`: `JudgmentTarget` and `ClassificationTarget`, which hold
-    everything particular to each stage, and finding them on disk.
+    everything particular to each stage, finding them on disk, and grouping them
+    into a `Problem` per instance, in rating order.
   - `sources.py`: the judge's buggy and golden views, rebuilt from a shallow Git
     fetch.
   - `store.py`: saving and reading reviews.
@@ -100,11 +102,12 @@ Supporting these:
   page asks, `server.py` serves it over HTTP on `127.0.0.1`, and `static/` is the
   page itself: one ES module per view, with pinned libraries in `static/vendor/`.
   It holds no review logic of its own.
-- `src/oracle_lab/trace/`: a standalone demo viewer for saved agent traces
-  (`oracle-lab trace`), outside the run stages. Harness adapters turn traces into
-  shared steps (`harnesses/steps.py`); `shell.py` classifies shell commands with
-  tree-sitter-bash; `facts.py` adds patch overlap and test file versions. It reads
-  old runs loosely on purpose; see `docs/features/trace-viewer/decisions.md`.
+- `src/oracle_lab/trace/`: a run's agent trace as typed, annotated events, for
+  the review page's Agent trace and Test files tabs. Harness adapters turn traces
+  into shared steps (`harnesses/steps.py`); `shell.py` classifies shell commands
+  with tree-sitter-bash; `facts.py` adds patch overlap and test file versions;
+  `build.py` reads the run with the strict contracts. It annotates facts only,
+  never failure modes.
 - `src/oracle_lab/spend.py`: the OpenRouter key spend measured around a run's
   model stages, saved as `cost.json`.
 - `src/oracle_lab/config.py`, `paths.py`, `results.py`: the input contract, the

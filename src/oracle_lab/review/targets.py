@@ -21,7 +21,7 @@ from oracle_lab.classification.contracts import (
     read_saved_classification,
 )
 from oracle_lab.classification.workspace import CLASSIFICATION_ROOT, classification_evidence
-from oracle_lab.config import RunConfig, repo_path
+from oracle_lab.config import RunConfig, load_config, repo_path
 from oracle_lab.io import read_json
 from oracle_lab.judge.contracts import JUDGMENT_LABELS, CompletedJudgment, validate_judgment
 from oracle_lab.judge.workspace import JUDGE_ROOT, judge_evidence
@@ -136,6 +136,7 @@ class JudgmentTarget(ReviewTarget):
         answers = validate_judgment(read_json(paths.judge.judgment))
         if not isinstance(answers, CompletedJudgment):
             raise TargetError(f"The judgment is {answers.status}, not completed")
+        load_config(paths.config, resolved=True)  # the page labels each run from it
         return cls(root, read_instance_record(paths.instance), answers)
 
     @property
@@ -167,7 +168,7 @@ class JudgmentTarget(ReviewTarget):
 
     def config(self) -> RunConfig:
         """The run's resolved configuration, which names its harness, model, and scope."""
-        raise NotImplementedError
+        return load_config(self.paths.config, resolved=True)
 
     def evaluation(self) -> EvaluationResult:
         return read_evaluation_result(self.paths.results)
@@ -264,20 +265,30 @@ class Problem:
     @property
     def tasks(self) -> list[ReviewTarget]:
         """The targets in the order a rater works through them: classification first."""
-        raise NotImplementedError
+        return [*self.classifications, *self.judgments]
 
     @property
     def instance(self) -> InstanceRecord:
         """The task record, from the first task; every target copies the same dataset record."""
-        raise NotImplementedError
+        return self.tasks[0].instance
 
     def issue(self) -> str:
-        raise NotImplementedError
+        return self.tasks[0].issue()
 
 
 def find_problems(targets: list[ReviewTarget]) -> list[Problem]:
     """The targets grouped by task instance, ordered by instance ID."""
-    raise NotImplementedError
+    by_instance: dict[str, list[ReviewTarget]] = {}
+    for target in sorted(targets, key=lambda target: target.root):
+        by_instance.setdefault(target.instance.instance_id, []).append(target)
+    return [
+        Problem(
+            instance_id,
+            [target for target in members if isinstance(target, ClassificationTarget)],
+            [target for target in members if isinstance(target, JudgmentTarget)],
+        )
+        for instance_id, members in sorted(by_instance.items())
+    ]
 
 
 def find_targets(path: Path) -> tuple[list[ReviewTarget], list[UnreviewableTarget]]:

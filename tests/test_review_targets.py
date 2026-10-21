@@ -4,6 +4,7 @@ import pytest
 from fixtures import (
     classified_attempt,
     completed_judgment,
+    instance_record,
     judged_run,
     out_of_scope_classification,
 )
@@ -13,6 +14,7 @@ from oracle_lab.review.targets import (
     ClassificationTarget,
     JudgmentTarget,
     TargetError,
+    find_problems,
     find_targets,
 )
 
@@ -126,6 +128,21 @@ def test_find_targets_lists_a_data_repository(tmp_path):
     assert all("failed, not completed" in item.reason for item in unreviewable)
 
 
+def test_problems_group_targets_by_instance_with_classifications_first(tmp_path):
+    other = instance_record(instance_id="other__project-2")
+    judged_run(tmp_path / "runs/run-b")
+    judged_run(tmp_path / "runs/run-a")
+    judged_run(tmp_path / "runs/run-c", instance=other)
+    classified_attempt(tmp_path / "classifications/owner__project-1/attempt-1")
+
+    problems = find_problems(find_targets(tmp_path)[0])
+
+    assert [problem.instance_id for problem in problems] == ["other__project-2", "owner__project-1"]
+    assert [target.root.name for target in problems[1].tasks] == ["attempt-1", "run-a", "run-b"]
+    assert problems[1].issue() == "Broken behavior."
+    assert JudgmentTarget.load(tmp_path / "runs/run-a").config().agent.harness == "claude"
+
+
 def test_find_targets_accepts_one_run_or_one_attempt(tmp_path):
     run = judged_run(tmp_path / "run").root
     attempt = classified_attempt(tmp_path / "attempt")
@@ -142,6 +159,15 @@ def test_a_run_without_a_judgment_is_unreviewable_with_its_reason(tmp_path):
 
     assert targets == []
     assert unreviewable[0].reason == "The run has no judgment"
+
+
+def test_a_run_with_an_invalid_config_is_unreviewable(tmp_path):
+    paths = judged_run(tmp_path / "runs/run-a")
+    paths.config.write_text("source: {}\n")
+
+    _, [item] = find_targets(tmp_path)
+
+    assert "validation error" in item.reason
 
 
 def test_find_targets_refuses_a_directory_without_targets(tmp_path):

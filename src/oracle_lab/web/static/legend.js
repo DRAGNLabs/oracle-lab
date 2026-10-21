@@ -1,5 +1,5 @@
-// The trace legend dialog: what every color, tag, and fact means, from the shared
-// descriptions.
+// The sidebar's Legend tab: what every color, tag, and fact in the trace means, from
+// the shared descriptions.
 
 import { ACTION_LABELS, CATEGORY_LABELS, DESCRIPTIONS } from "./labels.js";
 import { esc } from "./render.js";
@@ -13,9 +13,7 @@ const FACT_LABELS = {
 };
 const FILE_LABELS = { matches_submission: "matches submission", differs_submission: "differs from submission" };
 
-export function openLegend() {
-  // TODO: fill the legend dialog and show it.
-  const container = null;
+export function showLegend(container) {
   const actions = Object.entries(ACTION_LABELS)
     .map(([key, label]) => row(`<span class="dot" style="--dot: var(--a-${key})"></span>${esc(label)}`, DESCRIPTIONS.action[key]))
     .join("");
@@ -32,7 +30,7 @@ export function openLegend() {
     <h4>Edit facts</h4><p class="muted small">Facts about the order of test edits and runs. They describe what happened, not whether it was a mistake.</p><dl>${named(FACT_LABELS, DESCRIPTIONS.fact)}</dl>
     <h4>Test file tags</h4><dl>${named(FILE_LABELS, DESCRIPTIONS.file)}</dl>
     <h4>Final results</h4><p class="muted small">Each test's result on the buggy and fixed code. Other outcomes, such as errors or skips, show as "buggy / golden".</p><dl>${named({}, DESCRIPTIONS.outcome)}</dl>
-    <h4>Keys</h4><p><kbd>j</kbd>/<kbd>k</kbd> or the arrow keys move between events.</p>`;
+    <h4>Keys</h4><p>On the Agent trace tab, <kbd>↑</kbd>/<kbd>↓</kbd> move between events, and <kbd>Esc</kbd> clears the selection.</p>`;
 }
 
 function row(term, description) {

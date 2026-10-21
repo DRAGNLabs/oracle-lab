@@ -87,16 +87,13 @@ uv run oracle-lab judge runs/<run-id>
 # Classify one problem independently of a benchmark run.
 uv run oracle-lab classify configs/classification/example.yaml
 
-# Rate the LLM judges' answers in a local web page. No Docker or model calls.
+# Rate the LLM judges' answers in a local web page, one problem at a time, with
+# each run's agent trace. No Docker or model calls.
 # See docs/human-review.md for sharing review sets with raters.
 uv run oracle-lab review ../oracle-lab-data --rater <your-id>
 
 # Agreement between raters, and how often they found the LLM judges right.
 uv run oracle-lab agreement ../oracle-lab-data
-
-# Browse saved agent traces as annotated timelines. Demo; needs `uv sync --extra trace`.
-# See docs/features/trace-viewer/spec.md.
-uv run oracle-lab trace runs
 
 # Rebuild report.md from saved data. The session log is never regenerated.
 uv run oracle-lab report runs/<run-id>

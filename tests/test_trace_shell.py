@@ -1,9 +1,7 @@
 import pytest
 
-pytest.importorskip("tree_sitter_bash")
-
-from oracle_lab.harnesses.steps import EditFile, ReadFile, Search, WriteFile  # noqa: E402
-from oracle_lab.trace.shell import (  # noqa: E402
+from oracle_lab.harnesses.steps import EditFile, ReadFile, Search, WriteFile
+from oracle_lab.trace.shell import (
     PatchFile,
     RunCommand,
     RunPython,

@@ -57,13 +57,30 @@ the instance's base commit, cached under `~/.cache/oracle-lab/repos/` (or
 `$XDG_CACHE_HOME/oracle-lab/repos/`). Later reviews of the same commit reuse the
 cache.
 
-The page shows the rater what the judge had:
+The page opens on a home page that lists every problem (task instance) with its
+tasks in rating order: the task classification first, then each run's judgment,
+labeled with harness, model, and scope. It shows each task's progress, including
+ratings not saved yet, and filters by stage, harness, and unfinished tasks. Each
+task opens its rating page, titled Problem Classification or Generation
+Judgment.
 
-- the judge's answers and justifications beside three rating buttons;
-- for a judgment, the issue, the paired-outcome matrix and per-test outcomes,
-  the generated tests, the repair, and the reference tests;
-- for a classification, the task record's issue, issue comments or pull request
-  texts, the repair, and the reference tests;
+A rating page has three columns: the questions to rate, tabs with what the judge
+rated, and a sidebar with reference (the problem, the stage rubric, and for a
+judgment the trace legend and the selected trace event). Drag the divider to
+resize the sidebar. It shows the rater what the judge had:
+
+- the judge's answers and justifications beside three rating buttons, and after
+  saving, a link to the next unreviewed task;
+- a Problem tab: the issue, the task record's other texts, the golden patch, and
+  the reference tests;
+- for a judgment, an Overview of the run: the agent, the localized target, the
+  prompt, the paired-outcome matrix and per-test outcomes, which patched lines
+  the agent saw, edit facts, and the generated tests;
+- for a judgment, the agent trace as a timeline of typed events, with each
+  event's input and output in the sidebar, and a Test files tab with each generated
+  file's versions and the pytest runs between them. Both show facts only, such as
+  which events touch the patched lines, never failure-mode labels. A legend
+  explains every color and tag, and every tag describes itself on hover;
 - the repository views the judge read, with a file finder: buggy and golden for
   a judgment, with a side-by-side view of the repair, and the buggy checkout
   only for a classification;

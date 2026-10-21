@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import asdict, dataclass
-
-import yaml
+from dataclasses import asdict
 
 from oracle_lab.harnesses import read_steps, reasoning_kind
 from oracle_lab.harnesses.steps import (
@@ -19,7 +17,6 @@ from oracle_lab.harnesses.steps import (
     Step,
     WriteFile,
 )
-from oracle_lab.io import read_json
 from oracle_lab.paths import RunPaths
 from oracle_lab.results import LocalizedTarget, read_localized_target
 from oracle_lab.trace.events import (
@@ -28,10 +25,7 @@ from oracle_lab.trace.events import (
     DefectSummary,
     Event,
     FileCategory,
-    OutcomeRow,
-    RunSummary,
     RunTrace,
-    TaskContext,
     Touch,
 )
 from oracle_lab.trace.facts import (
@@ -51,123 +45,17 @@ from oracle_lab.trace.shell import (
     split,
 )
 
-# `RuntimeConfig.workdir`'s default, for configs that do not set it.
-DEFAULT_WORKDIR = "/testbed"
 _TEST_CATEGORIES = {FileCategory.TEST, FileCategory.GENERATED_TEST}
 _PREVIEW = 100
 
 
-@dataclass(frozen=True)
-class RunFacts:
-    """The few run details the viewer needs from the config and evaluation results."""
-
-    summary: RunSummary
-    repository: Repository
-    outcomes: dict[str, str] | None  # matrix cell by test id; None when not evaluated
-    task: TaskContext
-
-
-def read_run_facts(paths: RunPaths) -> RunFacts:
-    """Read run details loosely, from raw YAML and JSON, without the artifact contracts.
-
-    DEMO ONLY. Most demo runs predate the current `RunConfig` and `EvaluationResult`
-    contracts and fail strict validation in fields this viewer does not use. When the
-    viewer joins the pipeline, delete this and use `load_config(..., resolved=True)`
-    and `read_evaluation_result` instead. See `docs/features/trace-viewer/decisions.md`.
-    """
-    config = yaml.safe_load(paths.config.read_text())
-    agent = config["agent"]
-    summary = RunSummary(
-        paths.root.name, config["source"]["instance"], agent["harness"], agent["model"]
-    )
-    workdir = (config.get("runtime") or {}).get("workdir") or DEFAULT_WORKDIR
-    repository = Repository(workdir, config["task"]["generated_dir"])
-    outcomes = rows = scope = None
-    if paths.results.exists():
-        results = read_json(paths.results)
-        scope = results.get("task_scope")
-        tests = results.get("tests", [])
-        outcomes = {
-            test["test_id"]: test.get("cell") or f"{test['buggy']} / {test['golden']}"
-            for test in tests
-        }
-        rows = [
-            OutcomeRow(
-                test["test_id"],
-                test["buggy"],
-                test["golden"],
-                test.get("cell"),
-                _failure(test.get("buggy_failure")),
-                _failure(test.get("golden_failure")),
-            )
-            for test in tests
-        ]
-    return RunFacts(summary, repository, outcomes, _task_context(paths, rows, scope))
-
-
-def _task_context(
-    paths: RunPaths, results: list[OutcomeRow] | None, scope: str | None
-) -> TaskContext:
-    instance = read_json(paths.instance)
-    # Current runs save the target the prompt named; older ones only the instance's field.
-    if paths.target.exists():
-        target = read_localized_target(paths.target).text
-    else:
-        target = instance.get("test_target") if scope == "localized" else None
-    source = instance.get("source")
-    issue_path = paths.ground_truth / "issue.md"
-    if issue_path.exists():
-        issue = issue_path.read_text()
-    else:
-        record = instance.get("original_record") or {}
-        issue = record.get("problem_statement") if isinstance(record, dict) else None
-    return TaskContext(
-        instance_id=instance["instance_id"],
-        repo=instance.get("repo", ""),
-        dataset=source.get("name", "") if isinstance(source, dict) else str(source or ""),
-        base_commit=instance.get("base_commit", ""),
-        test_target=target,
-        issue=issue,
-        prompt=paths.prompt.read_text() if paths.prompt.exists() else None,
-        golden_patch=instance.get("golden_patch", ""),
-        reference_test_ids=list(instance.get("reference_test_ids") or []),
-        reference_test_patch=instance.get("reference_test_patch", ""),
-        results=results,
-    )
-
-
-def _failure(failure: dict | None) -> str | None:
-    if not failure:
-        return None
-    kind = (failure.get("exception_type") or "").removeprefix("builtins.")
-    return ": ".join(part for part in (kind, failure.get("message")) if part) or None
-
-
 def build_run_trace(paths: RunPaths) -> RunTrace:
-    """Read the run's trace, golden patch, target, submission, and outcomes, and annotate."""
-    facts = read_run_facts(paths)
-    steps = read_steps(facts.summary.harness, paths.generation / "trace.jsonl")
-    target = read_localized_target(paths.target) if paths.target.exists() else None
-    target_names = [name for file in target.files for name in file.names] if target else []
-    patch_path = paths.ground_truth / "fix.patch"
-    patch = patch_path.read_text() if patch_path.exists() else ""
-    regions = PatchedRegions.from_patch(patch, target_names)
-    events = to_events(steps, facts.repository, regions)
-    submitted_root = paths.submission / "files"
-    submitted = {
-        file.relative_to(submitted_root).as_posix(): file.read_text(errors="replace")
-        for file in sorted(submitted_root.rglob("*"))
-        if file.is_file()
-    }
-    return RunTrace(
-        run=facts.summary,
-        task=facts.task,
-        reasoning=reasoning_kind(facts.summary.harness),
-        events=events,
-        generated_files=generated_files(events, submitted, facts.outcomes),
-        defect=_defect_summary(events, regions, target),
-        outcomes_available=facts.outcomes is not None,
-    )
+    """Read the run's trace, golden patch, target, submission, and outcomes, and annotate.
+
+    Reads the run with the strict contracts: the resolved `RunConfig`, the
+    `EvaluationResult` when the run was evaluated, and the localized target.
+    """
+    raise NotImplementedError
 
 
 def to_events(steps: list[Step], repository: Repository, regions: PatchedRegions) -> list[Event]:

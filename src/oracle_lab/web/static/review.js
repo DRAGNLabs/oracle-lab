@@ -1,15 +1,24 @@
-// One target's review page: the question rail beside tabs of evidence.
+// One target's rating page: the question rail beside tabs of evidence. The Problem
+// tab comes first on every page; a judgment adds its run's trace and test files.
 
 import { openEvidence, renderEvidence, startEvidence } from "./evidence.js";
 import { openFile, openTest, renderFiles, startBrowser } from "./files.js";
 import { renderOverview } from "./overview.js";
+import { renderProblem } from "./problem.js";
 import { startRail } from "./rail.js";
 import { STAGE_NAMES, esc, markdown, parseDiff } from "./render.js";
 import { api, state } from "./state.js";
+import { showTests } from "./tests.js";
+import { openStep, renderTrace } from "./trace.js";
 
 const app = document.getElementById("app");
 const RENDER_TAB = {
+  problem: (panel) => renderProblem(panel, state.problem),
   overview: renderOverview,
+  trace: renderTrace,
+  tests: (panel) => {
+    throw new Error("not implemented"); // showTests over state.trace, with step links
+  },
   files: renderFiles,
   evidence: renderEvidence,
   rubric: (panel) => {
@@ -27,12 +36,11 @@ export async function openTarget(id) {
   startEvidence(target);
   document.title = `${target.instance_id} review`;
 
-  const tabs = [
-    ["overview", "Overview"],
-    ["files", "Files"],
-    ["evidence", target.stage === "judge" ? "Agent session" : "Task record"],
-    ["rubric", "Stage rubric"],
-  ];
+  // TODO: fetch state.problem with the target.
+  const tabs = target.stage === "judge"
+    ? [["problem", "Problem"], ["overview", "Overview"], ["trace", "Agent trace"], ["tests", "Test files"],
+      ["files", "Files"], ["evidence", "Evidence"], ["rubric", "Stage rubric"]]
+    : [["problem", "Problem"], ["files", "Files"], ["evidence", "Task record"], ["rubric", "Stage rubric"]];
   app.innerHTML = `
     <div class="review">
       <aside class="rail" aria-label="Questions to rate">
@@ -58,7 +66,7 @@ export async function openTarget(id) {
   });
   app.querySelector(".review").addEventListener("click", followLink);
   startRail(target);
-  showTab("overview");
+  showTab("problem");
 }
 
 export function showTab(tab) {
@@ -73,6 +81,7 @@ export function showTab(tab) {
 
 // Links anywhere on the page open the file, test, or evidence they name.
 function followLink(event) {
+  // TODO: data-open-step opens the trace tab at that step (openStep).
   const link = event.target.closest("[data-open-file], [data-open-test], [data-open-evidence]");
   if (!link) return;
   const { openFile: path, openTest: testId, openEvidence: name, view, line } = link.dataset;

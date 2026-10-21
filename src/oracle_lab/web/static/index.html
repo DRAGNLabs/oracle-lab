@@ -46,6 +46,14 @@
     <form method="dialog"><button class="primary" autofocus>Start reviewing</button></form>
   </dialog>
 
+  <dialog id="legend" aria-labelledby="legend-title">
+    <h2 id="legend-title">Trace legend</h2>
+    <div id="legend-body"></div>
+    <form method="dialog"><button>Close</button></form>
+  </dialog>
+
+  <div id="tooltip" role="tooltip" hidden></div>
+
   <dialog id="finder" aria-label="Find a file">
     <input type="search" id="finder-input" placeholder="Type part of a file path" autocomplete="off" spellcheck="false">
     <ul id="finder-results" role="listbox"></ul>

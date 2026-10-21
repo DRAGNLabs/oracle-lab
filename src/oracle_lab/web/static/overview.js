@@ -1,4 +1,5 @@
-// The Overview tab: the issue, what the judge's evidence showed, and the patches.
+// A judgment's Overview tab: the outcomes, the agent's coverage of the patched lines,
+// the edit facts, and the generated tests. The problem itself is the Problem tab.
 
 import { diffHtml, esc, fileHtml, fileLink, markdown, parseDiff, testLink } from "./render.js";
 import { api, state } from "./state.js";

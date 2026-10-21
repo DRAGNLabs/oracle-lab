@@ -1,7 +1,8 @@
 // Each test file the agent wrote under the generated directory, as the sequence of
 // versions its writes and edits produced, with the pytest runs after each one.
 
-import { DESCRIPTIONS, counts, diffHtml, editFacts, esc, outcomeTag, tag, testName } from "./html.js";
+import { DESCRIPTIONS, counts, editFacts, outcomeTag, tag, testName } from "./labels.js";
+import { esc, plainDiffHtml } from "./render.js";
 
 const INTRO = `
   <p class="intro">Every file the agent wrote under the generated test directory. Each
@@ -59,7 +60,7 @@ function change(version, index, edit) {
       ${edit?.command ? `<pre class="wrap">${esc(edit.command)}</pre>` : ""}
     </div>`;
   }
-  const diff = `<pre class="diff">${diffHtml(version.diff)}</pre>`;
+  const diff = `<pre class="diff">${plainDiffHtml(version.diff)}</pre>`;
   if (version.unknown) {
     const why = version.unknown === "no_base"
       ? "The file's content before this edit is unknown, because an earlier version could not be rebuilt."

@@ -1,40 +1,7 @@
-// Small helpers for building HTML strings safely.
+// The agent trace's labels and descriptions: action types, file categories, and the
+// facts on rows and test file versions. One table feeds the hover text and the legend.
 
-export function esc(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
-
-// Highlighted code, or escaped text when highlight.js does not know the language.
-export function code(text, language) {
-  if (window.hljs && language && hljs.getLanguage(language)) {
-    return hljs.highlight(text, { language, ignoreIllegals: true }).value;
-  }
-  return esc(text);
-}
-
-// Markdown as HTML, with the review page's pinned marked.
-export function markdown(text) {
-  const normalized = (text || "").replaceAll("\r\n", "\n"); // dataset issues often use CRLF
-  return window.marked ? marked.parse(normalized) : `<pre>${esc(normalized)}</pre>`;
-}
-
-// A unified diff with added and removed lines marked.
-export function diffHtml(diff) {
-  return diff
-    .split("\n")
-    .map((line) => {
-      const kind = line.startsWith("diff --git") ? "file"
-        : line.startsWith("+") && !line.startsWith("+++") ? "added"
-        : line.startsWith("-") && !line.startsWith("---") ? "removed"
-        : line.startsWith("@@") ? "hunk" : "";
-      return `<span class="diff-line ${kind}">${esc(line) || " "}</span>`;
-    })
-    .join("");
-}
+import { esc } from "./render.js";
 
 export const ACTION_LABELS = {
   read: "Read",

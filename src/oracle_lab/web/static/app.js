@@ -1,8 +1,10 @@
 // The review page: one rater rates one LLM output at a time against its evidence.
-// This entry point routes between the target list and one target, and owns the
-// keyboard and the help dialog. Plain JavaScript modules, no build step.
+// This entry point routes between the home page, a problem page, and a rating page,
+// and owns the keyboard, the hover text, and the help dialog. Plain JavaScript
+// modules, no build step.
 
 import { openFinder } from "./finder.js";
+import { openProblem } from "./problem.js";
 import { showListing } from "./listing.js";
 import { RATINGS, RATING_NAMES, rate, select } from "./rail.js";
 import { esc } from "./render.js";
@@ -13,6 +15,7 @@ const HELP_SEEN = "oracle-review:help-seen";
 
 document.getElementById("help-button").addEventListener("click", showHelp);
 document.addEventListener("keydown", onKey);
+document.addEventListener("mouseover", showTip);
 window.addEventListener("hashchange", route);
 route();
 
@@ -24,7 +27,9 @@ async function route() {
       state.listing = await api("/api/targets");
       document.getElementById("rater").textContent = `Rating as ${state.listing.rater}`;
     }
-    if (hash.startsWith("/review/")) {
+    if (hash.startsWith("/problem/")) {
+      await openProblem(decodeURIComponent(hash.slice("/problem/".length)));
+    } else if (hash.startsWith("/review/")) {
       await openTarget(decodeURIComponent(hash.slice("/review/".length)));
     } else {
       showListing();
@@ -44,6 +49,7 @@ function onKey(event) {
   if (document.querySelector("dialog[open]")) return;
   const typing = event.target.closest?.("input, textarea, select, [contenteditable]");
   if (typing || event.ctrlKey || event.metaKey || event.altKey) return;
+  // TODO: on the trace tab, onTraceKey gets the key first.
   if (event.key === "?") {
     showHelp();
   } else if (state.target && ["1", "2", "3"].includes(event.key)) {
@@ -54,6 +60,11 @@ function onKey(event) {
   } else if (state.target && event.key === "k") {
     select(state.selected - 1);
   }
+}
+
+// One floating description for whatever element under the cursor has `data-tip`.
+function showTip(event) {
+  throw new Error("not implemented");
 }
 
 function showHelp() {

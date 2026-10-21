@@ -90,8 +90,12 @@ class _ReviewHandler(BaseHTTPRequestHandler):
             self._static(path.removeprefix("/static/"))
         elif path == "/api/targets":
             self._json(session.listing())
+        elif path == "/api/problem":
+            self._json(session.problem(query.get("instance")))
         elif path == "/api/target":
             self._json(session.overview(query.get("id")))
+        elif path == "/api/trace":
+            self._json(session.trace(query.get("id")))
         elif path == "/api/tree":
             self._json(session.tree(query.get("id"), query.get("view")))
         elif path == "/api/file":

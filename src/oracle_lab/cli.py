@@ -95,11 +95,6 @@ def _build_parser() -> argparse.ArgumentParser:
         "--output", type=Path, help="Default: agreement/<UTC timestamp>/ here"
     )
 
-    # Browse saved agent traces as annotated timelines. Demo only; no model calls.
-    trace_parser = sub.add_parser("trace", help="View saved agent traces in the browser")
-    trace_parser.add_argument("path", type=Path, help="A run directory, or a directory of runs")
-    trace_parser.add_argument("--port", type=int, default=0, help="Default: any free port")
-    trace_parser.add_argument("--no-browser", action="store_true", help="Do not open a browser")
 
     return parser
 
@@ -113,8 +108,6 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _preflight_all(args.configs)
     if args.command == "review":
         return serve(args.path, args.rater, port=args.port, open_browser=not args.no_browser)
-    if args.command == "trace":
-        return _serve_traces(args.path, port=args.port, open_browser=not args.no_browser)
     if args.command == "run":
         output = run(load_config(args.config))
     elif args.command == "batch":
@@ -148,30 +141,6 @@ def _load_saved_run(run_dir: Path) -> tuple[RunConfig, RunPaths]:
     """Open a run and load its frozen resolved configuration once at the CLI boundary."""
     paths = RunPaths.open(run_dir.resolve())
     return load_config(paths.config, resolved=True), paths
-
-
-def _serve_traces(path: Path, *, port: int, open_browser: bool) -> int:
-    """Find runs with a saved agent trace under the path and serve the viewer.
-
-    The viewer needs the optional `trace` extra, so it is imported only here.
-    """
-    try:
-        from oracle_lab.trace.server import serve as serve_traces
-    except ImportError as error:
-        raise RuntimeError(
-            f"The trace viewer needs the trace extra ({error.name} is missing): "
-            "uv sync --extra trace"
-        ) from error
-    root = path.resolve()
-    candidates = [root] if (root / "generation").is_dir() else sorted(root.iterdir())
-    runs = [
-        RunPaths.open(candidate)
-        for candidate in candidates
-        if (candidate / "generation" / "trace.jsonl").is_file()
-    ]
-    if not runs:
-        raise ValueError(f"No runs with a saved agent trace under {path}")
-    return serve_traces(runs, port=port, open_browser=open_browser)
 
 
 def _preflight_all(configs: list[Path]) -> int:

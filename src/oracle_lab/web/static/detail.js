@@ -1,6 +1,7 @@
 // The selected event in full: what the agent issued, what it saw, and what it touched.
 
-import { ACTION_LABELS, CATEGORY_LABELS, DESCRIPTIONS, code, counts, esc } from "./html.js";
+import { ACTION_LABELS, CATEGORY_LABELS, DESCRIPTIONS, counts } from "./labels.js";
+import { code, esc } from "./render.js";
 
 const OUTPUT_LINES = 400; // longer output is collapsed behind a toggle
 

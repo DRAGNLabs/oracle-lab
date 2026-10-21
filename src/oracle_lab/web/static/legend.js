@@ -1,6 +1,8 @@
-// What every color, tag, and fact on the page means, from the shared descriptions.
+// The trace legend dialog: what every color, tag, and fact means, from the shared
+// descriptions.
 
-import { ACTION_LABELS, CATEGORY_LABELS, DESCRIPTIONS, esc } from "./html.js";
+import { ACTION_LABELS, CATEGORY_LABELS, DESCRIPTIONS } from "./labels.js";
+import { esc } from "./render.js";
 
 const TAG_LABELS = { patched_name: "function or class name, in orange", git_history: "git history", exit: "exit N" };
 const FACT_LABELS = {
@@ -11,7 +13,9 @@ const FACT_LABELS = {
 };
 const FILE_LABELS = { matches_submission: "matches submission", differs_submission: "differs from submission" };
 
-export function showLegend(container) {
+export function openLegend() {
+  // TODO: fill the legend dialog and show it.
+  const container = null;
   const actions = Object.entries(ACTION_LABELS)
     .map(([key, label]) => row(`<span class="dot" style="--dot: var(--a-${key})"></span>${esc(label)}`, DESCRIPTIONS.action[key]))
     .join("");

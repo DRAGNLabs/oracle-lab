@@ -17,6 +17,10 @@ Read these references before changing related behavior:
 - `docs/judging.md` for the LLM judge and the human review page.
 - `docs/human-review.md` for sharing review sets with raters.
 - `docs/containers.md` for Docker transport and image builds.
+- `docs/research-framing.md` for the research questions, oracle states, and
+  failure-mode start list behind the judge rubrics.
+- `docs/features/judgment-pivot/implementation.md` for the planned merge of the
+  trace viewer into the generation judgment and review page.
 
 ## Architecture and trust boundaries
 

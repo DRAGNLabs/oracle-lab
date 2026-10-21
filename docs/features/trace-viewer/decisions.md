@@ -76,4 +76,11 @@
 - **Issue text has CRLF line endings normalized, and its leading instance-id heading dropped** (`static/html.js`, `static/summary.js`). The header already shows the id.
 - **Each test file version names its file and the edit that made it** (`static/tests.js`), using the edit event's description, such as `Patch oracle_tests/test_x.py (+6/−2)`. The tab opens with a table of files and version counts, the file heading stays pinned while scrolling, and each version's outcome list is collapsed behind a count.
 
+## Pivot
+
+- **No human open coding.** The LLM generation judge labels failure modes from a start list and may add its own; raters rate those labels. See `docs/research-framing.md`.
+- **The viewer joins the review page** as the trace tab of a generation judgment, and `oracle-lab trace` goes away. The plan is `docs/features/judgment-pivot/implementation.md`.
+- **The loose reading in `build.read_run_facts` ends** when the viewer joins the pipeline, as the first decision above said.
+- **The page still shows facts only.** Failure-mode labels come from the judge, beside the trace, not from the viewer.
+
 ## Review

@@ -131,48 +131,7 @@ class DefectSummary:
 
 
 @dataclass
-class RunSummary:
-    """A run as the picker lists it."""
-
-    run_id: str
-    instance: str
-    harness: str
-    model: str
-
-
-@dataclass
-class OutcomeRow:
-    """One generated test's final evaluation result."""
-
-    test_id: str
-    buggy: str
-    golden: str
-    cell: str | None  # None for incomplete outcomes
-    buggy_failure: str | None  # exception type and message
-    golden_failure: str | None
-
-
-@dataclass
-class TaskContext:
-    """What the run was about: the instance, the issue, the prompt, and the answers."""
-
-    instance_id: str
-    repo: str
-    dataset: str
-    base_commit: str
-    test_target: str | None  # the localized target as the prompt named it
-    issue: str | None
-    prompt: str | None
-    golden_patch: str
-    reference_test_ids: list[str]
-    reference_test_patch: str
-    results: list[OutcomeRow] | None  # None when the run was not evaluated
-
-
-@dataclass
 class RunTrace:
-    run: RunSummary
-    task: TaskContext
     reasoning: str  # "raw" or "summary"
     events: list[Event]
     generated_files: list[GeneratedFile]

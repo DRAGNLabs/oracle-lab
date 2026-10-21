@@ -2,7 +2,8 @@
 
 Each kind of target knows everything particular to its stage: the questions its
 judge could answer, the repository views and evidence files the judge read, and
-where its files live.
+where its files live. Raters work through targets one problem at a time: a
+`Problem` is one task instance and its targets, in the order they are rated.
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from oracle_lab.classification.contracts import (
     read_saved_classification,
 )
 from oracle_lab.classification.workspace import CLASSIFICATION_ROOT, classification_evidence
-from oracle_lab.config import repo_path
+from oracle_lab.config import RunConfig, repo_path
 from oracle_lab.io import read_json
 from oracle_lab.judge.contracts import JUDGMENT_LABELS, CompletedJudgment, validate_judgment
 from oracle_lab.judge.workspace import JUDGE_ROOT, judge_evidence
@@ -164,6 +165,10 @@ class JudgmentTarget(ReviewTarget):
     def issue(self) -> str:
         return (self.paths.ground_truth / "issue.md").read_text()
 
+    def config(self) -> RunConfig:
+        """The run's resolved configuration, which names its harness, model, and scope."""
+        raise NotImplementedError
+
     def evaluation(self) -> EvaluationResult:
         return read_evaluation_result(self.paths.results)
 
@@ -246,6 +251,33 @@ class UnreviewableTarget:
     stage: Stage
     root: Path
     reason: str
+
+
+@dataclass(frozen=True)
+class Problem:
+    """One task instance and every target that rates something about it."""
+
+    instance_id: str
+    classifications: list[ClassificationTarget]  # ordered by attempt directory
+    judgments: list[JudgmentTarget]  # ordered by run ID, which starts with a timestamp
+
+    @property
+    def tasks(self) -> list[ReviewTarget]:
+        """The targets in the order a rater works through them: classification first."""
+        raise NotImplementedError
+
+    @property
+    def instance(self) -> InstanceRecord:
+        """The task record, from the first task; every target copies the same dataset record."""
+        raise NotImplementedError
+
+    def issue(self) -> str:
+        raise NotImplementedError
+
+
+def find_problems(targets: list[ReviewTarget]) -> list[Problem]:
+    """The targets grouped by task instance, ordered by instance ID."""
+    raise NotImplementedError
 
 
 def find_targets(path: Path) -> tuple[list[ReviewTarget], list[UnreviewableTarget]]:

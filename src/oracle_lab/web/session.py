@@ -1,7 +1,7 @@
 """What the review page shows: one rater's view of the targets under a directory.
 
 Each method answers one request the page makes, as JSON-ready data. Repository
-views and evidence are built on first use and kept for the session.
+views, evidence, and agent traces are built on first use and kept for the session.
 """
 
 from __future__ import annotations
@@ -13,10 +13,11 @@ from oracle_lab.review.contracts import RATING_DEFINITIONS, require_rater
 from oracle_lab.review.sources import SourceView, open_views
 from oracle_lab.review.store import read_review, save_review
 from oracle_lab.review.targets import (
-    ClassificationTarget,
     JudgmentTarget,
+    Problem,
     ReviewTarget,
     UnreviewableTarget,
+    find_problems,
     find_targets,
 )
 
@@ -43,34 +44,34 @@ class ReviewSession:
         self.unreviewable: dict[str, UnreviewableTarget] = {
             _target_id(root, item.root): item for item in unreviewable
         }
+        self.problems: dict[str, Problem] = {
+            problem.instance_id: problem for problem in find_problems(targets)
+        }
         self._remote = remote
         self._cache = cache
         self._lock = threading.Lock()
         self._views: dict[str, dict[str, SourceView]] = {}
         self._evidence: dict[str, dict[str, bytes]] = {}
+        self._traces: dict[str, dict] = {}
 
     def listing(self) -> dict:
-        """Every target with this rater's progress, and every target that cannot be reviewed."""
-        return {
-            "rater": self.rater,
-            "rating_definitions": RATING_DEFINITIONS,
-            "targets": [
-                {
-                    "id": target_id,
-                    "stage": target.stage,
-                    "instance_id": target.instance.instance_id,
-                    "reviewed": read_review(target, self.rater) is not None,
-                }
-                for target_id, target in self.targets.items()
-            ],
-            "unreviewable": [
-                {"id": target_id, "stage": item.stage, "reason": item.reason}
-                for target_id, item in self.unreviewable.items()
-            ],
-        }
+        """Every problem with its tasks in rating order and this rater's progress, and
+        every target that cannot be reviewed.
+
+        Each task carries its stage, its label (harness, model, and scope for a run),
+        its number of questions, and whether this rater has saved a review.
+        """
+        raise NotImplementedError
+
+    def problem(self, instance_id: str) -> dict:
+        """What the problem page and every Problem tab show: the instance, the issue, the
+        record's other texts, the golden patch, the reference tests, and its tasks."""
+        raise NotImplementedError
 
     def overview(self, target_id: str) -> dict:
-        """What the page shows first: the questions, the answers, and the core evidence."""
+        """The rating page's own data: the questions, the answers, the stage rubric, and,
+        for a judgment, the outcomes and the submission. The problem's issue, patches,
+        and record texts come from `problem`."""
         target = self._target(target_id)
         answers = target.answers.model_dump(mode="json")
         review = read_review(target, self.rater)
@@ -90,16 +91,10 @@ class ReviewSession:
             ],
             "review": review.ratings if review else None,
             "stage_rubric": target.stage_rubric.read_text(),
-            "issue": target.issue(),
-            "repair_patch": target.instance.golden_patch,
-            "reference_test_patch": target.instance.reference_test_patch,
-            "reference_test_ids": target.instance.reference_test_ids,
             "evidence": sorted(self._evidence_of(target_id)),
         }
         if isinstance(target, JudgmentTarget):
             overview |= _judgment_details(target)
-        elif isinstance(target, ClassificationTarget):
-            overview |= _classification_details(target)
         return overview
 
     def tree(self, target_id: str, view: str) -> dict:
@@ -116,6 +111,10 @@ class ReviewSession:
         if name not in evidence:
             raise LookupError(f"No such evidence file: {name}")
         return {"name": name, **_text(evidence[name])}
+
+    def trace(self, target_id: str) -> dict:
+        """A judged run's agent trace, as `RunTrace.to_json()`. Built once per session."""
+        raise NotImplementedError
 
     def submit(self, target_id: str, raw: str) -> dict:
         review = save_review(self._target(target_id), self.rater, raw)
@@ -160,18 +159,6 @@ def _judgment_details(target: JudgmentTarget) -> dict:
             "forbidden_changes": manifest.forbidden_changes,
             "compliant": manifest.compliant,
         },
-    }
-
-
-def _classification_details(target: ClassificationTarget) -> dict:
-    """The task record's texts the classifier read besides the issue."""
-    record = target.instance.original_record
-    return {
-        "record_texts": [
-            {"title": title, "text": record[field]}
-            for field, title in RECORD_TEXTS.items()
-            if isinstance(record.get(field), str) and record[field].strip()
-        ],
     }
 
 

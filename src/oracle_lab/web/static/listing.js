@@ -1,9 +1,17 @@
-// The target list: every target grouped by task, with this rater's progress.
+// The home page: every problem and its tasks in rating order, with this rater's
+// progress, filters, and Continue. `nextStop` decides where Continue and Next task go.
 
 import { STAGE_NAMES, esc } from "./render.js";
 import { state } from "./state.js";
 
+// Where to go after `afterId` (or from the start): the next unrated task's rating
+// page, or its problem's page when that task starts a new problem. Null when done.
+export function nextStop(afterId = null) {
+  throw new Error("not implemented");
+}
+
 export function showListing() {
+  // TODO: problems, overall and per-problem progress, filters from the hash, Continue.
   state.target = null;
   document.title = "Oracle Lab review";
   const { targets, unreviewable } = state.listing;

@@ -3,7 +3,8 @@
 // rest) when toggled. Rows touching patched lines are marked strongly, rows touching
 // only a patched file faintly.
 
-import { ACTION_LABELS, CATEGORY_LABELS, DESCRIPTIONS, editFacts, esc, tag } from "./html.js";
+import { ACTION_LABELS, CATEGORY_LABELS, DESCRIPTIONS, editFacts, tag } from "./labels.js";
+import { esc } from "./render.js";
 
 const NO_FILE = "(no file)";
 const OTHER_FILES = "(files touched once)";

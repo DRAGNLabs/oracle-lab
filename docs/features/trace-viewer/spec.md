@@ -4,6 +4,10 @@ A local page that shows one run's agent trace as a timeline of typed, annotated
 events. It is a standalone demo for judging whether traces carry enough signal for
 open coding. It is not a pipeline stage and writes nothing to the run directory.
 
+Open coding is dropped. The viewer is moving into the generation judgment's review
+page, where raters rate the LLM judge's failure-mode labels against the trace. See
+[the judgment pivot plan](../judgment-pivot/implementation.md).
+
 Decisions and their reasons are in `decisions.md`.
 
 ## What it shows

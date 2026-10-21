@@ -1,4 +1,5 @@
-// The question rail: each answer the judge gave, the rater's rating of it, and saving.
+// The question rail: each answer the judge gave, the rater's rating of it, saving,
+// and Next task once everything is saved.
 
 import { esc, linkify } from "./render.js";
 import { api, state } from "./state.js";

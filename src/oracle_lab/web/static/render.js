@@ -217,6 +217,17 @@ export function splitDiffHtml(files) {
 // ---------- Links to evidence ----------
 
 // Each kind of link names what it opens; the review page follows them all.
+// A diff the trace recorded as text, such as one test file version's change or an
+// apply_patch body, with added and removed lines marked.
+export function plainDiffHtml(diff) {
+  throw new Error("not implemented");
+}
+
+// Highlighted code, or escaped text when highlight.js does not know the language.
+export function code(text, language) {
+  throw new Error("not implemented");
+}
+
 export function fileLink(path, view, label, line = "") {
   return `<button type="button" class="link-like" data-open-file="${esc(path)}" data-view="${view}" data-line="${line}">${label}</button>`;
 }

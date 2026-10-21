@@ -1676,6 +1676,8 @@ dependencies = [
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
+    { name = "tree-sitter" },
+    { name = "tree-sitter-bash" },
 ]
 
 [package.optional-dependencies]
@@ -1690,10 +1692,6 @@ dev = [
     { name = "pytest" },
     { name = "ruff" },
 ]
-trace = [
-    { name = "tree-sitter" },
-    { name = "tree-sitter-bash" },
-]
 
 [package.metadata]
 requires-dist = [
@@ -1706,10 +1704,10 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1,<2" },
     { name = "pyyaml", specifier = ">=6,<7" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.11,<1" },
-    { name = "tree-sitter", marker = "extra == 'trace'", specifier = ">=0.23,<1" },
-    { name = "tree-sitter-bash", marker = "extra == 'trace'", specifier = ">=0.23,<1" },
+    { name = "tree-sitter", specifier = ">=0.23,<1" },
+    { name = "tree-sitter-bash", specifier = ">=0.23,<1" },
 ]
-provides-extras = ["dataset", "dev", "analysis", "trace"]
+provides-extras = ["dataset", "dev", "analysis"]
 
 [[package]]
 name = "packaging"

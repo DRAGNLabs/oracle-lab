@@ -17,22 +17,29 @@ Decisions and their reasons are in `decisions.md`.
   column per file: patched files first, then test files, then the rest. Files
   touched only once go into one "other" column.
 - **Defect overlap.** A strong mark on events that overlap patched lines, and a
-  faint mark on events that only touch a patched file. A header shows the first
-  touch (step number, or "never") and the share of patched lines that appeared in
-  output the agent saw.
+  faint mark on events that only touch a patched file. A key for both sits in the
+  table header.
 - **Reasoning.** Reasoning and message events show a short preview that expands to
-  the full text. Each run's header says whether the harness exposes raw reasoning
-  or summaries.
-- **Test files.** A side panel lists each file under the generated directory with
-  its versions. Each version is a diff against the previous one, with the pytest
-  results of runs between versions.
-- **Outcome.** A toggle, off by default, reveals each test's final evaluation
-  result, attached to the version that introduced it.
-- **Edit facts.** A second toggle, off by default, shows three facts about test
-  edits. (1) A run between the previous version and this one reported failures,
-  and which FAILED ids are in this file. (2) The edit added a skip/xfail mark.
-  (3) Tests reported as FAILED that the submitted file no longer defines. They are
-  sequence facts, worded neutrally, and never named as failure modes.
+  the full text.
+- **Side panel.** One tab bar with two labeled groups. Run tabs: Summary, Test
+  files, and Legend. Step tab: Event, the selected row in full. Selecting a row
+  opens Event.
+- **Summary.** A document about the run, read first. The instance (repository,
+  dataset, base commit, agent, localized target), the issue as Markdown, the prompt
+  the agent was given, the golden patch with its changed line ranges and how many
+  of those lines the agent saw, the reference tests, the final results as the 2×2
+  matrix plus a per-test table with failure messages, and the edit facts as a table
+  with step links.
+- **Test files.** Each file under the generated directory with its versions. Each
+  version is a diff against the previous one, with the pytest results of runs
+  between versions and the final result of each test it introduced.
+- **Edit facts.** Always shown, as tags on edit rows and versions. (1) A run between
+  the previous version and this one reported failures, and which FAILED ids are in
+  this file. (2) The edit added a skip/xfail mark. (3) Tests reported as FAILED
+  that the submitted file no longer defines. They are sequence facts, worded
+  neutrally, and never named as failure modes.
+- **Legend and hover text.** Every tag shows a description on hover. The Legend tab
+  lists every color, tag, and fact with the same descriptions.
 - **Run picker.** Runs grouped by instance, showing harness and model.
 
 The viewer annotates facts only: where the agent was, what it saw, and what
@@ -104,8 +111,9 @@ harness name (`read_steps`, `reasoning_kind`).
 - `server.py`: `serve(runs)` and `TraceServer` serve `static/`, `highlight.js` from
   `web/static/vendor/` under `/vendor/`, `GET /api/runs`, and `GET /api/run?id=`.
   Traces are built on first request and cached in memory.
-- `static/`: `index.html`, `app.js` (picker, toggles, panel tabs, state),
-  `timeline.js`, `detail.js`, `tests.js`, `html.js` (shared helpers), `app.css`.
+- `static/`: `index.html`, `app.js` (picker, lane toggle, panel tabs, hover text,
+  state), `timeline.js`, `detail.js`, `tests.js`, `summary.js`, `legend.js`,
+  `html.js` (shared helpers and the description table), `app.css`.
 
 ### CLI
 
@@ -130,7 +138,7 @@ it are skipped when it is absent.
 - Hunks use old-side (buggy) line numbers, which match the checkout the agent saw.
 - The share of patched lines shown counts changed buggy-side lines that fall inside
   a read or grep range *and* whose text appears in that event's output. Truncated
-  output does not count, so this is a lower bound, and the page says so.
+  output does not count, so this is a lower bound, and the page says so on hover.
 - Edits and searches without line numbers get at most the file-level mark.
 
 ## Test file versions
@@ -138,7 +146,10 @@ it are skipped when it is absent.
 Full content comes from Write/write, `apply_patch` Add File, and
 `cat > f <<EOF`/`tee`. Edit/edit (`old_string`→`new_string`) and `apply_patch`
 Update File apply to the last known version. If no base is known, or an edit
-doesn't apply, the version records only that edit's diff and is marked partial.
+doesn't apply, the version records only that edit's diff, and `FileVersion.unknown`
+says why: a shell edit such as `sed -i`, an unknown earlier version, or old text
+that isn't in the previous version. The page says which in a sentence, and shows
+the command for shell edits.
 The final version is compared with `submission/files/` and marked if it differs.
 
 ## Implementation steps
@@ -163,8 +174,18 @@ The final version is compared with `submission/files/` and marked if it differs.
 `skip_marks_added`; `GeneratedFile` gains `failed_then_absent`. All are computed
 in `facts.generated_files` from the versions, runs, and submission it already has.
 No new trace parsing. Runs are ordered by `(step, part)`, so a run chained after an
-edit in the same command follows it. The page shows them only with "Show edit
-facts": tags on edit rows and versions, plus the ids in the Test files panel.
+edit in the same command follows it. Cycle 3 shows them always.
+
+## Cycle 3: page layout
+
+`DefectSummary` gains `hunks`. The run header and both fact toggles are removed,
+the side panel gains Summary and Legend tabs, and every tag gets hover text from
+one description table in `static/html.js`.
+
+The Summary tab reads like the review page's Overview. `RunTrace` gains a
+`TaskContext` (instance, issue, prompt, golden and reference patches, and
+`OutcomeRow`s), read loosely from `inputs/instance.json`, `ground-truth/issue.md`,
+`inputs/prompt.txt`, `inputs/target.json`, and `evaluation/results.json`.
 
 ## Out of scope
 

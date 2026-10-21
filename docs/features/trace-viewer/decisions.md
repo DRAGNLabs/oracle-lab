@@ -55,4 +55,25 @@
 - **A first version's skip marks count as "added"** (`facts._attach_edit_facts`). It's literally true; the toggle's tag doesn't claim the mark came after a failure.
 - **Fixed: `_defines` now matches diff lines** (`+def name`). Before, outcomes for partial versions always fell through to the file's last version.
 
+## Pre (cycle 3: page layout)
+
+- **Edit facts and outcomes are always shown; both toggles are gone.** This reverses the earlier choice to hide outcomes against outcome bias. Reviewers found the toggles added clicks without changing how they read.
+- **No run header strip.** The reasoning kind and first touch of patched lines are dropped from the page. Reviewers can see first touch in the timeline. The remaining run facts move to a Summary tab.
+- **The side panel has run tabs (Summary, Test files, Legend) and a step tab (Event), labeled as two groups in one bar.** Test files looked attached to the selected event before. Three columns were the alternative, rejected for timeline width.
+- **Every tag describes itself on hover, and a Legend tab lists every color, tag, and fact.** Labels such as the orange patched-name tag and "partial" were unreadable without them.
+- **The patch overlap key sits in the table header; the color legend above the table is gone.** The lane headers already name the action colors.
+
+## Model-decided (cycle 3)
+
+- **One description table, `DESCRIPTIONS` in `static/html.js`, feeds both the hover text and the Legend tab** (`static/legend.js`), so the wording can't drift.
+- **Hover text is one floating element, not the `title` attribute** (`static/app.js`). `title` waits about a second and can't be styled.
+- **The "test" category is now "existing test"** (`html.CATEGORY_LABELS`). The data keeps its name.
+- **`FileVersion.partial` became `unknown`, a reason** (`facts._apply`): `shell`, `no_base`, or `mismatch`. A "partial"/"change only" tag did not say why the file was unknown; the version now says it in a sentence and shows a shell edit's command instead of a placeholder diff.
+- **`DefectSummary.hunks`** gives the Summary tab each patched file's buggy-side line ranges. `first_touch` stays in the data, unused by the page.
+- **Repeated pytest runs within one step are numbered "run 1 of 2"** (`static/tests.js`). Chained commands made the same step link appear twice.
+- **The Summary tab is a document, not a list of numbers.** It holds what an annotator needs first: the issue, the prompt, the fix, the reference tests, and the results. Its sections and the 2×2 matrix follow the review page's Overview (`web/static/overview.js`). Issues render with the review page's pinned `marked`.
+- **`TaskContext` is read with the same loose, demo-only reading as the rest of `build.read_run_facts`.** The localized target comes from `inputs/target.json`, or, for older runs, the instance's `test_target` when results say the scope was localized. A missing issue falls back to the record's `problem_statement`.
+- **Issue text has CRLF line endings normalized, and its leading instance-id heading dropped** (`static/html.js`, `static/summary.js`). The header already shows the id.
+- **Each test file version names its file and the edit that made it** (`static/tests.js`), using the edit event's description, such as `Patch oracle_tests/test_x.py (+6/−2)`. The tab opens with a table of files and version counts, the file heading stays pinned while scrolling, and each version's outcome list is collapsed behind a count.
+
 ## Review

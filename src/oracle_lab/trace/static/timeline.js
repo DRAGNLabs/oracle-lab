@@ -3,21 +3,22 @@
 // rest) when toggled. Rows touching patched lines are marked strongly, rows touching
 // only a patched file faintly.
 
-import { ACTION_LABELS, editFacts, esc } from "./html.js";
+import { ACTION_LABELS, CATEGORY_LABELS, DESCRIPTIONS, editFacts, esc, tag } from "./html.js";
 
 const NO_FILE = "(no file)";
 const OTHER_FILES = "(files touched once)";
 
-export function showTimeline(container, trace, { lanesByFile, showEditFacts, selected, onSelect }) {
+export function showTimeline(container, trace, { lanesByFile, selected, onSelect }) {
   const laneKeys = lanes(trace, lanesByFile);
-  const facts = showEditFacts ? factsByEdit(trace) : new Map();
+  const facts = factsByEdit(trace);
   const template = `4.5em repeat(${laneKeys.length}, 22px) minmax(0, 1fr)`;
   const header = laneKeys
     .map((key) => {
       // The last two path parts, so `tests/conftest.py` and `oracle_tests/conftest.py` differ.
       const label = lanesByFile ? key.split("/").slice(-2).join("/") : ACTION_LABELS[key];
       const color = lanesByFile ? "" : ` style="--lane: var(--a-${key})"`;
-      return `<div class="lane-head${lanesByFile ? "" : " typed"}"${color} title="${esc(key)}"><span>${esc(label)}</span></div>`;
+      const tip = lanesByFile ? key : DESCRIPTIONS.action[key] || key;
+      return `<div class="lane-head${lanesByFile ? "" : " typed"}"${color} data-tip="${esc(tip)}"><span>${esc(label)}</span></div>`;
     })
     .join("");
   const rows = trace.events
@@ -28,9 +29,8 @@ export function showTimeline(container, trace, { lanesByFile, showEditFacts, sel
     })
     .join("");
   container.innerHTML = `
-    ${legend()}
     <div class="grid" style="grid-template-columns: ${template}">
-      <div class="lane-head step-head">Step</div>${header}<div class="lane-head desc-head"></div>
+      <div class="lane-head step-head">Step</div>${header}<div class="lane-head desc-head">${overlapKey()}</div>
       ${rows}
     </div>`;
   for (const element of container.querySelectorAll("[data-event]")) {
@@ -47,12 +47,12 @@ function row(event, index, laneKeys, lanesByFile, isSelected, lastPart, factLabe
   const classes = ["row", `overlap-${overlap}`, event.part ? "part" : "", isSelected ? "selected" : ""].join(" ");
   const step = event.part ? "↳" : event.step;
   const marks = [
-    event.git_history ? `<span class="tag">git history</span>` : "",
-    event.patched_names.length ? `<span class="tag patched" title="Mentions names defined in patched hunks">${esc(event.patched_names.join(", "))}</span>` : "",
+    event.git_history ? tag("git history", DESCRIPTIONS.tag.git_history) : "",
+    event.patched_names.length ? tag(event.patched_names.join(", "), DESCRIPTIONS.tag.patched_name, "patched") : "",
     // A chained command's exit code belongs to the whole chain; show it once, at the end.
-    event.exit_code && lastPart ? `<span class="tag">exit ${event.exit_code}</span>` : "",
-    ...factLabels.map((label) => `<span class="tag fact">${esc(label)}</span>`),
-    ...categories(event).map((category) => `<span class="tag cat-${category}">${category.replace("_", " ")}</span>`),
+    event.exit_code && lastPart ? tag(`exit ${event.exit_code}`, DESCRIPTIONS.tag.exit) : "",
+    ...factLabels,
+    ...categories(event).map((category) => tag(CATEGORY_LABELS[category] || category, DESCRIPTIONS.tag[category], `cat-${category}`)),
   ].join("");
   const expanded = isSelected && (event.action === "reasoning" || event.action === "message")
     ? `<div class="full-text">${esc(event.text)}</div>`
@@ -66,7 +66,7 @@ function row(event, index, laneKeys, lanesByFile, isSelected, lastPart, factLabe
     </div>`;
 }
 
-// Edit fact labels by the "step:part" of the edit that made each test file version.
+// Edit fact tags by the "step:part" of the edit that made each test file version.
 function factsByEdit(trace) {
   const facts = new Map();
   for (const file of trace.generated_files) {
@@ -118,12 +118,10 @@ function categories(event) {
   return [...new Set(event.touches.map((touch) => touch.category))].filter((category) => shown.has(category));
 }
 
-function legend() {
-  const items = Object.entries(ACTION_LABELS)
-    .map(([key, label]) => `<span class="legend-item"><span class="dot" style="--dot: var(--a-${key})"></span>${label}</span>`)
-    .join("");
-  return `<div class="legend">${items}
-    <span class="legend-item"><span class="swatch overlap-lines"></span>Patched lines</span>
-    <span class="legend-item"><span class="swatch overlap-file"></span>Patched file</span>
+// What the colored bar at the left of a row means.
+function overlapKey() {
+  return `<div class="overlap-key">
+    <span data-tip="${esc(DESCRIPTIONS.overlap.lines)}"><span class="swatch overlap-lines"></span>patched lines</span>
+    <span data-tip="${esc(DESCRIPTIONS.overlap.file)}"><span class="swatch overlap-file"></span>patched file</span>
   </div>`;
 }

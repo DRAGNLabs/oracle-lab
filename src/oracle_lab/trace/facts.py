@@ -268,11 +268,11 @@ def generated_files(
         if touch.category is not FileCategory.GENERATED_TEST:
             continue
         before = content.get(touch.path)
-        after, diff = _apply(before, event.change)
+        after, diff, unknown = _apply(before, event.change)
         content[touch.path] = after
         history = histories.setdefault(touch.path, GeneratedFile(touch.path, [], None))
         history.versions.append(
-            FileVersion(event.step, event.part, diff, after, partial=after is None, runs_after=[])
+            FileVersion(event.step, event.part, diff, after, unknown, runs_after=[])
         )
     for path in submitted:
         histories.setdefault(path, GeneratedFile(path, [], None))
@@ -288,19 +288,28 @@ def generated_files(
     return sorted(histories.values(), key=lambda history: history.path)
 
 
-def _apply(before: str | None, change: WriteFile | EditFile | PatchFile) -> tuple[str | None, str]:
-    """The file after a change, or None when it cannot be rebuilt, and the change's diff."""
+def _apply(
+    before: str | None, change: WriteFile | EditFile | PatchFile
+) -> tuple[str | None, str, str | None]:
+    """The file after a change (None when it cannot be rebuilt), the change's diff, and
+    why the file is unknown, as `FileVersion.unknown` names it."""
     if isinstance(change, WriteFile):
-        return change.content, _diff(before or "", change.content)
+        return change.content, _diff(before or "", change.content), None
     if isinstance(change, EditFile):
         if change.old is None or change.new is None:
-            return None, "(edit not visible in the trace)"
-        if before is not None and change.old in before:
-            after = before.replace(change.old, change.new, 1)
-            return after, _diff(before, after)
-        return None, _diff(change.old, change.new)
-    after = _apply_codex_patch(before, change.patch) if before is not None else None
-    return after, _diff(before, after) if after is not None and before is not None else change.patch
+            return None, "", "shell"
+        if before is None:
+            return None, _diff(change.old, change.new), "no_base"
+        if change.old not in before:
+            return None, _diff(change.old, change.new), "mismatch"
+        after = before.replace(change.old, change.new, 1)
+        return after, _diff(before, after), None
+    if before is None:
+        return None, change.patch, "no_base"
+    after = _apply_codex_patch(before, change.patch)
+    if after is None:
+        return None, change.patch, "mismatch"
+    return after, _diff(before, after), None
 
 
 def _apply_codex_patch(before: str, patch: str) -> str | None:

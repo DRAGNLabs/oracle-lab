@@ -149,13 +149,24 @@ def test_generated_files_rebuild_versions_and_attach_runs_and_outcomes():
     assert history.matches_submission is True
 
 
-def test_an_edit_without_a_known_base_is_partial():
+def test_versions_say_why_their_content_is_unknown():
     path = "oracle_tests/test_a.py"
-    events = [edit(1, path, EditFile(path, "a", "b")), edit(2, path, EditFile(path, None, None))]
+    events = [
+        edit(1, path, EditFile(path, "a", "b")),
+        edit(2, path, EditFile(path, None, None)),
+        edit(3, path, WriteFile(path, "x = 1\n")),
+        edit(4, path, EditFile(path, "y", "z")),
+    ]
 
     [history] = generated_files(events, {}, None)
 
-    assert [version.partial for version in history.versions] == [True, True]
+    assert [version.unknown for version in history.versions] == [
+        "no_base",
+        "shell",
+        None,
+        "mismatch",
+    ]
+    assert history.matches_submission is None
     assert history.matches_submission is None
 
 

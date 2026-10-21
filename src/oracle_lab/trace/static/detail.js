@@ -1,6 +1,6 @@
 // The selected event in full: what the agent issued, what it saw, and what it touched.
 
-import { ACTION_LABELS, code, esc } from "./html.js";
+import { ACTION_LABELS, CATEGORY_LABELS, DESCRIPTIONS, code, counts, esc } from "./html.js";
 
 const OUTPUT_LINES = 400; // longer output is collapsed behind a toggle
 
@@ -18,7 +18,7 @@ export function showDetail(container, trace, selected) {
     event.exit_code !== null ? `exit ${event.exit_code}` : "",
   ].filter(Boolean).join(" · ");
   container.innerHTML = `
-    <h3><span class="dot" style="--dot: var(--a-${event.action})"></span>${ACTION_LABELS[event.action]}</h3>
+    <h3 data-tip="${esc(DESCRIPTIONS.action[event.action])}"><span class="dot" style="--dot: var(--a-${event.action})"></span>${ACTION_LABELS[event.action]}</h3>
     <p class="muted small">${esc(meta)}</p>
     <p>${esc(event.description)}</p>
     ${touches(event)}
@@ -42,7 +42,7 @@ function touches(event) {
   const rows = event.touches
     .map((touch) => {
       const lines = touch.lines ? `L${touch.lines[0]}–${touch.lines[1] >= 1e9 ? "end" : touch.lines[1]}` : "whole / unknown";
-      return `<tr class="overlap-${touch.overlap}"><td><code>${esc(touch.path)}</code></td><td>${esc(touch.category.replace("_", " "))}</td><td>${lines}</td><td>${touch.overlap === "lines" ? "patched lines" : touch.overlap === "file" ? "patched file" : ""}</td></tr>`;
+      return `<tr class="overlap-${touch.overlap}"><td><code>${esc(touch.path)}</code></td><td>${esc(CATEGORY_LABELS[touch.category] || touch.category)}</td><td>${lines}</td><td${touch.overlap !== "none" ? ` data-tip="${esc(DESCRIPTIONS.overlap[touch.overlap])}"` : ""}>${touch.overlap === "lines" ? "patched lines" : touch.overlap === "file" ? "patched file" : ""}</td></tr>`;
     })
     .join("");
   return `<table class="touches"><tr><th>File</th><th>Category</th><th>Lines</th><th>Patch</th></tr>${rows}</table>`;
@@ -50,11 +50,10 @@ function touches(event) {
 
 function facts(event) {
   const items = [];
-  if (event.patched_names.length) items.push(`Mentions patched names: ${event.patched_names.map((name) => `<code>${esc(name)}</code>`).join(" ")}`);
+  if (event.patched_names.length) items.push(`Mentions functions or classes the golden patch changes: ${event.patched_names.map((name) => `<code>${esc(name)}</code>`).join(" ")}`);
   if (event.git_history) items.push("Reads git history");
   if (event.pytest) {
-    const counts = Object.entries(event.pytest.counts).map(([word, count]) => `${count} ${word}`).join(", ") || "no tests ran";
-    items.push(`Pytest: ${esc(counts)}`);
+    items.push(`Pytest: ${esc(counts(event.pytest))}`);
     for (const id of event.pytest.failed) items.push(`FAILED <code>${esc(id)}</code>`);
   }
   return items.length ? `<ul class="facts">${items.map((item) => `<li>${item}</li>`).join("")}</ul>` : "";

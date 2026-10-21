@@ -97,11 +97,14 @@ class FileVersion:
     part: int  # the edit's sub-command, so a run chained after it in the same step follows it
     diff: str
     content: str | None  # None when only the edit is known
-    partial: bool
+    # Why `content` is None: "shell" (a shell command such as `sed -i` changed the file,
+    # and the trace does not record how), "no_base" (an earlier version is unknown), or
+    # "mismatch" (the edit's old text is not in the previous version). None when known.
+    unknown: str | None
     runs_after: list[tuple[int, PytestSummary]]  # (step, summary) before the next version
-    # Final outcome by test id, for tests this version introduced. Hidden on the page by default.
+    # Final outcome by test id, for tests this version introduced.
     outcomes: dict[str, str] = field(default_factory=dict)
-    # Edit facts, also hidden by default. A run between the previous version and this one
+    # Edit facts. A run between the previous version and this one
     # reported failures or errors; the FAILED ids among them that are in this file.
     follows_failed_run: bool = False
     follows_failures: list[str] = field(default_factory=list)
@@ -122,6 +125,7 @@ class DefectSummary:
     first_touch: int | None  # step of the first LINES overlap
     lines_shown: int  # changed buggy-side lines that appeared in output; a lower bound
     lines_total: int
+    hunks: dict[str, list[tuple[int, int]]]  # buggy-side hunk ranges by patched file
     names: list[str]
     target_read: bool | None  # None for runs without a localized target
 
@@ -137,8 +141,38 @@ class RunSummary:
 
 
 @dataclass
+class OutcomeRow:
+    """One generated test's final evaluation result."""
+
+    test_id: str
+    buggy: str
+    golden: str
+    cell: str | None  # None for incomplete outcomes
+    buggy_failure: str | None  # exception type and message
+    golden_failure: str | None
+
+
+@dataclass
+class TaskContext:
+    """What the run was about: the instance, the issue, the prompt, and the answers."""
+
+    instance_id: str
+    repo: str
+    dataset: str
+    base_commit: str
+    test_target: str | None  # the localized target as the prompt named it
+    issue: str | None
+    prompt: str | None
+    golden_patch: str
+    reference_test_ids: list[str]
+    reference_test_patch: str
+    results: list[OutcomeRow] | None  # None when the run was not evaluated
+
+
+@dataclass
 class RunTrace:
     run: RunSummary
+    task: TaskContext
     reasoning: str  # "raw" or "summary"
     events: list[Event]
     generated_files: list[GeneratedFile]

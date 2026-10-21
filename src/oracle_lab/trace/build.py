@@ -28,8 +28,10 @@ from oracle_lab.trace.events import (
     DefectSummary,
     Event,
     FileCategory,
+    OutcomeRow,
     RunSummary,
     RunTrace,
+    TaskContext,
     Touch,
 )
 from oracle_lab.trace.facts import (
@@ -62,6 +64,7 @@ class RunFacts:
     summary: RunSummary
     repository: Repository
     outcomes: dict[str, str] | None  # matrix cell by test id; None when not evaluated
+    task: TaskContext
 
 
 def read_run_facts(paths: RunPaths) -> RunFacts:
@@ -79,13 +82,65 @@ def read_run_facts(paths: RunPaths) -> RunFacts:
     )
     workdir = (config.get("runtime") or {}).get("workdir") or DEFAULT_WORKDIR
     repository = Repository(workdir, config["task"]["generated_dir"])
-    outcomes = None
+    outcomes = rows = scope = None
     if paths.results.exists():
+        results = read_json(paths.results)
+        scope = results.get("task_scope")
+        tests = results.get("tests", [])
         outcomes = {
             test["test_id"]: test.get("cell") or f"{test['buggy']} / {test['golden']}"
-            for test in read_json(paths.results).get("tests", [])
+            for test in tests
         }
-    return RunFacts(summary, repository, outcomes)
+        rows = [
+            OutcomeRow(
+                test["test_id"],
+                test["buggy"],
+                test["golden"],
+                test.get("cell"),
+                _failure(test.get("buggy_failure")),
+                _failure(test.get("golden_failure")),
+            )
+            for test in tests
+        ]
+    return RunFacts(summary, repository, outcomes, _task_context(paths, rows, scope))
+
+
+def _task_context(
+    paths: RunPaths, results: list[OutcomeRow] | None, scope: str | None
+) -> TaskContext:
+    instance = read_json(paths.instance)
+    # Current runs save the target the prompt named; older ones only the instance's field.
+    if paths.target.exists():
+        target = read_localized_target(paths.target).text
+    else:
+        target = instance.get("test_target") if scope == "localized" else None
+    source = instance.get("source")
+    issue_path = paths.ground_truth / "issue.md"
+    if issue_path.exists():
+        issue = issue_path.read_text()
+    else:
+        record = instance.get("original_record") or {}
+        issue = record.get("problem_statement") if isinstance(record, dict) else None
+    return TaskContext(
+        instance_id=instance["instance_id"],
+        repo=instance.get("repo", ""),
+        dataset=source.get("name", "") if isinstance(source, dict) else str(source or ""),
+        base_commit=instance.get("base_commit", ""),
+        test_target=target,
+        issue=issue,
+        prompt=paths.prompt.read_text() if paths.prompt.exists() else None,
+        golden_patch=instance.get("golden_patch", ""),
+        reference_test_ids=list(instance.get("reference_test_ids") or []),
+        reference_test_patch=instance.get("reference_test_patch", ""),
+        results=results,
+    )
+
+
+def _failure(failure: dict | None) -> str | None:
+    if not failure:
+        return None
+    kind = (failure.get("exception_type") or "").removeprefix("builtins.")
+    return ": ".join(part for part in (kind, failure.get("message")) if part) or None
 
 
 def build_run_trace(paths: RunPaths) -> RunTrace:
@@ -106,6 +161,7 @@ def build_run_trace(paths: RunPaths) -> RunTrace:
     }
     return RunTrace(
         run=facts.summary,
+        task=facts.task,
         reasoning=reasoning_kind(facts.summary.harness),
         events=events,
         generated_files=generated_files(events, submitted, facts.outcomes),
@@ -291,6 +347,7 @@ def _defect_summary(
         first_touch=first_touch,
         lines_shown=len(shown),
         lines_total=regions.lines_total,
+        hunks={path: patched.hunks for path, patched in regions.files.items()},
         names=regions.names,
         target_read=_target_read(events, target) if target else None,
     )
@@ -335,7 +392,7 @@ def _size(action: WriteFile | EditFile | PatchFile) -> str:
         return f"({len(action.content.splitlines())} lines)"
     if isinstance(action, EditFile):
         if action.old is None or action.new is None:
-            return "(change not visible)"
+            return "(shell edit; result not recorded)"
         return f"(+{len(action.new.splitlines())}/−{len(action.old.splitlines())})"
     lines = action.patch.splitlines()
     added = sum(1 for line in lines if line.startswith("+"))

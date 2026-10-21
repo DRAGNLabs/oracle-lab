@@ -1,9 +1,11 @@
 // The trace viewer: one run's agent trace as a timeline of typed, annotated events.
-// This entry point owns the run picker, the toggles, the panel tabs, and the page
-// state. Plain JavaScript modules, no build step.
+// This entry point owns the run picker, the lane toggle, the panel tabs, the hover
+// descriptions, and the page state. Plain JavaScript modules, no build step.
 
 import { showDetail } from "./detail.js";
 import { esc } from "./html.js";
+import { showLegend } from "./legend.js";
+import { showSummary } from "./summary.js";
 import { showTests } from "./tests.js";
 import { showTimeline } from "./timeline.js";
 
@@ -11,10 +13,8 @@ export const state = {
   runs: [], // GET /api/runs: every run's summary
   trace: null, // GET /api/run: the open run's RunTrace
   lanesByFile: false, // default: one lane per action type
-  showOutcomes: false, // final evaluation results stay hidden until asked for
-  showEditFacts: false, // mechanical facts about test edits, also hidden until asked for
   selected: null, // index into trace.events
-  panel: "event", // "event" or "tests"
+  panel: "summary", // run tabs: "summary", "tests", "legend"; step tab: "event"
 };
 
 export async function api(path, params = {}) {
@@ -27,20 +27,10 @@ export async function api(path, params = {}) {
 
 const picker = document.getElementById("run-picker");
 const lanesToggle = document.getElementById("lanes-by-file");
-const outcomesToggle = document.getElementById("show-outcomes");
-const editFactsToggle = document.getElementById("show-edit-facts");
 
 picker.addEventListener("change", () => (location.hash = `run=${picker.value}`));
 lanesToggle.addEventListener("change", () => {
   state.lanesByFile = lanesToggle.checked;
-  render();
-});
-outcomesToggle.addEventListener("change", () => {
-  state.showOutcomes = outcomesToggle.checked;
-  render();
-});
-editFactsToggle.addEventListener("change", () => {
-  state.showEditFacts = editFactsToggle.checked;
   render();
 });
 for (const tab of document.querySelectorAll("[data-panel]")) {
@@ -50,6 +40,7 @@ for (const tab of document.querySelectorAll("[data-panel]")) {
   });
 }
 document.addEventListener("keydown", onKey);
+document.addEventListener("mouseover", showTip);
 window.addEventListener("hashchange", route);
 start();
 
@@ -105,8 +96,7 @@ async function route() {
     return;
   }
   state.selected = null;
-  outcomesToggle.disabled = !state.trace.outcomes_available;
-  if (outcomesToggle.disabled) outcomesToggle.checked = state.showOutcomes = false;
+  if (state.panel === "event") state.panel = "summary";
   render();
 }
 
@@ -129,50 +119,40 @@ export function selectStep(step) {
 export function render() {
   const trace = state.trace;
   if (!trace) return;
-  document.getElementById("run-header").innerHTML = runHeader(trace);
   showTimeline(document.getElementById("timeline"), trace, {
     lanesByFile: state.lanesByFile,
-    showEditFacts: state.showEditFacts,
     selected: state.selected,
     onSelect: select,
   });
   for (const tab of document.querySelectorAll("[data-panel]")) {
     tab.classList.toggle("active", tab.dataset.panel === state.panel);
+    if (tab.dataset.panel === "event") {
+      tab.textContent = state.selected === null ? "Event" : `Event · step ${trace.events[state.selected].step}`;
+    }
   }
   const panel = document.getElementById("panel-body");
-  if (state.panel === "tests") {
-    showTests(panel, trace, {
-      showOutcomes: state.showOutcomes,
-      showEditFacts: state.showEditFacts,
-      onSelectStep: selectStep,
-    });
-  } else {
-    showDetail(panel, trace, state.selected);
-  }
+  panel.scrollTop = 0;
+  if (state.panel === "summary") showSummary(panel, trace, { onSelectStep: selectStep });
+  else if (state.panel === "tests") showTests(panel, trace, { onSelectStep: selectStep });
+  else if (state.panel === "legend") showLegend(panel);
+  else showDetail(panel, trace, state.selected);
 }
 
-function runHeader(trace) {
-  const defect = trace.defect;
-  const first = defect.first_touch === null ? "never" : `step ${defect.first_touch}`;
-  const target =
-    defect.target_read === null ? "" : `<span>Target definition shown: <b>${defect.target_read ? "yes" : "no"}</b></span>`;
-  const names = defect.names.length
-    ? `<span>Patched names: ${defect.names.map((name) => `<code>${esc(name)}</code>`).join(" ")}</span>`
-    : "";
-  return `
-    <div class="run-title">
-      <b>${esc(trace.run.instance)}</b>
-      <span class="muted">${esc(trace.run.harness)} · ${esc(trace.run.model)}</span>
-      <span class="badge" title="Whether the harness records the model's own reasoning or a summary of it">${
-        trace.reasoning === "raw" ? "raw reasoning" : "summarized reasoning"
-      }</span>
-    </div>
-    <div class="run-facts">
-      <span>First touch of patched lines: <b>${first}</b></span>
-      <span title="Changed buggy-side lines whose text appeared in output the agent saw. Truncated output does not count, so this is a lower bound.">Patched lines shown: <b>${defect.lines_shown}/${defect.lines_total}</b></span>
-      ${target}
-      ${names}
-    </div>`;
+// One floating description for whatever element under the cursor has `data-tip`.
+const tooltip = document.getElementById("tooltip");
+function showTip(event) {
+  const target = event.target.closest?.("[data-tip]");
+  if (!target) {
+    tooltip.hidden = true;
+    return;
+  }
+  tooltip.textContent = target.dataset.tip;
+  tooltip.hidden = false;
+  const box = target.getBoundingClientRect();
+  const left = Math.min(box.left, window.innerWidth - tooltip.offsetWidth - 8);
+  const below = box.bottom + 6 + tooltip.offsetHeight < window.innerHeight;
+  tooltip.style.left = `${Math.max(left, 8)}px`;
+  tooltip.style.top = `${below ? box.bottom + 6 : box.top - tooltip.offsetHeight - 6}px`;
 }
 
 function onKey(event) {

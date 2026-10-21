@@ -20,7 +20,7 @@ from oracle_lab.paths import RunPaths
 from oracle_lab.trace.build import build_run_trace, read_run_facts
 
 STATIC = Path(__file__).resolve().parent / "static"
-# The review page's pinned highlight.js, served under /vendor/.
+# The review page's pinned highlight.js and marked, served under /vendor/.
 VENDOR = Path(__file__).resolve().parent.parent / "web" / "static" / "vendor"
 
 

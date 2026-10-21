@@ -30,6 +30,21 @@ def make_run(root):
         "runtime: {image: example}\n"
     )
     (paths.ground_truth / "fix.patch").write_text(PATCH)
+    (paths.ground_truth / "issue.md").write_text("# org__pkg-1\n\nparse lowercases\n")
+    paths.prompt.write_text("Write tests.\n")
+    paths.instance.write_text(
+        json.dumps(
+            {
+                "instance_id": "org__pkg-1",
+                "repo": "org/pkg",
+                "source": {"kind": "swebench", "name": "example/dataset"},
+                "base_commit": "a" * 40,
+                "golden_patch": PATCH,
+                "reference_test_ids": ["tests/test_mod.py::test_parse"],
+                "reference_test_patch": "",
+            }
+        )
+    )
     files = paths.submission / "files" / "oracle_tests"
     files.mkdir(parents=True)
     (files / "test_mod.py").write_text(TEST)
@@ -72,6 +87,10 @@ def make_run(root):
                         "buggy": "pass",
                         "golden": "fail",
                         "cell": "pass_on_buggy_fail_on_golden",
+                        "golden_failure": {
+                            "exception_type": "builtins.AssertionError",
+                            "message": "assert 'A' == 'a'",
+                        },
                     }
                 ]
             }
@@ -104,6 +123,14 @@ def test_build_run_trace_annotates_a_codex_run(tmp_path):
         "oracle_tests/test_mod.py::test_parse": "pass_on_buggy_fail_on_golden"
     }
     assert trace.reasoning == "summary" and trace.outcomes_available
+    assert (trace.task.dataset, trace.task.issue, trace.task.prompt) == (
+        "example/dataset",
+        "# org__pkg-1\n\nparse lowercases\n",
+        "Write tests.\n",
+    )
+    [row] = trace.task.results
+    assert (row.cell, row.buggy_failure) == ("pass_on_buggy_fail_on_golden", None)
+    assert row.golden_failure == "AssertionError: assert 'A' == 'a'"
     data = json.loads(json.dumps(trace.to_json()))
     assert "change" not in data["events"][4]
 

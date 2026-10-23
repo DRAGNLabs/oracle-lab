@@ -5,8 +5,8 @@
 
 import { openFinder } from "./finder.js";
 import { showListing } from "./listing.js";
-import { RATINGS, RATING_NAMES, rate, select } from "./rail.js";
-import { esc } from "./render.js";
+import { RATINGS, rate, select } from "./rail.js";
+import { esc, markdown } from "./render.js";
 import { openTarget } from "./review.js";
 import { api, state } from "./state.js";
 import { onTraceKey } from "./trace.js";
@@ -78,11 +78,9 @@ function showTip(event) {
   tooltip.style.top = `${below ? box.bottom + 6 : box.top - tooltip.offsetHeight - 6}px`;
 }
 
+// The reviewer's instructions, from `web/templates/how-to-review.md`.
 function showHelp() {
-  const definitions = state.listing?.rating_definitions;
-  document.getElementById("help-ratings").innerHTML = definitions
-    ? RATINGS.map((key) => `<dt class="${key}">${RATING_NAMES[key]}</dt><dd>${esc(definitions[key])}</dd>`).join("")
-    : "";
+  document.getElementById("help-body").innerHTML = markdown(state.listing?.how_to_review || "");
   const dialog = document.getElementById("help");
   if (!dialog.open) dialog.showModal();
 }

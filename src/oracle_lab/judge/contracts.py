@@ -128,7 +128,12 @@ class JudgmentLabels(StrictModel):
 
     @model_validator(mode="after")
     def failure_modes_cover_the_start_list(self) -> JudgmentLabels:
-        raise NotImplementedError
+        if set(self.failure_modes) != set(FAILURE_MODES):
+            raise ValueError(
+                f"failure_modes must decide exactly the start-list labels {sorted(FAILURE_MODES)}, "
+                f"not {sorted(self.failure_modes)}"
+            )
+        return self
 
     @model_validator(mode="after")
     def conditional_fields_match_answer(self) -> JudgmentLabels:

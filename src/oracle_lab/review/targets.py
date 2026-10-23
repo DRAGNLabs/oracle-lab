@@ -23,7 +23,12 @@ from oracle_lab.classification.contracts import (
 from oracle_lab.classification.workspace import CLASSIFICATION_ROOT, classification_evidence
 from oracle_lab.config import RunConfig, load_config, repo_path
 from oracle_lab.io import read_json
-from oracle_lab.judge.contracts import JUDGMENT_LABELS, CompletedJudgment, validate_judgment
+from oracle_lab.judge.contracts import (
+    FAILURE_MODES,
+    JUDGMENT_LABELS,
+    CompletedJudgment,
+    validate_judgment,
+)
 from oracle_lab.judge.workspace import JUDGE_ROOT, judge_evidence
 from oracle_lab.paths import RunPaths
 from oracle_lab.results import (
@@ -103,11 +108,22 @@ class ReviewTarget(ABC):
         """Every item a rater rates, in rail order: the questions the LLM answered (a
         `null` answer is not reviewed), then for a judgment each start-list failure
         mode as `failure_modes.<key>` and each added one as `added_failure_modes.<index>`."""
-        raise NotImplementedError
+        keys = [key for key in self.labels if getattr(self.answers, key, None) is not None]
+        if isinstance(self.answers, CompletedJudgment):
+            keys += [f"failure_modes.{key}" for key in FAILURE_MODES]
+            keys += [
+                f"added_failure_modes.{n}" for n in range(len(self.answers.added_failure_modes))
+            ]
+        return keys
 
     def rating_label(self, key: str) -> str:
         """What the rail and the agreement report call one rating item."""
-        raise NotImplementedError
+        section, _, name = key.partition(".")
+        if section == "failure_modes":
+            return FAILURE_MODES[name]
+        if section == "added_failure_modes" and isinstance(self.answers, CompletedJudgment):
+            return self.answers.added_failure_modes[int(name)].name
+        return self.labels[key]
 
     def evidence(self) -> dict[str, bytes]:
         """The files the judge read besides the repository views, by path in its workspace.

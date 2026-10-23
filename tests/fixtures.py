@@ -16,7 +16,8 @@ import oracle_lab.container
 from oracle_lab.classification.contracts import CLASSIFICATION_LABELS
 from oracle_lab.config import RunConfig, RuntimeConfig, load_config
 from oracle_lab.io import digest, write_json
-from oracle_lab.judge.contracts import JUDGMENT_LABEL_KEYS
+from oracle_lab.judge.contracts import FAILURE_MODES, JUDGMENT_LABEL_KEYS
+from oracle_lab.judge.workspace import save_trace
 from oracle_lab.paths import RunPaths
 from oracle_lab.results import MATRIX_CELLS, InstanceRecord, SubmissionManifest, write_result
 
@@ -125,6 +126,8 @@ def judgment_labels(**changes) -> dict:
         "tests_issue": "yes",
         "attempt_detail": "correct_assertion",
         "cheating": "no",
+        "failure_modes": failure_modes(),
+        "added_failure_modes": [],
     }
     labels.update(changes)
     labels.setdefault(
@@ -136,6 +139,41 @@ def judgment_labels(**changes) -> dict:
         },
     )
     return labels
+
+
+def failure_modes(**present: list[int]) -> dict:
+    """Every start-list decision: absent, except the keys given with their steps."""
+    return {
+        key: {
+            "decision": "present",
+            "steps": present[key],
+            "justification": f"The trace shows {key} at these steps.",
+        }
+        if key in present
+        else {"decision": "absent"}
+        for key in FAILURE_MODES
+    }
+
+
+def added_failure_mode(**changes) -> dict:
+    """A failure mode the judge named itself."""
+    mode = {
+        "name": "Tested only defaults",
+        "definition": "Every test calls the function with its default arguments only.",
+        "steps": [4],
+        "justification": "Step 4 writes tests that never pass an argument.",
+    }
+    mode.update(changes)
+    return mode
+
+
+def judgment_ratings(**changes: str) -> dict[str, str]:
+    """A rater's agreement with every item of the default judgment: its three answers
+    and each start-list decision. Keyword names use `__` for the `.` in item keys."""
+    ratings = {key: "agree" for key in ("tests_issue", "attempt_detail", "cheating")}
+    ratings |= {f"failure_modes.{key}": "agree" for key in FAILURE_MODES}
+    ratings |= {key.replace("__", "."): rating for key, rating in changes.items()}
+    return ratings
 
 
 def completed_judgment(**changes) -> dict:
@@ -287,6 +325,7 @@ def judged_run(
     (paths.ground_truth / "issue.md").write_text("# Issue\n\nIncorrect result.\n")
     (paths.ground_truth / "fix.patch").write_text(instance.golden_patch)
     (paths.generation / "session.log").write_text("agent session\n")
+    (paths.generation / "trace.jsonl").write_text("")
     (paths.generation / "workspace.diff").write_text("generated diff\n")
     write_submission(paths, files)
     write_json(paths.results, detecting_result())
@@ -308,6 +347,7 @@ def judged_run(
     )
     write_json(paths.judge.result, judge_attempt())
     write_json(paths.judge.judgment, completed_judgment() if judgment is None else judgment)
+    save_trace(paths)
     return paths
 
 
@@ -370,6 +410,7 @@ def traced_run(root: Path) -> RunPaths:
             for index, item in enumerate(items)
         )
     )
+    save_trace(paths)
     return paths
 
 

@@ -63,6 +63,7 @@ runs/<run-id>/
 │   ├── image.json
 │   ├── workspace-spec.json
 │   ├── bundle-manifest.json
+│   ├── trace.json (when the agent's trace could be built)
 │   ├── prompt.md
 │   ├── judgment.raw.txt
 │   ├── judgment.json
@@ -189,7 +190,10 @@ The judge's disposable container receives:
 - the `/oracle-judge/buggy` and `/oracle-judge/golden` repository views, each
   with the generated submission;
 - the issue and the patches;
-- the saved evaluation evidence.
+- the saved evaluation evidence;
+- the agent's trace: `evidence/agent-trace.md` (summarized) and
+  `evidence/agent-trace.json` (`judge/trace.json`), or the raw
+  `evidence/agent-trace.jsonl` when the trace could not be built.
 
 Oracle Lab verifies the submission bundle before the transfer. It checks every
 generated file again inside both views. The repository views are not copied back
@@ -332,11 +336,19 @@ run is not. A cost failure never changes the run's state.
 ### `judge/judgment.json`
 
 The normalized judgment. A completed one has `status`, `tests_issue`,
-`attempt_detail`, `no_attempt_reason`, `cheating`, and `justifications`. A
-conditional field that does not apply is saved as JSON `null`, even when the
-response used the string `"null"`. `justifications` maps each answered question
-to its justification; a question answered `null` has none. The raw response is
-kept as well. The other states:
+`attempt_detail`, `no_attempt_reason`, `cheating`, `justifications`,
+`failure_modes`, and `added_failure_modes`. A conditional field that does not
+apply is saved as JSON `null`, even when the response used the string `"null"`.
+`justifications` maps each answered submission question to its justification; a
+question answered `null` has none.
+
+`failure_modes` decides every start-list label (the keys in
+`judge/contracts.FAILURE_MODES`): `{"decision": "absent"}`, or
+`{"decision": "present", "steps": [...], "justification": "..."}` with at least one
+trace step. `added_failure_modes` lists the judge's own labels, each with `name`,
+`definition`, `steps`, and `justification`. Steps are the step numbers of
+`judge/trace.json`, or, when it is absent, line numbers of
+`generation/trace.jsonl`. The raw response is kept as well. The other states:
 
 | Status | Meaning |
 |---|---|
@@ -345,6 +357,14 @@ kept as well. The other states:
 | `timed_out` | The judge exceeded its wall-time limit |
 | `skipped` | No tests were collected, so no judge turn ran; `reason` says why |
 | `stale` | Reevaluation replaced the execution evidence; the prior annotation is nested for audit |
+
+### `judge/trace.json`
+
+The agent's trace as typed, annotated events (`RunTrace.to_json()`), built from
+`generation/trace.jsonl` when the judge's workspace is. The judge reads it and a
+summary rendered from it, and the review page's Agent trace and Test files tabs
+show it, so both see the same step numbers. Absent when the trace could not be
+built.
 
 ### Judge model evidence
 
@@ -358,8 +378,12 @@ limit. The other files in `agent/` match their namesakes under `generation/`.
 One directory per human rater, written by `oracle-lab review`. See
 [human review](judging.md#human-review).
 
-- `review.json`: `{"ratings": {question: rating}}`, one of `correct`,
-  `defensible`, or `incorrect` for exactly the questions the judge answered.
+- `review.json`: `{"ratings": {item: rating}, "other_failure_modes": [...]}`.
+  Each rating is `agree` or `disagree`, for exactly the items the judge answered:
+  the submission questions, `failure_modes.<key>` for every start-list label, and
+  `added_failure_modes.<index>` for each label the judge added.
+  `other_failure_modes` holds the rater's own labels, each with `name`,
+  `description`, and `steps`; it is empty for a classification.
 - `provenance.json`: what the review was based on. `stage`, `rater`, the
   reviewed output's path (`judge/judgment.json`) and SHA-256, the judge's
   harness and model from `agent/result.json`, and the SHA-256 of the stage
@@ -689,9 +713,12 @@ the nearest stage log.
 - `agreement.json`: `created_at`, the `inputs` it read, every `raters` ID, and
   per stage (`judge`, `classification`) the number of targets and reviews and,
   for each question with at least one rating, its `label`, `targets`,
-  `ratings` counts, `correct_share`, `acceptable_share` (`correct` or
-  `defensible`), `rater_pairs`, `pairwise_agreement`, and `alpha`. A share or
-  alpha that cannot be computed is `null`. `missing` maps each target that some
+  `ratings` counts, `agree_share`, `rater_pairs`, `pairwise_agreement`, and
+  `alpha`. Questions include `failure_modes.<key>` for each start-list label and
+  one pooled `added_failure_modes`. A share or alpha that cannot be computed is
+  `null`. `added_labels` lists every judge-added failure mode with its `target`,
+  `name`, and `ratings`; `rater_labels` counts the raters' own labels by name.
+  `missing` maps each target that some
   rater did not review to those raters; `unreviewable` maps each target that
   could not be reviewed to the reason.
 - `agreement.md`: the same results as tables, with a note on reading alpha.

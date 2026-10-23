@@ -36,6 +36,7 @@ oracle_lab = [
     "judge/templates/*.md",
     "judge/templates/*.json",
     "web/static/*",
+    "web/templates/*.md",
     "web/static/vendor/*",
 ]
 

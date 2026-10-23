@@ -67,17 +67,17 @@ class ReviewProvenance(StrictModel):
     workspace_spec_sha256: Sha256
 
 
-def parse_review(raw: str, questions: Collection[str]) -> Review:
-    """Validate submitted ratings against the questions the LLM judge answered."""
+def parse_review(raw: str, items: Collection[str]) -> Review:
+    """Validate submitted ratings against the items the LLM judge answered."""
     try:
         value = json.loads(raw)
     except json.JSONDecodeError as error:
         raise ValueError(f"Invalid review JSON: {error}") from error
 
     review = Review.model_validate(value)
-    if set(review.ratings) != set(questions):
+    if set(review.ratings) != set(items):
         raise ValueError(
-            f"ratings must cover exactly the answered questions {sorted(questions)}, "
+            f"ratings must cover exactly the items the judge answered {sorted(items)}, "
             f"not {sorted(review.ratings)}"
         )
     return review

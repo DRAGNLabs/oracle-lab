@@ -5,6 +5,7 @@ export const state = {
   problem: null, // GET /api/problem: the open target's problem, shown by the Problem tab
   target: null, // GET /api/target: the target under review, or null off a rating page
   ratings: {}, // this rater's ratings of the open target, saved or not
+  otherLabels: [], // this rater's own failure-mode labels for the open target
   selected: 0, // the question the keyboard rates
   tab: "overview", // the middle tab
   sideTab: "problem", // the sidebar tab

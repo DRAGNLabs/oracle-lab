@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
+from string import Template
 
+from oracle_lab.io import read_json
 from oracle_lab.results import InstanceRecord
 from oracle_lab.review.contracts import RATING_DEFINITIONS, require_rater
 from oracle_lab.review.sources import SourceView, open_views
@@ -21,7 +23,8 @@ from oracle_lab.review.targets import (
     find_problems,
     find_targets,
 )
-from oracle_lab.trace.build import build_run_trace
+
+HOW_TO_REVIEW = Path(__file__).resolve().parent / "templates/how-to-review.md"
 
 # The task record's readable texts beside the issue, by dataset field, in page order.
 RECORD_TEXTS = {
@@ -67,6 +70,7 @@ class ReviewSession:
         return {
             "rater": self.rater,
             "rating_definitions": RATING_DEFINITIONS,
+            "how_to_review": how_to_review(),
             "problems": [
                 {
                     "instance_id": problem.instance_id,
@@ -122,7 +126,7 @@ class ReviewSession:
             # "failure_modes", or "added_failure_modes"), the judge's answer or
             # decision, its steps for a failure mode, and its justification.
             "questions": _rating_items(target, answers),
-            "review": review.ratings if review else None,
+            "review": review.model_dump() if review else None,
             "stage_rubric": target.stage_rubric.read_text(),
             "evidence": sorted(self._evidence_of(target_id)),
         }
@@ -155,13 +159,17 @@ class ReviewSession:
             raise LookupError(f"{target_id} has no agent trace")
         with self._lock:
             if target_id not in self._traces:
-                # TODO: read target.paths.judge.trace; LookupError when it is absent.
-                self._traces[target_id] = build_run_trace(target.paths).to_json()
+                if not target.paths.judge.trace.is_file():
+                    raise LookupError(
+                        "This run's trace could not be built when it was judged; "
+                        "the judge read the raw trace (agent-trace.jsonl in Evidence)."
+                    )
+                self._traces[target_id] = read_json(target.paths.judge.trace)
             return self._traces[target_id]
 
     def submit(self, target_id: str, raw: str) -> dict:
         review = save_review(self._target(target_id), self.rater, raw)
-        return {"review": review.ratings}
+        return {"review": review.model_dump()}
 
     def _task(self, target_id: str) -> dict:
         """One target as the home page lists it, with this rater's progress."""
@@ -221,8 +229,37 @@ def _judgment_details(target: JudgmentTarget) -> dict:
     }
 
 
+def how_to_review() -> str:
+    """The reviewer's instructions as Markdown, with each rating's definition filled in."""
+    ratings = "\n".join(
+        f"- **{rating.capitalize()}:** {definition}"
+        for rating, definition in RATING_DEFINITIONS.items()
+    )
+    return Template(HOW_TO_REVIEW.read_text()).substitute(ratings=ratings)
+
+
 def _rating_items(target: ReviewTarget, answers: dict) -> list[dict]:
-    raise NotImplementedError
+    """Every rating item in rail order, as the rail shows it."""
+    items = []
+    for key in target.rating_keys():
+        section, _, name = key.partition(".")
+        item = {"key": key, "label": target.rating_label(key)}
+        if section == "failure_modes":
+            decision = answers["failure_modes"][name]
+            item |= {"section": section, "answer": decision["decision"]}
+            item |= {field: decision.get(field) for field in ("steps", "justification")}
+        elif section == "added_failure_modes":
+            added = answers["added_failure_modes"][int(name)]
+            item |= {"section": section, "answer": "present", "definition": added["definition"]}
+            item |= {field: added[field] for field in ("steps", "justification")}
+        else:
+            item |= {
+                "section": "submission",
+                "answer": answers[key],
+                "justification": answers["justifications"][key],
+            }
+        items.append(item)
+    return items
 
 
 def _run_label(target: JudgmentTarget) -> dict:

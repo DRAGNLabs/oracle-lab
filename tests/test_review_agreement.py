@@ -1,13 +1,19 @@
 """Agreement between human raters, and how often they found the LLM judges right."""
 
 import pytest
-from fixtures import classified_attempt, judged_run
+from fixtures import (
+    added_failure_mode,
+    classified_attempt,
+    completed_judgment,
+    judged_run,
+    judgment_ratings,
+)
 
 from oracle_lab.io import read_json, write_json
 from oracle_lab.review.agreement import agreement, compute_agreement, krippendorff_alpha
 from oracle_lab.review.contracts import AgreementReport
 
-RATINGS = ("correct", "defensible", "incorrect")
+RATINGS = ("agree", "disagree")
 
 
 def test_alpha_matches_krippendorffs_worked_example():
@@ -22,40 +28,51 @@ def test_alpha_matches_krippendorffs_worked_example():
 
 
 def test_perfect_agreement_gives_one():
-    units = [["correct", "correct"], ["incorrect", "incorrect"], ["defensible", "defensible"]]
+    units = [["agree", "agree"], ["disagree", "disagree"], ["agree", "agree"]]
 
     assert krippendorff_alpha(units, RATINGS) == 1
 
 
 def test_alpha_is_undefined_without_variation_or_pairs():
-    assert krippendorff_alpha([["correct", "correct"], ["correct", "correct"]], RATINGS) is None
-    assert krippendorff_alpha([["correct"], ["incorrect"]], RATINGS) is None
+    assert krippendorff_alpha([["agree", "agree"], ["agree", "agree"]], RATINGS) is None
+    assert krippendorff_alpha([["agree"], ["disagree"]], RATINGS) is None
 
 
-def test_ordinal_disagreement_by_two_steps_costs_more_than_by_one():
-    near = [["correct", "defensible"], ["incorrect", "incorrect"], ["correct", "correct"]]
-    far = [["correct", "incorrect"], ["incorrect", "incorrect"], ["correct", "correct"]]
-
-    assert krippendorff_alpha(near, RATINGS) > krippendorff_alpha(far, RATINGS)
-
-
-def review(root, rater, **ratings):
-    write_json(root / rater / "review.json", {"ratings": ratings})
+def review(root, rater, ratings, other=()):
+    write_json(
+        root / rater / "review.json",
+        {
+            "ratings": ratings,
+            "other_failure_modes": [
+                {"name": name, "description": "Seen.", "steps": [1]} for name in other
+            ],
+        },
+    )
 
 
 @pytest.fixture
 def data(tmp_path):
-    """Two judged runs and a classification, reviewed by two raters, one of whom skipped one."""
-    run_a = judged_run(tmp_path / "runs/run-a").judge.reviews
+    """Two judged runs and a classification, reviewed by two raters, one of whom skipped one.
+
+    Run A's judge added a failure mode of its own.
+    """
+    added = completed_judgment(added_failure_modes=[added_failure_mode()])
+    run_a = judged_run(tmp_path / "runs/run-a", added).judge.reviews
     run_b = judged_run(tmp_path / "runs/run-b").judge.reviews
     judged_run(tmp_path / "runs/run-c", {"status": "failed", "error": "Crashed."})
     attempt = classified_attempt(tmp_path / "classifications/owner__project-1/attempt-1")
-    judge = {"attempt_detail": "correct", "cheating": "correct"}
-    review(run_a, "alice", tests_issue="correct", **judge)
-    review(run_a, "bob", tests_issue="incorrect", **judge)
-    review(run_b, "alice", tests_issue="correct", **judge)
-    review(run_b, "bob", tests_issue="correct", **judge)
-    review(attempt / "reviews", "alice", task_nature="defensible")
+    review(
+        run_a, "alice", judgment_ratings(added_failure_modes__0="agree"), other=["Gave up early"]
+    )
+    review(
+        run_a,
+        "bob",
+        judgment_ratings(tests_issue="disagree", added_failure_modes__0="disagree"),
+        other=["Gave up early"],
+    )
+    review(run_b, "alice", judgment_ratings(failure_modes__never_saw_bug="disagree"))
+    review(run_b, "bob", judgment_ratings())
+    review(attempt / "reviews", "alice", {"task_nature": "disagree"})
     return tmp_path
 
 
@@ -67,9 +84,8 @@ def test_each_question_reports_judge_quality_and_rater_agreement(data):
     assert (judge.targets, judge.reviews) == (2, 4)
     tests_issue = judge.questions["tests_issue"]
     assert tests_issue.label == "Do the generated tests attempt to test the issue?"
-    assert tests_issue.ratings == {"correct": 3, "defensible": 0, "incorrect": 1}
-    assert tests_issue.correct_share == 0.75
-    assert tests_issue.acceptable_share == 0.75
+    assert tests_issue.ratings == {"agree": 3, "disagree": 1}
+    assert tests_issue.agree_share == 0.75
     assert (tests_issue.rater_pairs, tests_issue.pairwise_agreement) == (2, 0.5)
     assert tests_issue.alpha is not None
     # Everyone agreed and nobody varied: raw agreement is perfect, alpha undefined.
@@ -78,11 +94,27 @@ def test_each_question_reports_judge_quality_and_rater_agreement(data):
     assert "no_attempt_reason" not in judge.questions
 
 
+def test_each_start_label_is_a_question_and_added_labels_are_pooled(data):
+    report = compute_agreement([data])
+
+    questions = report.stages["judge"].questions
+    never = questions["failure_modes.never_saw_bug"]
+    assert (never.label, never.ratings) == ("Never saw the bug", {"agree": 3, "disagree": 1})
+    pooled = questions["added_failure_modes"]
+    assert (pooled.label, pooled.targets, pooled.ratings) == (
+        "Failure modes the judge added",
+        1,
+        {"agree": 1, "disagree": 1},
+    )
+    [added] = report.added_labels
+    assert (added.name, added.ratings) == ("Tested only defaults", {"agree": 1, "disagree": 1})
+    assert report.rater_labels == {"Gave up early": 2}
+
+
 def test_one_rater_gives_judge_quality_but_no_agreement(data):
     task_nature = compute_agreement([data]).stages["classification"].questions["task_nature"]
 
-    assert task_nature.correct_share == 0
-    assert task_nature.acceptable_share == 1
+    assert task_nature.agree_share == 0
     assert (task_nature.rater_pairs, task_nature.pairwise_agreement, task_nature.alpha) == (
         0,
         None,
@@ -104,8 +136,10 @@ def test_agreement_is_saved_as_json_and_markdown(data, tmp_path):
     report = AgreementReport.model_validate(read_json(directory / "agreement.json"))
     assert report.stages["judge"].questions["tests_issue"].rater_pairs == 2
     text = (directory / "agreement.md").read_text()
-    assert "## Test judgments" in text
-    assert "| Do the generated tests attempt to test the issue? | 2 | 3 | 0 | 1 | 75% |" in text
+    assert "## Generation judgments" in text
+    assert "| Do the generated tests attempt to test the issue? | 2 | 3 | 1 | 75% |" in text
+    assert "| Tested only defaults | 1 | 1 |" in text
+    assert "| Gave up early | 2 |" in text
     assert "## Missing reviews" in text and "| bob |" in text
 
 

@@ -7,6 +7,7 @@ from fixtures import (
     REVIEWED_RUN,
     classified_attempt,
     instance_record,
+    judgment_ratings,
     out_of_scope_classification,
     review_set,
     upstream_repository,
@@ -16,7 +17,7 @@ from oracle_lab.io import write_json
 from oracle_lab.web.session import ReviewSession
 
 ATTEMPT = "classifications/owner__project-1/attempt-1"
-RATINGS = {"tests_issue": "correct", "attempt_detail": "defensible", "cheating": "correct"}
+RATINGS = judgment_ratings(attempt_detail="disagree")
 
 
 @pytest.fixture
@@ -43,7 +44,9 @@ def session(open_session):
 def test_the_listing_groups_tasks_by_problem_with_classification_first(session):
     listing = session.listing()
 
-    assert set(listing["rating_definitions"]) == {"correct", "defensible", "incorrect"}
+    assert set(listing["rating_definitions"]) == {"agree", "disagree"}
+    assert "- **Disagree:** You would give a different answer" in listing["how_to_review"]
+    assert "${" not in listing["how_to_review"]
     [problem] = listing["problems"]
     assert (problem["instance_id"], problem["title"]) == ("owner__project-1", "Broken behavior.")
     assert [(task["id"], task["stage"]) for task in problem["tasks"]] == [
@@ -52,7 +55,7 @@ def test_the_listing_groups_tasks_by_problem_with_classification_first(session):
     ]
     run = problem["tasks"][1]
     assert run["run"] == {"harness": "claude", "model": "test-model", "scope": "repository"}
-    assert run["questions"] == ["tests_issue", "attempt_detail", "cheating"]
+    assert run["questions"] == list(RATINGS)
     assert run["reviewed"] is False
     assert problem["tasks"][0]["run"] is None
     assert listing["unreviewable"] == [
@@ -76,16 +79,21 @@ def test_a_problem_has_its_issue_record_texts_and_patches(data, open_session):
 def test_a_judgment_overview_has_the_questions_answers_and_core_evidence(session):
     overview = session.overview(REVIEWED_RUN)
 
-    assert [q["key"] for q in overview["questions"]] == [
-        "tests_issue",
-        "attempt_detail",
-        "cheating",
-    ]
+    assert [q["key"] for q in overview["questions"]] == list(RATINGS)
     assert overview["questions"][0] == {
         "key": "tests_issue",
         "label": "Do the generated tests attempt to test the issue?",
+        "section": "submission",
         "answer": "yes",
         "justification": "The submission supports this tests_issue answer.",
+    }
+    assert overview["questions"][3] == {
+        "key": "failure_modes.never_saw_bug",
+        "label": "Never saw the bug",
+        "section": "failure_modes",
+        "answer": "absent",
+        "steps": None,
+        "justification": None,
     }
     assert overview["review"] is None
     assert overview["stage_rubric"] == "# Judge rubric\n"
@@ -107,13 +115,18 @@ def test_a_classification_overview_has_its_questions_and_evidence(session):
     assert "outcomes" not in overview
 
 
-def test_only_a_judgment_has_an_agent_trace(data, session):
-    (data / REVIEWED_RUN / "generation/trace.jsonl").write_text("")
-
+def test_only_a_judgment_has_an_agent_trace(session):
     assert session.trace(REVIEWED_RUN)["events"] == []
     assert session.trace(REVIEWED_RUN) is session.trace(REVIEWED_RUN)
     with pytest.raises(LookupError, match="no agent trace"):
         session.trace(ATTEMPT)
+
+
+def test_the_trace_is_the_one_saved_when_the_run_was_judged(data, open_session):
+    (data / REVIEWED_RUN / "judge/trace.json").unlink()
+
+    with pytest.raises(LookupError, match="could not be built"):
+        open_session().trace(REVIEWED_RUN)
 
 
 def test_an_out_of_scope_classification_is_reviewed_on_one_question(data, open_session):
@@ -122,10 +135,13 @@ def test_an_out_of_scope_classification_is_reviewed_on_one_question(data, open_s
     session = open_session()
 
     (question,) = session.overview(attempt)["questions"]
-    session.submit(attempt, json.dumps({"ratings": {"task_nature": "defensible"}}))
+    session.submit(attempt, json.dumps({"ratings": {"task_nature": "disagree"}}))
 
     assert question["answer"] == "out_of_scope"
-    assert session.overview(attempt)["review"] == {"task_nature": "defensible"}
+    assert session.overview(attempt)["review"] == {
+        "ratings": {"task_nature": "disagree"},
+        "other_failure_modes": [],
+    }
     assert (data / attempt / "reviews/rater-1/provenance.json").is_file()
 
 
@@ -159,7 +175,7 @@ def test_a_submitted_review_shows_as_reviewed(session):
     session.submit(REVIEWED_RUN, json.dumps({"ratings": RATINGS}))
 
     assert session.listing()["problems"][0]["tasks"][1]["reviewed"] is True
-    assert session.overview(REVIEWED_RUN)["review"] == RATINGS
+    assert session.overview(REVIEWED_RUN)["review"]["ratings"] == RATINGS
 
 
 def test_a_rater_id_is_checked_before_anything_is_read(data):

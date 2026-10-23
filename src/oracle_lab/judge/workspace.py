@@ -22,6 +22,8 @@ from oracle_lab.results import (
     SubmissionManifest,
     write_result,
 )
+from oracle_lab.trace.build import build_run_trace
+from oracle_lab.trace.markdown import trace_markdown
 
 JUDGE_ROOT = "/oracle-judge"
 HELPER = "/judge_workspace.py"
@@ -55,7 +57,8 @@ def build_judge_workspace(
     artifacts: list[ExposedArtifact] = []
     with TemporaryDirectory(prefix="oracle-judge-bundle-") as temporary:
         staging = Path(temporary)
-        # TODO: save_trace(paths) first, so the evidence can expose it.
+        if persist:
+            save_trace(paths)  # first, so the evidence can expose it
         evidence = judge_evidence(paths, staging, instance, evaluation, manifest)
 
         # images.json is read at the end for the spec, not shown to the judge.
@@ -147,7 +150,13 @@ def build_judge_workspace(
 def save_trace(paths: RunPaths) -> bool:
     """Build the agent's trace and save it as `judge/trace.json`. False when it cannot be
     built, in which case the judge reads the raw harness trace instead."""
-    raise NotImplementedError
+    paths.judge.trace.unlink(missing_ok=True)
+    try:
+        trace = build_run_trace(paths)
+    except Exception:  # noqa: BLE001 - it parses agent output; any failure means no summary
+        return False
+    write_json(paths.judge.trace, trace.to_json())
+    return True
 
 
 def judge_evidence(
@@ -192,14 +201,25 @@ def judge_evidence(
         (instructions, JUDGE_ROOT + "/instructions.md"),
         (submission_manifest, JUDGE_ROOT + "/evidence/submission-manifest.json"),
         (paths.generation / "session.log", JUDGE_ROOT + "/evidence/agent-session.log"),
-        # TODO: agent-trace.md (staged from trace_markdown) and agent-trace.json from
-        # paths.judge.trace, or the raw trace.jsonl as agent-trace.jsonl without it.
+        *_trace_evidence(paths, staging),
         (paths.generation / "workspace.diff", JUDGE_ROOT + "/evidence/workspace.diff"),
         (paths.results, JUDGE_ROOT + "/evidence/paired-results.json"),
         (paths.evaluation / "buggy/tests.json", JUDGE_ROOT + "/evidence/buggy-tests.json"),
         (paths.evaluation / "buggy/output.log", JUDGE_ROOT + "/evidence/buggy-output.log"),
         (paths.evaluation / "golden/tests.json", JUDGE_ROOT + "/evidence/golden-tests.json"),
         (paths.evaluation / "golden/output.log", JUDGE_ROOT + "/evidence/golden-output.log"),
+    ]
+
+
+def _trace_evidence(paths: RunPaths, staging: Path) -> list[tuple[Path, str]]:
+    """The agent's trace twice, summarized and in full, or the raw trace without a build."""
+    if not paths.judge.trace.is_file():
+        return [(paths.generation / "trace.jsonl", JUDGE_ROOT + "/evidence/agent-trace.jsonl")]
+    summary = staging / "agent-trace.md"
+    summary.write_text(trace_markdown(read_json(paths.judge.trace)))
+    return [
+        (summary, JUDGE_ROOT + "/evidence/agent-trace.md"),
+        (paths.judge.trace, JUDGE_ROOT + "/evidence/agent-trace.json"),
     ]
 
 

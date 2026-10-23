@@ -2,14 +2,16 @@ import json
 import re
 
 import pytest
-from fixtures import completed_judgment as fixture_completed_judgment
 from fixtures import (
+    added_failure_mode,
+    failure_modes,
     instance_record,
     judge_attempt,
     localized_target,
     out_of_scope_classification,
     usage,
 )
+from fixtures import completed_judgment as fixture_completed_judgment
 
 from oracle_lab.classification.contracts import CLASSIFICATION_LABELS
 from oracle_lab.io import write_json
@@ -122,20 +124,25 @@ def report_results(**changes):
     return results
 
 
-def completed_judgment():
+def completed_judgment(**changes):
     return fixture_completed_judgment(
+        **changes,
         justifications={
             "tests_issue": "The generated assertion reaches the issue.",
             "attempt_detail": "It distinguishes both revisions.",
             "cheating": "The session shows only repository exploration.",
-        }
+        },
     )
 
 
 def test_report_renders_completed_judge_with_provenance_and_supporting_files(tmp_path):
     paths = RunPaths.create(tmp_path)
     paths.results.write_text(json.dumps(report_results()))
-    paths.judge.judgment.write_text(json.dumps(completed_judgment()))
+    judgment = completed_judgment(
+        failure_modes=failure_modes(changed_test_to_pass=[23, 24]),
+        added_failure_modes=[added_failure_mode()],
+    )
+    paths.judge.judgment.write_text(json.dumps(judgment))
     write_targets = [
         paths.judge.judgment_raw,
         paths.judge.prompt,
@@ -168,6 +175,9 @@ def test_report_renders_completed_judge_with_provenance_and_supporting_files(tmp
     assert "| yes | correct_assertion | — | no |" in text
     assert "`tests_issue`:\n\n> The generated assertion reaches the issue." in text
     assert "`attempt_detail`:\n\n> It distinguishes both revisions." in text
+    assert "**Changed test to pass**, steps 23, 24:" in text
+    assert "**Tested only defaults (judge's own:" in text
+    assert "Absent: Never saw the bug," in text
     assert "| Generate | 4 s | 12 | 0 | 20 |" in text
     assert "| Judge | 3 s | 20 | 0 | 20 |" in text
     assert "[workspace](judge/workspace-spec.json)" in text

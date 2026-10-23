@@ -16,6 +16,7 @@ from pathlib import Path
 from oracle_lab.io import utc_stamp, write_json
 from oracle_lab.review.contracts import (
     RATINGS,
+    AddedLabelRatings,
     AgreementReport,
     QuestionAgreement,
     Rating,
@@ -24,9 +25,15 @@ from oracle_lab.review.contracts import (
     StageAgreement,
 )
 from oracle_lab.review.store import read_all_reviews
-from oracle_lab.review.targets import TARGET_KINDS, find_targets
+from oracle_lab.review.targets import TARGET_KINDS, ReviewTarget, find_targets
 
-TITLES: dict[Stage, str] = {"judge": "Test judgments", "classification": "Task classifications"}
+TITLES: dict[Stage, str] = {
+    "judge": "Generation judgments",
+    "classification": "Problem classifications",
+}
+# Rating items for failure modes a judge added, which are pooled into one question.
+ADDED = "added_failure_modes"
+ADDED_TITLE = "Failure modes the judge added"
 
 
 def agreement(paths: Sequence[Path], output: Path | None = None) -> Path:
@@ -52,9 +59,12 @@ def compute_agreement(paths: Sequence[Path]) -> AgreementReport:
 
     stages = {}
     for kind in TARGET_KINDS:
-        in_stage = [reviews[target.root] for target in targets if isinstance(target, kind)]
+        in_stage = [
+            (target, reviews[target.root]) for target in targets if isinstance(target, kind)
+        ]
         if in_stage:
-            stages[kind.stage] = _stage(in_stage, kind.labels)
+            stages[kind.stage] = _stage(in_stage)
+    added_labels, rater_labels = _added_labels(targets, reviews)
 
     # Every rater is expected to review every target.
     missing = {}
@@ -68,15 +78,41 @@ def compute_agreement(paths: Sequence[Path]) -> AgreementReport:
         inputs=[path.as_posix() for path in paths],
         raters=raters,
         stages=stages,
+        added_labels=added_labels,
+        rater_labels=rater_labels,
         missing=missing,
         unreviewable=unreviewable,
     )
 
 
-def _added_labels(targets, reviews) -> tuple[list, dict[str, int]]:
+def _added_labels(
+    targets: Sequence[ReviewTarget], reviews: dict[Path, dict[str, Review]]
+) -> tuple[list[AddedLabelRatings], dict[str, int]]:
     """Every judge-added failure mode with its ratings, and the raters' own labels
     counted by name."""
-    raise NotImplementedError
+    added = []
+    for target in targets:
+        for key in target.rating_keys():
+            if key.startswith(ADDED + "."):
+                counts = Counter(
+                    review.ratings[key]
+                    for review in reviews[target.root].values()
+                    if key in review.ratings
+                )
+                added.append(
+                    AddedLabelRatings(
+                        target=target.root.as_posix(),
+                        name=target.rating_label(key),
+                        ratings={rating: counts[rating] for rating in RATINGS},
+                    )
+                )
+    names = Counter(
+        label.name
+        for by_rater in reviews.values()
+        for review in by_rater.values()
+        for label in review.other_failure_modes
+    )
+    return added, dict(sorted(names.items()))
 
 
 def krippendorff_alpha(
@@ -136,28 +172,43 @@ def render_agreement(report: AgreementReport) -> str:
             continue
         lines += [
             "",
-            "| Question | Targets | Correct | Defensible | Incorrect | Judge correct "
-            "| Correct or defensible | Rater pairs | Raw agreement | Alpha |",
-            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+            "| Question | Targets | Agree | Disagree | Judge agreed with "
+            "| Rater pairs | Raw agreement | Alpha |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|",
         ]
         for question in summary.questions.values():
             counts = question.ratings
             lines.append(
-                f"| {question.label} | {question.targets} | {counts['correct']} "
-                f"| {counts['defensible']} | {counts['incorrect']} "
-                f"| {_percent(question.correct_share)} | {_percent(question.acceptable_share)} "
+                f"| {question.label} | {question.targets} | {counts['agree']} "
+                f"| {counts['disagree']} | {_percent(question.agree_share)} "
                 f"| {question.rater_pairs} | {_percent(question.pairwise_agreement)} "
                 f"| {'—' if question.alpha is None else f'{question.alpha:.3f}'} |"
             )
     lines += [
         "",
-        "Judge correct is the share of ratings that are `correct`; correct or defensible "
-        "adds `defensible`. Raw agreement is the share of rater pairs on the same target "
-        "that gave the same rating. Alpha is Krippendorff's alpha for ordinal ratings, "
-        "ordered correct, defensible, incorrect. It is low when nearly every rating is "
-        "the same, even if raters agree; raw agreement shows that case. A dash means "
-        "there was no pair of raters, or no variation, to compute it from.",
+        "Judge agreed with is the share of ratings that agree with the judge. Raw "
+        "agreement is the share of rater pairs on the same target that gave the same "
+        "rating. Alpha is Krippendorff's alpha over the two ratings. It is low when "
+        "nearly every rating is the same, even if raters agree; raw agreement shows that "
+        "case. A dash means there was no pair of raters, or no variation, to compute it "
+        "from. Failure modes a judge added differ by run, so they are pooled into one "
+        "question and listed below.",
     ]
+    if report.added_labels:
+        lines += [
+            "",
+            "## Failure modes the judges added",
+            "",
+            "| Target | Label | Agree | Disagree |",
+            "|---|---|---:|---:|",
+        ]
+        lines += [
+            f"| `{item.target}` | {item.name} | {item.ratings['agree']} | {item.ratings['disagree']} |"
+            for item in report.added_labels
+        ]
+    if report.rater_labels:
+        lines += ["", "## Failure modes raters added", "", "| Label | Times |", "|---|---:|"]
+        lines += [f"| {name} | {count} |" for name, count in report.rater_labels.items()]
     lines += ["", "## Missing reviews", ""]
     if not report.raters:
         lines.append("No reviews yet.")
@@ -177,24 +228,27 @@ def render_agreement(report: AgreementReport) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _stage(reviews: list[dict[str, Review]], labels: dict[str, str]) -> StageAgreement:
-    """Agreement for one stage, from each of its targets' reviews by rater."""
-    questions = {}
-    for key, label in labels.items():
-        # One unit per target: the ratings its raters gave this question.
-        units: list[list[Rating]] = []
-        for by_rater in reviews:
-            unit: list[Rating] = [
-                review.ratings[key] for review in by_rater.values() if key in review.ratings
-            ]
+def _stage(reviewed: list[tuple[ReviewTarget, dict[str, Review]]]) -> StageAgreement:
+    """Agreement for one stage, from each of its targets and their reviews by rater.
+
+    Each question and each start-list failure mode is one question. The failure modes
+    a judge added differ by run, so they are pooled into one question.
+    """
+    # One unit per target and rating item: the ratings its raters gave that item.
+    units: dict[str, list[list[Rating]]] = {}
+    labels: dict[str, str] = {}
+    for target, by_rater in reviewed:
+        for key in target.rating_keys():
+            question = ADDED if key.startswith(ADDED + ".") else key
+            labels[question] = ADDED_TITLE if question == ADDED else target.rating_label(key)
+            unit = [review.ratings[key] for review in by_rater.values() if key in review.ratings]
             if unit:
-                units.append(unit)
-        if units:
-            questions[key] = _question(label, units)
+                units.setdefault(question, []).append(unit)
+    order = {key: index for index, key in enumerate(labels)}
     return StageAgreement(
-        targets=len(reviews),
-        reviews=sum(len(by_rater) for by_rater in reviews),
-        questions=questions,
+        targets=len(reviewed),
+        reviews=sum(len(by_rater) for _, by_rater in reviewed),
+        questions={key: _question(labels[key], units[key]) for key in sorted(units, key=order.get)},
     )
 
 
@@ -206,8 +260,7 @@ def _question(label: str, units: list[list[Rating]]) -> QuestionAgreement:
         label=label,
         targets=len(units),
         ratings={rating: counts[rating] for rating in RATINGS},
-        correct_share=counts["correct"] / total,
-        acceptable_share=(counts["correct"] + counts["defensible"]) / total,
+        agree_share=counts["agree"] / total,
         rater_pairs=len(pairs),
         pairwise_agreement=sum(pairs) / len(pairs) if pairs else None,
         alpha=krippendorff_alpha(units, RATINGS),

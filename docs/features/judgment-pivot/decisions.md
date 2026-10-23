@@ -78,3 +78,17 @@ The plan is `implementation.md`. Research reasons are in `docs/research-framing.
 - **The rail has sections: Submission, then Failure modes (present labels as full cards, absent labels as one-line rows), then the rater's own labels.** Keys and `j`/`k` run through every item in order.
 - **If the trace cannot be built, the judge gets the raw harness trace instead** (`evidence/agent-trace.jsonl`) and judging continues. Its cited steps are then that file's line numbers.
 - **Agreement reports each start label as its own question, the judge-added labels pooled as one question, and a list of every judge-added label with its ratings.** Judge-added names differ per run, so they cannot be grouped by name.
+
+## Model-decided (cycle 2)
+
+- **Failure-mode titles live in `judge/contracts.FAILURE_MODES`, and `FailureModeKey` repeats the keys as a `Literal`** for validation. `tests/test_rubrics.py` checks the rubric defines exactly those keys and titles (`### `key`: Title` headings).
+- **A present label needs a justification and at least one step; an absent one is exactly `{"decision": "absent"}`** (`judge/contracts.py`). The submission `justifications` map still covers only Questions 1–4.
+- **`save_trace` runs only when the workspace is persisted, and removes any earlier `judge/trace.json` first** (`judge/workspace.py`). It catches any exception from the build, since the builder parses agent output, and the judge then gets the raw trace.
+- **`agent-trace.md` lists every event with its tags but no output, then the test file versions with their pytest runs and how many added tests detect the bug** (`trace/markdown.py`). The judge already sees the paired results, so the outcome counts add nothing hidden.
+- **`judged_run` saves an empty `generation/trace.jsonl` and its `judge/trace.json`** (`tests/fixtures.py`), as every judged run now has. `judgment_ratings()` builds a full agreeing review.
+- **The overview's rating items carry `section`, `answer`, and for failure modes `steps` and `justification` (null when absent)** (`web/session._rating_items`). A saved review is returned whole (`ratings` and `other_failure_modes`).
+- **The rail sorts items into display order once, present start labels before absent ones** (`rail.startRail`), so the existing index-based keyboard and rating code works unchanged.
+- **Drafts store the whole review, ratings and the rater's own labels** (`rail.js`). Drafts in the old shape are ignored.
+- **The ordinal-distance agreement test was removed.** With two ratings there is no "one step apart".
+- **The demo set's failure-mode decisions are stand-ins marked "Demo placeholder"**, since no judge has labeled that run.
+- **The "How to review" text is Markdown, `web/templates/how-to-review.md`, filled with `string.Template` like the judge's workspace instructions** (`web/session.how_to_review`). Reviewer prose does not belong in page code (user). `${ratings}` takes the definitions from `RATING_DEFINITIONS`, which the rating buttons' tooltips also use.

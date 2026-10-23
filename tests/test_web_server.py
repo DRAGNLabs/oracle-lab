@@ -5,12 +5,12 @@ import json
 import threading
 
 import pytest
-from fixtures import REVIEWED_RUN, review_set, upstream_repository
+from fixtures import REVIEWED_RUN, judgment_ratings, review_set, upstream_repository
 
 from oracle_lab.web.server import ReviewServer
 from oracle_lab.web.session import ReviewSession
 
-RATINGS = {"tests_issue": "correct", "attempt_detail": "defensible", "cheating": "correct"}
+RATINGS = judgment_ratings(attempt_detail="disagree")
 
 
 @pytest.fixture
@@ -64,7 +64,7 @@ def test_a_review_is_posted_as_json(port, data):
         headers={"Content-Type": "application/json"},
     )
 
-    assert status == 200 and json.loads(response) == {"review": RATINGS}
+    assert status == 200 and json.loads(response)["review"]["ratings"] == RATINGS
     assert (data / REVIEWED_RUN / "judge/reviews/rater-1/review.json").is_file()
 
 

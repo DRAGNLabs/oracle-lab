@@ -140,7 +140,7 @@ def _dispatch(args: argparse.Namespace) -> int:
     elif args.command == "agreement":
         output = agreement(args.paths, args.output)
     else:  # report
-        output = report(RunPaths.open(args.run_dir.resolve()))
+        output = report(RunPaths(args.run_dir.resolve()))
 
     print(output)
 
@@ -171,7 +171,7 @@ def _export(root: Path, out: Path | None, repo: str | None) -> int:
 
 def _load_saved_run(run_dir: Path) -> tuple[RunConfig, RunPaths]:
     """Open a run and load its frozen resolved configuration once at the CLI boundary."""
-    paths = RunPaths.open(run_dir.resolve())
+    paths = RunPaths(run_dir.resolve())
     return load_config(paths.config, resolved=True), paths
 
 

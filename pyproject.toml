@@ -35,7 +35,6 @@ oracle_lab = [
     "container/docker/package*.json",
     "container/docker/*.md",
     "judge/templates/*.md",
-    "judge/templates/*.json",
     "export/templates/*.md",
     "web/static/*",
     "web/templates/*.md",

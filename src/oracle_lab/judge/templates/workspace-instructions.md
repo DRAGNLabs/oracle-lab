@@ -15,7 +15,7 @@ execution evidence without assigning rubric labels.
 5. Read `evidence/agent-trace.md` for the failure modes, and
    `evidence/agent-trace.json` for any step in full. Cite steps by the numbers
    in `agent-trace.md`.
-5. Open the detailed JSON or raw logs when the summary is insufficient.
+6. Open the detailed JSON or raw logs when the summary is insufficient.
 
 ## Workspace folders
 

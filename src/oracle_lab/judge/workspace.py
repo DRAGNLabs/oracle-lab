@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from string import Template
 from tempfile import TemporaryDirectory
@@ -10,6 +9,7 @@ from typing import Literal
 
 from oracle_lab.config import RunConfig, repo_path
 from oracle_lab.container.sandbox import Sandbox
+from oracle_lab.instance.swebench import test_ids
 from oracle_lab.io import digest, read_json, require_files, write_json
 from oracle_lab.judge.contracts import BundleManifest, PreparedImage, WorkspaceSpec
 from oracle_lab.localization.patches import parse_patch
@@ -23,6 +23,7 @@ from oracle_lab.results import (
     write_result,
 )
 from oracle_lab.trace.build import build_run_trace
+from oracle_lab.trace.events import read_run_trace
 from oracle_lab.trace.markdown import trace_markdown
 
 JUDGE_ROOT = "/oracle-judge"
@@ -41,8 +42,6 @@ def build_judge_workspace(
     instance: InstanceRecord,
     evaluation: EvaluationResult,
     manifest: SubmissionManifest,
-    *,
-    persist: bool = True,
 ) -> WorkspaceSpec:
     """Assemble /oracle-judge in the container: two repo checkouts plus the evidence.
 
@@ -57,8 +56,7 @@ def build_judge_workspace(
     artifacts: list[ExposedArtifact] = []
     with TemporaryDirectory(prefix="oracle-judge-bundle-") as temporary:
         staging = Path(temporary)
-        if persist:
-            save_trace(paths)  # first, so the evidence can expose it
+        save_trace(paths)  # first, so the evidence can expose it
         evidence = judge_evidence(paths, staging, instance, evaluation, manifest)
 
         # images.json is read at the end for the spec, not shown to the judge.
@@ -140,10 +138,9 @@ def build_judge_workspace(
         reconstruction_commands=commands,
         artifacts=artifacts,
     )
-    if persist:
-        write_json(paths.judge.image, image_record.model_dump())
-        write_json(paths.judge.bundle_manifest, BundleManifest(artifacts=artifacts).model_dump())
-        write_json(paths.judge.workspace_spec, spec.model_dump())
+    write_json(paths.judge.image, image_record.model_dump())
+    write_json(paths.judge.bundle_manifest, BundleManifest(artifacts=artifacts).model_dump())
+    write_json(paths.judge.workspace_spec, spec.model_dump())
     return spec
 
 
@@ -184,8 +181,8 @@ def judge_evidence(
             "instance_id": instance.instance_id,
             "repo": instance.repo,
             "base_commit": instance.base_commit,
-            "FAIL_TO_PASS": _normalized_test_ids(original.get("FAIL_TO_PASS", [])),
-            "PASS_TO_PASS": _normalized_test_ids(original.get("PASS_TO_PASS", [])),
+            "FAIL_TO_PASS": test_ids(original, "FAIL_TO_PASS"),
+            "PASS_TO_PASS": test_ids(original, "PASS_TO_PASS"),
             "reference_test_ids": instance.reference_test_ids,
         },
     )
@@ -216,7 +213,7 @@ def _trace_evidence(paths: RunPaths, staging: Path) -> list[tuple[Path, str]]:
     if not paths.judge.trace.is_file():
         return [(paths.generation / "trace.jsonl", JUDGE_ROOT + "/evidence/agent-trace.jsonl")]
     summary = staging / "agent-trace.md"
-    summary.write_text(trace_markdown(read_json(paths.judge.trace)))
+    summary.write_text(trace_markdown(read_run_trace(paths.judge.trace).to_json()))
     return [
         (summary, JUDGE_ROOT + "/evidence/agent-trace.md"),
         (paths.judge.trace, JUDGE_ROOT + "/evidence/agent-trace.json"),
@@ -240,14 +237,6 @@ def _exposed(
         destination=destination,
         sha256=sha256 or digest(source.read_bytes()),
     )
-
-
-def _normalized_test_ids(value: object) -> list[str]:
-    if isinstance(value, str):
-        value = json.loads(value)
-    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-        raise ValueError("SWE-bench test IDs must be a list of strings")
-    return value
 
 
 def _patch_paths(patch: str) -> list[str]:

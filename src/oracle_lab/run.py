@@ -26,9 +26,9 @@ from oracle_lab.harnesses import require_credentials
 from oracle_lab.instance import resolve_source, write_private_instance_artifacts
 from oracle_lab.io import read_json, write_json
 from oracle_lab.judge.contracts import (
+    SkippedJudgment,
     mark_judgments_stale,
     read_judgment_state,
-    skipped_judgment,
 )
 from oracle_lab.judge.run import judge_stage
 from oracle_lab.localization import localize
@@ -84,8 +84,8 @@ def run(config: RunConfig) -> Path:
                 judge_status = "disabled"
                 if config.judge:
                     if submission.empty or result.no_tests:
-                        judgment = skipped_judgment(
-                            "No generated tests were collected; no judge turn was run."
+                        judgment = SkippedJudgment(
+                            reason="No generated tests were collected; no judge turn was run."
                         )
                         write_json(paths.judge.judgment, judgment.model_dump())
                     else:

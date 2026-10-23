@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from fixtures import instance_record, out_of_scope_classification
+from fixtures import instance_record, out_of_scope_classification, run_status
 
 from oracle_lab.classification.contracts import latest_classification
 from oracle_lab.io import write_json
@@ -68,7 +68,7 @@ def test_incomplete_latest_attempt_does_not_fall_back(tmp_path):
     write_json(root / "20260101T000000Z-old" / "judge" / "classification.json", classification())
     write_json(
         root / "20260201T000000Z-new" / "status.json",
-        {"stage": "build", "state": "failed", "error": "image build failed"},
+        run_status(stage="build", state="failed", error="image build failed"),
     )
 
     result, attempt = latest(paths)

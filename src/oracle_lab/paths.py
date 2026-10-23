@@ -51,11 +51,29 @@ class OutputPaths:
     def new_attempt(self, instance_id: str) -> AttemptPaths:
         return AttemptPaths.create(_new_directory(self.classifications / instance_id))
 
+    def saved_runs(self) -> list[RunPaths]:
+        """Every run directory under `runs/`, in ID order."""
+        return [RunPaths(run) for run in _subdirectories(self.runs)]
+
+    def saved_attempts(self) -> list[AttemptPaths]:
+        """Every classification attempt, by instance ID and then attempt ID."""
+        return [
+            AttemptPaths(attempt)
+            for instance in _subdirectories(self.classifications)
+            for attempt in _subdirectories(instance)
+        ]
+
 
 def _new_directory(parent: Path) -> Path:
     directory = parent / new_id()
     directory.mkdir(parents=True)
     return directory
+
+
+def _subdirectories(path: Path) -> list[Path]:
+    if not path.is_dir():
+        return []
+    return sorted(child for child in path.iterdir() if child.is_dir())
 
 
 @dataclass(frozen=True)
@@ -79,10 +97,6 @@ class RunPaths:
         ):
             directory.mkdir(parents=True, exist_ok=True)
         return paths
-
-    @classmethod
-    def open(cls, root: Path) -> "RunPaths":
-        return cls(root)
 
     @property
     def inputs(self) -> Path:
@@ -252,6 +266,11 @@ class JudgePaths:
         return self.agent / "final.txt"
 
     @property
+    def agent_history(self) -> Path:
+        """Earlier turns retried after a transient failure."""
+        return self.root / "agent-history"
+
+    @property
     def reviews(self) -> Path:
         return self.root / "reviews"
 
@@ -298,11 +317,6 @@ class JudgmentPaths(JudgePaths):
 @dataclass(frozen=True)
 class ClassifierPaths(JudgePaths):
     """The task classifier's directory in a classification attempt."""
-
-    @property
-    def agent_history(self) -> Path:
-        """Earlier turns retried after a transient failure."""
-        return self.root / "agent-history"
 
     @property
     def classification(self) -> Path:

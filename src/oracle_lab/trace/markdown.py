@@ -6,26 +6,7 @@ page show the same steps with the same numbers.
 
 from __future__ import annotations
 
-ACTIONS = {
-    "read": "Read",
-    "search": "Search",
-    "edit_test": "Edit test",
-    "edit_source": "Edit source",
-    "run_tests": "Run tests",
-    "probe_code": "Probe code",
-    "run_other": "Run other",
-    "reasoning": "Reasoning",
-    "message": "Message",
-    "failed_call": "Failed call",
-}
-# File categories worth naming on a step: everything but source and generated tests.
-CATEGORIES = {
-    "test": "existing test",
-    "docs": "docs",
-    "changelog": "changelog",
-    "config": "config",
-    "outside": "outside repo",
-}
+from oracle_lab.trace.events import ACTION_LABELS, CATEGORY_LABELS, FLAGGED_CATEGORIES
 
 INTRO = """\
 # Agent trace
@@ -56,7 +37,7 @@ def trace_markdown(trace: dict) -> str:
         tags = _tags(event) + facts.get((event["step"], event["part"]), [])
         tagged = f" [{'; '.join(tags)}]" if tags else ""
         description = " ".join(event["description"].split())
-        lines.append(f"- {step} · {ACTIONS[event['action']]} · {description}{tagged}")
+        lines.append(f"- {step} · {ACTION_LABELS[event['action']]} · {description}{tagged}")
     lines += ["", "## Generated test files", ""]
     if not trace["generated_files"]:
         lines.append("None under the generated test directory.")
@@ -79,7 +60,7 @@ def _tags(event: dict) -> list[str]:
     if event["exit_code"]:
         tags.append(f"exit {event['exit_code']}")
     categories = {touch["category"] for touch in event["touches"]}
-    tags += [label for category, label in CATEGORIES.items() if category in categories]
+    tags += [CATEGORY_LABELS[category] for category in FLAGGED_CATEGORIES if category in categories]
     return tags
 
 

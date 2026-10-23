@@ -35,8 +35,8 @@ from oracle_lab.trace.events import (
     Touch,
 )
 from oracle_lab.trace.facts import (
+    Checkout,
     PatchedRegions,
-    Repository,
     generated_files,
     grep_hits,
     parse_pytest,
@@ -62,15 +62,14 @@ def build_run_trace(paths: RunPaths) -> RunTrace:
     `EvaluationResult` when the run was evaluated, and the localized target.
     """
     config = load_config(paths.config, resolved=True)
-    assert config.runtime is not None  # a resolved config always names its runtime
-    repository = Repository(config.runtime.workdir, config.task.generated_dir)
+    checkout = Checkout(config.require_runtime().workdir, config.task.generated_dir)
     steps = read_steps(config.agent.harness, paths.generation / "trace.jsonl")
     target = read_localized_target(paths.target) if paths.target.exists() else None
     target_names = [name for file in target.files for name in file.names] if target else []
     regions = PatchedRegions.from_patch(
         read_instance_record(paths.instance).golden_patch, target_names
     )
-    events = to_events(steps, repository, regions)
+    events = to_events(steps, checkout, regions)
     outcomes = None
     if paths.results.exists():
         outcomes = {
@@ -94,7 +93,7 @@ def build_run_trace(paths: RunPaths) -> RunTrace:
     )
 
 
-def to_events(steps: list[Step], repository: Repository, regions: PatchedRegions) -> list[Event]:
+def to_events(steps: list[Step], checkout: Checkout, regions: PatchedRegions) -> list[Event]:
     """One event per step, or per sub-command for chained shell commands."""
     events: list[Event] = []
     scripts: dict[str, str] = {}  # files the agent wrote, by path as written, for `python x.py`
@@ -135,7 +134,7 @@ def to_events(steps: list[Step], repository: Repository, regions: PatchedRegions
         else:
             actions = [(_input_text(step.action), step.action)]
         for part, (text, action) in enumerate(actions):
-            event = _event(action, text, part, common, repository, regions, scripts)
+            event = _event(action, text, part, common, checkout, regions, scripts)
             events.append(event)
     return events
 
@@ -145,18 +144,18 @@ def _event(
     text: str,
     part: int,
     common: dict,
-    repository: Repository,
+    checkout: Checkout,
     regions: PatchedRegions,
     scripts: dict[str, str],
 ) -> Event:
     output = common["output"]
 
     def touch(path: str, lines: tuple[int, int] | None, *, read: bool) -> Touch:
-        relative = repository.relative(path) or path
+        relative = checkout.relative(path) or path
         overlap = regions.overlap(relative, lines)
         if not read and overlap is DefectOverlap.LINES:
             overlap = DefectOverlap.FILE  # where an edit or hitless search lands is unknown
-        return Touch(relative, repository.category(path), lines, overlap)
+        return Touch(relative, checkout.category(path), lines, overlap)
 
     def event(kind: ActionType, description: str, **fields) -> Event:
         return Event(
@@ -166,15 +165,15 @@ def _event(
     if isinstance(action, ReadFile):
         lines = _range(action.start, action.end)
         shown = f" L{lines[0]}–{lines[1] if lines[1] < _END else 'end'}" if lines else ""
-        relative = repository.relative(action.path) or action.path
+        relative = checkout.relative(action.path) or action.path
         return event(
             ActionType.READ,
             f"Read {relative}{shown}",
             touches=[touch(action.path, lines, read=True)],
         )
     if isinstance(action, Search):
-        touches = _search_touches(action, output, repository, touch)
-        where = f" in {repository.relative(action.path) or action.path}" if action.path else ""
+        touches = _search_touches(action, output, checkout, touch)
+        where = f" in {checkout.relative(action.path) or action.path}" if action.path else ""
         files = len({item.path for item in touches})
         return event(
             ActionType.SEARCH,
@@ -189,7 +188,7 @@ def _event(
         if target.category in _TEST_CATEGORIES:
             kind = ActionType.EDIT_TEST
         elif target.category is FileCategory.OUTSIDE:
-            kind = ActionType.RUN_OTHER  # a scratch file outside the repository
+            kind = ActionType.RUN_OTHER  # a scratch file outside the checkout
         else:
             kind = ActionType.EDIT_SOURCE
         return event(
@@ -228,12 +227,12 @@ def _range(start: int | None, end: int | None) -> tuple[int, int] | None:
     return (start or 1, end if end is not None else _END)
 
 
-def _search_touches(action: Search, output: str, repository: Repository, touch) -> list[Touch]:
+def _search_touches(action: Search, output: str, checkout: Checkout, touch) -> list[Touch]:
     """One touch per run of consecutive hit lines, or the searched file when there are none."""
-    scope = repository.relative(action.path) if action.path else None
+    scope = checkout.relative(action.path) if action.path else None
     lines: dict[str, list[int]] = {}
     for path, number in grep_hits(output, action.path):
-        relative = repository.relative(path) or path
+        relative = checkout.relative(path) or path
         if scope and scope != "." and not (relative == scope or relative.startswith(scope + "/")):
             continue  # another sub-command's output, shared by a chained command
         lines.setdefault(path, []).append(number)

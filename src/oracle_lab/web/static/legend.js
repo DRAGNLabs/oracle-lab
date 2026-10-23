@@ -1,7 +1,7 @@
 // The sidebar's Legend tab: what every color, tag, and fact in the trace means, from
 // the shared descriptions.
 
-import { ACTION_LABELS, CATEGORY_LABELS, DESCRIPTIONS } from "./labels.js";
+import { DESCRIPTIONS, labels } from "./labels.js";
 import { esc } from "./render.js";
 
 const TAG_LABELS = { patched_name: "function or class name, in orange", git_history: "git history", exit: "exit N" };
@@ -14,13 +14,13 @@ const FACT_LABELS = {
 const FILE_LABELS = { matches_submission: "matches submission", differs_submission: "differs from submission" };
 
 export function showLegend(container) {
-  const actions = Object.entries(ACTION_LABELS)
+  const actions = Object.entries(labels().actions)
     .map(([key, label]) => row(`<span class="dot" style="--dot: var(--a-${key})"></span>${esc(label)}`, DESCRIPTIONS.action[key]))
     .join("");
   const overlap = row(`<span class="swatch overlap-lines"></span>patched lines`, DESCRIPTIONS.overlap.lines) +
     row(`<span class="swatch overlap-file"></span>patched file`, DESCRIPTIONS.overlap.file);
   const tags = Object.entries(DESCRIPTIONS.tag)
-    .map(([key, description]) => row(esc(TAG_LABELS[key] || CATEGORY_LABELS[key]), description))
+    .map(([key, description]) => row(esc(TAG_LABELS[key] || labels().categories[key]), description))
     .join("");
   const named = (labels, descriptions) => Object.entries(descriptions).map(([key, description]) => row(esc(labels[key] || key.replaceAll("_", " ")), description)).join("");
   container.innerHTML = `

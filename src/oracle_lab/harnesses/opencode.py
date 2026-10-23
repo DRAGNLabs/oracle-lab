@@ -10,7 +10,6 @@ from pathlib import Path
 from oracle_lab.container.sandbox import Sandbox
 from oracle_lab.harnesses.launch import (
     AgentTurnRequest,
-    read_trace,
     run_agent_turn,
     turn_status,
 )
@@ -23,7 +22,7 @@ from oracle_lab.harnesses.steps import (
     Shell,
     Step,
     WriteFile,
-    numbered_events,
+    read_trace,
 )
 from oracle_lab.results import Usage
 
@@ -33,24 +32,25 @@ REASONING = "raw"
 
 def parse_trace(path: Path) -> dict:
     """Normalize OpenCode's JSON event stream into the shared harness result."""
-    steps = []
+    step_tokens = []
     final_text = ""
     errors = []
     completed = False
-    events, malformed = read_trace(path)
+    numbered, malformed = read_trace(path)
+    events = [event for _, event in numbered]
     for event in events:
         part = event.get("part") or {}
         if event.get("type") == "text":
             final_text = str(part.get("text", ""))
         elif event.get("type") == "step_finish":
             if part.get("tokens"):
-                steps.append(part["tokens"])
+                step_tokens.append(part["tokens"])
             completed = part.get("reason") == "stop"
         elif event.get("type") == "error":
             errors.append(event)
 
     return {
-        "usage": _usage(steps),
+        "usage": _usage(step_tokens),
         "errors": errors,
         "unparsed_trace_lines": malformed,
         "turn_completed": completed,
@@ -69,7 +69,7 @@ def read_steps(path: Path) -> list[Step]:
     """
     steps: list[Step] = []
     reasoned: set[tuple[str, str]] = set()
-    for line, event in numbered_events(path):
+    for line, event in read_trace(path)[0]:
         part = event.get("part")
         if not isinstance(part, dict):
             continue
@@ -92,6 +92,11 @@ def read_steps(path: Path) -> list[Step]:
                     steps.append(Step("reasoning", line, text=text, timestamp=stamp))
             steps.append(_tool_step(line, part, stamp))
     return steps
+
+
+def render_event(event: dict) -> None:
+    """OpenCode events are kept whole in `session.log`."""
+    return None
 
 
 def _tool_step(line: int, part: dict, stamp: str | None) -> Step:

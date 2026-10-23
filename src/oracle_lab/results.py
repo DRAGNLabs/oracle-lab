@@ -12,7 +12,7 @@ import re
 from datetime import datetime, timezone
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, Any, Generic, Literal, TypeVar
+from typing import Annotated, Generic, Literal, TypeVar
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
@@ -272,7 +272,7 @@ class EvaluationResult(PairedResult):
 
 
 class AgentAttempt(HarnessResult):
-    """A judge or classifier turn's harness result, plus which agent ran it."""
+    """A model turn's harness result, plus which agent ran it: generation, judge, or classifier."""
 
     harness: str
     provider: str
@@ -334,6 +334,19 @@ def failed_turn(error: str, *, timed_out: bool = False) -> UnsuccessfulTurn:
     return UnsuccessfulTurn(status="timed_out" if timed_out else "failed", error=error)
 
 
+def turn_failure(result: dict, who: str) -> UnsuccessfulTurn | None:
+    """Why a harness turn gave no answer to parse, or None when it completed.
+
+    Prefers the harness's own last error over a generic status line.
+    """
+    if result["status"] == "completed":
+        return None
+    reason = last_error_message(result["errors"]) or (
+        f"{who} harness ended with status {result['status']}"
+    )
+    return failed_turn(reason, timed_out=result["status"] == "timeout")
+
+
 # A fenced block on its own lines, anywhere in the answer.
 _FENCED_JSON = re.compile(
     r"^```(?:json)?[ \t]*\r?\n(?P<body>.*?)\r?\n```[ \t]*$", re.DOTALL | re.MULTILINE
@@ -372,18 +385,34 @@ def last_error_message(errors: list) -> str | None:
     return str(last)
 
 
-def write_status(directory: Path, stage: str, state: str = "running", **details: Any) -> None:
+class RunStatus(ArtifactModel):
+    """`status.json` of a run, preflight, or classification attempt: its latest checkpoint."""
+
+    stage: str
+    state: str
+    updated_at: str
+    error: str | None = None
+    judge_status: str | None = None  # runs only
+    classification_status: str | None = None  # classification attempts only
+
+
+def write_status(directory: Path, stage: str, state: str = "running", **details: str) -> None:
     """Record the latest lifecycle checkpoint in `status.json` and print it."""
-    write_json(
-        directory / "status.json",
-        {
-            "stage": stage,
-            "state": state,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-            **details,
-        },
-    )
+    status = RunStatus(stage=stage, state=state, updated_at=_now(), **details)
+    save_status(directory / "status.json", status)
     print(f"[{stage}] {state}: {directory}", flush=True)
+
+
+def save_status(path: Path, status: RunStatus) -> None:
+    write_json(path, status.model_dump(exclude_none=True))
+
+
+def read_status(path: Path) -> RunStatus:
+    return RunStatus.model_validate(read_json(path))
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def read_agent_attempt(path: Path) -> AgentAttempt:

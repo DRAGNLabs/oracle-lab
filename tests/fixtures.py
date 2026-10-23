@@ -29,6 +29,16 @@ HELPERS = CONTAINER / "helpers"
 DOCKERFILES = CONTAINER / "docker"
 
 
+def run_status(**changes) -> dict:
+    """A `status.json`: a finished, completed run unless changed."""
+    return {
+        "stage": "finished",
+        "state": "completed",
+        "updated_at": "2026-01-01T00:00:00+00:00",
+        **changes,
+    }
+
+
 def instance_record(**changes) -> InstanceRecord:
     """A resolved instance. Tests pass only the fields they care about."""
     record = {

@@ -42,10 +42,12 @@ from oracle_lab.results import (
     read_evaluation_result,
     read_instance_record,
     read_run_cost,
+    read_status,
     read_submission_manifest,
 )
 from oracle_lab.review.store import read_all_reviews, read_provenance
 from oracle_lab.review.targets import ClassificationTarget, JudgmentTarget, ReviewTarget
+from oracle_lab.trace.events import read_run_trace
 
 T = TypeVar("T")
 _TABLE_OF = {model: name for name, model in TABLES.items()}
@@ -71,19 +73,18 @@ def collect(root: Path) -> Collected:
     """Rows for every run and classification attempt under the output root `root`."""
     output = OutputPaths(root)
     collected = Collected()
-    for run in map(RunPaths, _directories(output.runs)):
+    for run in output.saved_runs():
         try:
             collected.add(run_rows(run))
             collected.runs.append(run)
         except (OSError, ValueError, KeyError) as error:
             collected.skipped.append(_skipped(root, run.root, error))
-    for instance in _directories(output.classifications):
-        for attempt in map(AttemptPaths, _directories(instance)):
-            try:
-                collected.add(attempt_rows(attempt))
-                collected.attempts.append(attempt)
-            except (OSError, ValueError, KeyError) as error:
-                collected.skipped.append(_skipped(root, attempt.root, error))
+    for attempt in output.saved_attempts():
+        try:
+            collected.add(attempt_rows(attempt))
+            collected.attempts.append(attempt)
+        except (OSError, ValueError, KeyError) as error:
+            collected.skipped.append(_skipped(root, attempt.root, error))
     if not collected.runs and not collected.attempts and not collected.skipped:
         raise ValueError(f"No runs or classification attempts under {root}")
     return collected
@@ -92,7 +93,7 @@ def collect(root: Path) -> Collected:
 def run_rows(paths: RunPaths) -> list[ArtifactModel]:
     """Every row one run contributes: the run, its tests, its judgment, and its reviews."""
     config = load_config(paths.config, resolved=True)
-    status = read_json(paths.status)
+    status = read_status(paths.status)
     instance = _optional(read_instance_record, paths.instance)
     run_id = paths.root.name
     instance_id = instance.instance_id if instance else config.source.instance
@@ -118,9 +119,9 @@ def run_rows(paths: RunPaths) -> list[ArtifactModel]:
             task_scope=config.task.scope,
             existing_tests=config.task.existing_tests,
             generated_dir=config.task.generated_dir,
-            stage=status["stage"],
-            state=status["state"],
-            error=status.get("error"),
+            stage=status.stage,
+            state=status.state,
+            error=status.error,
             cost_status=cost.status if cost else None,
             cost_usd=cost.cost_usd if cost else None,
             generation_status=generation.status if generation else None,
@@ -179,14 +180,20 @@ def run_rows(paths: RunPaths) -> list[ArtifactModel]:
         rows += review_rows(JudgmentTarget.load(paths.root))
     if paths.judge.trace.is_file():
         rows += [
-            TraceStepRow.model_validate(
-                {
-                    "run_id": run_id,
-                    "instance_id": instance_id,
-                    **{key: event[key] for key in TraceStepRow.model_fields if key in event},
-                }
+            TraceStepRow(
+                run_id=run_id,
+                instance_id=instance_id,
+                step=event.step,
+                part=event.part,
+                action=event.action.value,
+                description=event.description,
+                command=event.command,
+                output=event.output,
+                exit_code=event.exit_code,
+                text=event.text,
+                timestamp=event.timestamp,
             )
-            for event in read_json(paths.judge.trace)["events"]
+            for event in read_run_trace(paths.judge.trace).events
         ]
     return rows
 
@@ -311,9 +318,3 @@ def _sha256(path: Path) -> str | None:
 
 def _skipped(root: Path, path: Path, error: Exception) -> SkippedTarget:
     return SkippedTarget(path=path.relative_to(root).as_posix(), error=str(error))
-
-
-def _directories(path: Path) -> list[Path]:
-    if not path.is_dir():
-        return []
-    return sorted(child for child in path.iterdir() if child.is_dir())

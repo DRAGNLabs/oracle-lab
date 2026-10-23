@@ -249,7 +249,7 @@ def test_the_stage_reads_the_reset_checkout_and_saves_the_target(monkeypatch, tm
         monkeypatch, tmp_path, diff(BASE, after, "package/core.py"), {"package/core.py": BASE}
     )
 
-    assert [profile.value for _, profile in opened] == ["reference"]
+    assert [profile.value for _, profile in opened] == ["localization"]
     assert sandbox.commands == [["git", "reset", "--hard", "a" * 40]]
     assert sandbox.downloads == ["/testbed/package/core.py"]
     assert target.files == [TargetFile(path="package/core.py", names=["Handler.reset"], lines=2)]

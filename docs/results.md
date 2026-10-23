@@ -86,7 +86,8 @@ report.
 │   ├── prompt.md
 │   ├── judgment.raw.txt
 │   ├── judgment.json
-│   ├── agent/{command.json,version.txt,trace.jsonl,stderr.log,final.txt,result.json}
+│   ├── agent/{command.json,version.txt,trace.jsonl,stderr.log,launch.log,final.txt,result.json}
+│   ├── agent-history/<UTC timestamp>/agent/ (when a transient failure was retried)
 │   ├── reviews/<rater>/{review.json,provenance.json} (after human review)
 │   └── reviews-history/<rater>/<UTC timestamp>/ (replaced reviews)
 ├── judge-history/<archived judge attempts>/
@@ -101,8 +102,8 @@ When a file is missing, check `status.json` and the last stage's log.
 Generation, judge, and classification turns are retried after a recognized
 transient API or transport error. There are up to three retries, after 30, 90,
 and 180 seconds. Each retry uses a fresh container and workspace. The earlier
-attempt is kept under `generation-history/`, `judge-history/`, or a
-classification attempt's `agent-history/`. Other harness failures and deadlines
+attempt is kept under `generation-history/` for generation, and under
+`judge/agent-history/` for the judge and the classifier. Other harness failures and deadlines
 are not retried; they end with their normal status.
 
 ## Preflight directories
@@ -519,8 +520,9 @@ the OpenRouter key (see [`cost.json`](#costjson)).
 
 ### `generation/command.json`
 
-The exact agent CLI arguments: the model, isolation flags, provider overrides,
-and the wall-time limit. No credential values.
+The exact agent CLI arguments: the model, isolation flags, and provider
+overrides. No credential values. The wall-time limit is enforced by the
+container, not passed to the CLI.
 
 ### `generation/version.txt`
 
@@ -544,6 +546,7 @@ Normalized generation metadata.
 | `errors` | Structured errors extracted from the trace |
 | `unparsed_trace_lines` | Lines that were not valid JSON |
 | `usage` | Token counts with one meaning for every harness, or null |
+| `harness`, `provider`, `model`, `harness_version`, `limit` | Which CLI, model, and stopping limit ran the turn |
 
 `usage` has the same fields for every harness:
 
@@ -564,7 +567,7 @@ count. Each adapter adds them back.
 | File | Contents |
 |---|---|
 | `stderr.log` | Agent CLI standard error; often empty on success |
-| `setup.log` | Generation-container creation, repository reset/rebuild, test visibility, and initial snapshot diagnostics |
+| `setup.log` | Generation-container creation, repository reset, test visibility, and initial snapshot diagnostics |
 | `launch.log` | Agent launch and setup diagnostics |
 | `capture.log` | Final snapshot, workspace diff, and generated-file copy diagnostics |
 
@@ -672,9 +675,10 @@ collect.
 | File | Contents |
 |---|---|
 | `imports.json` | Each configured module and the file it imported from; catches an import from another installed copy |
-| `runner.json` | The in-container runner's inputs: workdir, output, targets, source roots, and imports |
+| `runner.json` | The in-container runner's inputs: workdir, output, targets, import probes, and pytest plugins |
 | `command.json` | The pytest command (not the agent command) |
 | `execution.json` | The runner's exit code, duration, and timeout flag |
+| `tests.raw.json` | The runner's own `tests.json`, kept when it could not be read; `tests.json` then holds the normalized `runner_error` |
 | `output.log` | Output from workspace setup, patching, pytest, and Docker |
 | `repair.patch` | The exact golden source patch; golden executions only |
 | `reference.patch` | The private test patch; reference executions only |
@@ -699,8 +703,8 @@ uv run oracle-lab evaluate output/runs/<run-id>
 
 does three things:
 
-1. It moves the current `evaluation/` into `evaluation-history/<UTC timestamp>/`.
-2. It verifies the frozen manifest.
+1. It verifies the frozen manifest.
+2. It moves the current `evaluation/` into `evaluation-history/<UTC timestamp>/`.
 3. It evaluates the frozen tests in fresh containers.
 
 Generation files, provenance, the runtime image, and the frozen tests stay

@@ -70,7 +70,12 @@ def changed_files(before: dict, after: dict, generated_dir: str) -> tuple[list[s
     for name in sorted(before.keys() | after.keys()):
         if before.get(name) == after.get(name):
             continue
-        path = PurePosixPath(repo_path(name))
+        try:
+            path = PurePosixPath(repo_path(name))
+        except ValueError:
+            # A name no repository path may have, such as `-v`, is never a submission.
+            forbidden.append(name)
+            continue
         entry = after.get(name)
         # New regular files only; symlinks cannot cause host-side reads or replacement of code.
         if root in path.parents and name not in before and entry and entry["kind"] == "file":
@@ -104,11 +109,11 @@ def capture(
     log = paths.generation / "capture.log"
     after = snapshot(sandbox, paths.generation / "after.json", log)
     allowed, forbidden = changed_files(before, after, config.task.generated_dir)
-    generated = paths.submission
+    submission = paths.submission
     # Keep the frozen bundle structurally complete even when the agent creates no
     # tests. Downstream verification and diagnostics can then inspect an empty
     # directory instead of failing because the bundle root never existed.
-    (generated / "files").mkdir(parents=True, exist_ok=True)
+    (submission / "files").mkdir(parents=True, exist_ok=True)
     sandbox.run(
         [
             runtime.python,
@@ -129,7 +134,7 @@ def capture(
     )
     files: dict[str, SubmissionFile] = {}
     for name in allowed:
-        target = generated / "files" / name
+        target = submission / "files" / name
         sandbox.download(runtime.workdir + "/" + name, target)
         # Copy only regular files with the exact bytes measured in the final snapshot.
         if target.is_symlink() or digest(target.read_bytes()) != after[name]["sha256"]:
@@ -142,7 +147,7 @@ def capture(
         empty=not files,
         sha256=_files_digest(files),
     )
-    write_result(generated / "manifest.json", manifest)
+    write_result(submission / "manifest.json", manifest)
     return manifest
 
 
@@ -153,11 +158,11 @@ def _files_digest(files: dict[str, SubmissionFile]) -> str:
 
 def verify_bundle(paths: RunPaths) -> SubmissionManifest:
     """Validate the external bundle before transferring it to either code version."""
-    generated = paths.submission
-    manifest = read_submission_manifest(generated / "manifest.json")
+    submission = paths.submission
+    manifest = read_submission_manifest(submission / "manifest.json")
     if _files_digest(manifest.files) != manifest.sha256:
         raise ValueError("Generated manifest checksum mismatch")
-    root = generated / "files"
+    root = submission / "files"
     entries = {
         path.relative_to(root).as_posix()
         for path in root.rglob("*")

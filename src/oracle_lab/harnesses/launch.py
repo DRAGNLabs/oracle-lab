@@ -1,6 +1,5 @@
 """Shared execution and artifact policy for one coding-agent turn."""
 
-import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,25 +28,6 @@ class AgentTurnRequest:
     prompt: Path
     working_directory: str
     artifact_directory: Path
-
-
-def read_trace(path: Path) -> tuple[list[dict], int]:
-    """A JSON Lines trace's events, and how many non-blank lines were not JSON objects."""
-    events, malformed = [], 0
-    if path.exists():
-        for line in path.read_text(errors="replace").splitlines():
-            if not line.strip():
-                continue
-            try:
-                event = json.loads(line)
-            except json.JSONDecodeError:
-                malformed += 1
-                continue
-            if isinstance(event, dict):
-                events.append(event)
-            else:
-                malformed += 1
-    return events, malformed
 
 
 def turn_status(outcome: CommandResult, parsed: dict) -> str:

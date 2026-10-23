@@ -26,6 +26,7 @@ ORACLE_USER = "10001:10001"
 
 class Profile(Enum):
     GENERATION = "generation"
+    LOCALIZATION = "localization"
     EVALUATION = "evaluation"
     REFERENCE = "reference"
     JUDGE = "judge"
@@ -205,11 +206,6 @@ def create_sandbox_container(
     image: str,
     config: RunConfig | ClassificationConfig,
     profile: Profile,
-    *,
-    name: str | None = None,
-    network_mode: str = "bridge",
-    labels: dict[str, str] | None = None,
-    container_user: str = "root",
 ) -> Container:
     """Create a stopped container with the benchmark's standard isolation limits."""
     runtime = config.require_runtime()
@@ -218,16 +214,17 @@ def create_sandbox_container(
         image,
         command=["-c", "sleep infinity"],
         entrypoint="/bin/bash",
-        name=name or "oracle-lab-" + uuid4().hex[:16],
+        name="oracle-lab-" + uuid4().hex[:16],
         detach=True,
         init=True,
         platform=runtime.platform,
-        user=container_user,
+        user="root",
         mem_limit=limits.memory,
         nano_cpus=int(limits.cpus * 1_000_000_000),
         security_opt=["no-new-privileges"],
-        network_mode=network_mode,
-        labels={"oracle-lab.profile": profile.value, **(labels or {})},
+        # Every profile uses the ordinary outbound bridge, so tests see one environment.
+        network_mode="bridge",
+        labels={"oracle-lab.profile": profile.value},
         # Every profile imports the same code, so the agent tests what evaluation runs.
         environment={"PYTHONPATH": runtime.pythonpath} if runtime.pythonpath else None,
         use_config_proxy=False,

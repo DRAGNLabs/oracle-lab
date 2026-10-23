@@ -34,7 +34,7 @@ _PYTEST_COUNT = re.compile(
 
 
 @dataclass(frozen=True)
-class Repository:
+class Checkout:
     """Where paths in a trace resolve: the checkout root and the generated test directory."""
 
     workdir: str  # e.g. /testbed

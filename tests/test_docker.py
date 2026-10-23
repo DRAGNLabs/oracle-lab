@@ -40,7 +40,7 @@ def test_local_sdk_build_exec_and_copy(tmp_path):
     if not saved:
         pytest.skip("Set ORACLE_LAB_SMOKE_RUN to use a local prepared runtime")
     saved = Path(saved).resolve()
-    saved_paths = RunPaths.open(saved)
+    saved_paths = RunPaths(saved)
     config = load_config(saved_paths.config, resolved=True)
     parent = read_json(saved_paths.runtime)["image"]
     context = tmp_path / "context"
@@ -105,7 +105,7 @@ def test_reconstruct_privileged_judge_workspace(tmp_path, request):
     if not saved:
         pytest.skip("Set ORACLE_LAB_SMOKE_RUN to use a completed saved run")
     saved = Path(saved).resolve()
-    saved_paths = RunPaths.open(saved)
+    saved_paths = RunPaths(saved)
     config = load_config(saved_paths.config, resolved=True)
     config.judge = JudgeConfig(
         rubric=str(Path(__file__).parents[1] / "prompts/judge/generated-test-evaluation-rubric.md"),
@@ -235,7 +235,7 @@ def test_real_requests_pair_and_artifact_copy(tmp_path, visibility, monkeypatch,
     if not saved:
         pytest.skip("Set ORACLE_LAB_SMOKE_RUN to a run with a prepared Requests smoke image")
     saved = Path(saved).resolve()
-    saved_paths = RunPaths.open(saved)
+    saved_paths = RunPaths(saved)
     config = load_config(saved_paths.config, resolved=True)
     config.task.existing_tests = visibility
     instance = read_instance_record(saved_paths.instance)
@@ -276,7 +276,7 @@ def test_localize_reads_the_saved_image_and_reproduces_the_saved_target(tmp_path
     saved = os.environ.get("ORACLE_LAB_SMOKE_RUN")
     if not saved:
         pytest.skip("Set ORACLE_LAB_SMOKE_RUN to a localized run")
-    saved_paths = RunPaths.open(Path(saved).resolve())
+    saved_paths = RunPaths(Path(saved).resolve())
     if not saved_paths.target.is_file():
         pytest.skip("The saved run is not localized")
     config = load_config(saved_paths.config, resolved=True)
@@ -310,7 +310,7 @@ def test_runtime_build_removes_or_refuses_a_task_record(tmp_path, planted, build
     saved = os.environ.get("ORACLE_LAB_SMOKE_RUN")
     if not saved:
         pytest.skip("Set ORACLE_LAB_SMOKE_RUN to use a local prepared runtime")
-    saved_paths = RunPaths.open(Path(saved).resolve())
+    saved_paths = RunPaths(Path(saved).resolve())
     platform = load_config(saved_paths.config, resolved=True).require_runtime().platform
     context = tmp_path / "context"
     context.mkdir()

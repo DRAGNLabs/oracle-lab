@@ -47,18 +47,8 @@ FAILURE_MODES = {
     "explained_bug_away": "Explained the bug away",
     "flagged_bug": "Flagged the bug",
 }
-FailureModeKey = Literal[
-    "never_saw_bug",
-    "saw_bug_untested",
-    "copied_buggy_output",
-    "copied_existing_tests",
-    "ignored_available_docs",
-    "contradicted_read_docs",
-    "changed_test_to_pass",
-    "doubted_moved_on",
-    "explained_bug_away",
-    "flagged_bug",
-]
+# One list of keys: the type is built from the dict, so a new label is one edit.
+FailureModeKey = Literal[tuple(FAILURE_MODES)]  # pyright: ignore[reportInvalidTypeForm]
 # Trace step numbers, as the review page's timeline shows them. When the trace could
 # not be built, they are line numbers of the raw harness trace instead.
 TraceSteps = Annotated[list[Annotated[int, Field(ge=0)]], Field(min_length=1)]
@@ -206,11 +196,6 @@ def parse_judgment(raw: str) -> CompletedJudgment | UnsuccessfulTurn:
         return CompletedJudgment.model_validate(parse_json_object(raw))
     except (json.JSONDecodeError, ValidationError, ValueError) as error:
         return UnsuccessfulTurn(status="invalid_output", error=str(error))
-
-
-def skipped_judgment(reason: str) -> SkippedJudgment:
-    """Represent a judge turn that was inapplicable and therefore never launched."""
-    return SkippedJudgment(reason=reason)
 
 
 def validate_judgment(value: object) -> JudgmentResult:

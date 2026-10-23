@@ -204,7 +204,7 @@ def test_run_fills_the_agent_prompt_environment(tmp_path, monkeypatch):
 
     run_dir = run_module.run(config)
 
-    assert RunPaths.open(run_dir).prompt.read_text() == (
+    assert RunPaths(run_dir).prompt.read_text() == (
         f"Write to oracle_tests from {runtime.workdir} using {runtime.python}; "
         f"target {localized_target()['text']}; $HOME remains literal."
     )
@@ -243,7 +243,7 @@ def test_a_repository_run_never_localizes(tmp_path, monkeypatch):
     run_dir = run_module.run(config)
 
     run_module.localize.assert_not_called()
-    assert RunPaths.open(run_dir).prompt.read_text() == "Generate tests"
+    assert RunPaths(run_dir).prompt.read_text() == "Generate tests"
 
 
 def test_a_localize_failure_stops_the_run_at_that_stage(tmp_path, monkeypatch):
@@ -260,7 +260,7 @@ def test_a_localize_failure_stops_the_run_at_that_stage(tmp_path, monkeypatch):
     (run_dir,) = OutputPaths(Path(config.output)).runs.iterdir()
     final = read_json(run_dir / "status.json")
     assert (final["stage"], final["state"]) == ("localize", "failed")
-    assert not RunPaths.open(run_dir).prompt.exists()
+    assert not RunPaths(run_dir).prompt.exists()
     run_module.check_reference.assert_not_called()
 
 
@@ -279,7 +279,7 @@ def test_run_renders_each_bundled_agent_prompt(tmp_path, monkeypatch, name, scop
     install_pipeline_fakes(monkeypatch, runtime, instance)
 
     run_dir = run_module.run(config)
-    prompt = RunPaths.open(run_dir).prompt.read_text()
+    prompt = RunPaths(run_dir).prompt.read_text()
 
     assert "oracle_tests" in prompt
     assert runtime.python in prompt
@@ -303,7 +303,7 @@ def test_saved_config_points_at_the_run_s_own_rubric_copy(tmp_path, monkeypatch)
 
     run_dir = run_module.run(config)
 
-    paths = RunPaths.open(run_dir)
+    paths = RunPaths(run_dir)
     assert paths.judge.rubric.read_bytes() == source_rubric.read_bytes()
 
     # Reload the way `evaluate` and `judge` do, from a different working directory.
@@ -324,7 +324,7 @@ def test_judge_failure_preserves_completed_evaluation(tmp_path, monkeypatch):
     final = read_json(run_dir / "status.json")
     assert final["state"] == "completed"
     assert final["judge_status"] == "failed"
-    assert read_json(RunPaths.open(run_dir).judge.judgment)["status"] == "failed"
+    assert read_json(RunPaths(run_dir).judge.judgment)["status"] == "failed"
 
 
 def test_empty_generation_skips_configured_judge(tmp_path, monkeypatch):
@@ -341,7 +341,7 @@ def test_empty_generation_skips_configured_judge(tmp_path, monkeypatch):
 
     run_dir = run_module.run(config)
 
-    paths = RunPaths.open(run_dir)
+    paths = RunPaths(run_dir)
     assert read_json(paths.status)["judge_status"] == "skipped"
     assert read_json(paths.judge.judgment) == {
         "status": "skipped",

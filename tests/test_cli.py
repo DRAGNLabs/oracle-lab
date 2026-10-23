@@ -75,7 +75,7 @@ def test_judge_loads_credentials_and_uses_saved_run(tmp_path, monkeypatch):
     (tmp_path / "status.json").write_text('{"state": "completed"}\n')
 
     config = object()
-    monkeypatch.setattr(cli, "_load_saved_run", lambda path: (config, cli.RunPaths.open(path)))
+    monkeypatch.setattr(cli, "_load_saved_run", lambda path: (config, cli.RunPaths(path)))
 
     def invoke(loaded_config, paths):
         assert loaded_config is config

@@ -53,7 +53,7 @@ def localize(
     diffs = production_diffs(instance.golden_patch, runtime.source_roots)
     changes = []
     with (
-        open_sandbox(client, image, config, Profile.REFERENCE, paths.target_log) as sandbox,
+        open_sandbox(client, image, config, Profile.LOCALIZATION, paths.target_log) as sandbox,
         tempfile.TemporaryDirectory() as scratch,
     ):
         # Read the code the agent will see: setup steps in the image can edit

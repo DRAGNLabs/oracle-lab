@@ -10,8 +10,7 @@ import threading
 from pathlib import Path
 from string import Template
 
-from oracle_lab.io import read_json
-from oracle_lab.results import InstanceRecord
+from oracle_lab.results import MATRIX_CELLS, InstanceRecord
 from oracle_lab.review.contracts import RATING_DEFINITIONS, require_rater
 from oracle_lab.review.sources import SourceView, open_views
 from oracle_lab.review.store import read_review, save_review
@@ -22,6 +21,12 @@ from oracle_lab.review.targets import (
     UnreviewableTarget,
     find_problems,
     find_targets,
+)
+from oracle_lab.trace.events import (
+    ACTION_LABELS,
+    CATEGORY_LABELS,
+    FLAGGED_CATEGORIES,
+    read_run_trace,
 )
 
 HOW_TO_REVIEW = Path(__file__).resolve().parent / "templates/how-to-review.md"
@@ -61,8 +66,9 @@ class ReviewSession:
         self._traces: dict[str, dict] = {}
 
     def listing(self) -> dict:
-        """Every problem with its tasks in rating order and this rater's progress, and
-        every target that cannot be reviewed.
+        """Every problem with its tasks in rating order and this rater's progress,
+        every target that cannot be reviewed, and the names the page shows for trace
+        actions, file categories, and matrix cells.
 
         Each task carries its stage, its label (harness, model, and scope for a run),
         its question keys, and whether this rater has saved a review.
@@ -71,6 +77,12 @@ class ReviewSession:
             "rater": self.rater,
             "rating_definitions": RATING_DEFINITIONS,
             "how_to_review": how_to_review(),
+            "labels": {
+                "actions": ACTION_LABELS,
+                "categories": CATEGORY_LABELS,
+                "flagged_categories": list(FLAGGED_CATEGORIES),
+                "cells": {cell.value: cell.label for cell in MATRIX_CELLS},
+            },
             "problems": [
                 {
                     "instance_id": problem.instance_id,
@@ -164,7 +176,7 @@ class ReviewSession:
                         "This run's trace could not be built when it was judged; "
                         "the judge read the raw trace (agent-trace.jsonl in Evidence)."
                     )
-                self._traces[target_id] = read_json(target.paths.judge.trace)
+                self._traces[target_id] = read_run_trace(target.paths.judge.trace).to_json()
             return self._traces[target_id]
 
     def submit(self, target_id: str, raw: str) -> dict:

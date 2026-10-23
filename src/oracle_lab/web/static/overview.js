@@ -1,17 +1,10 @@
 // A judgment's Overview tab: the run, its outcomes, the agent's coverage of the patched
 // lines, the edit facts, and the generated tests. The problem itself is the Problem tab.
 
-import { testName } from "./labels.js";
+import { labels, testName } from "./labels.js";
 import { esc, fileHtml, fileLink, markdown, testLink } from "./render.js";
 import { api, state } from "./state.js";
 import { loadTrace } from "./trace.js";
-
-const CELLS = {
-  fail_on_buggy_pass_on_golden: "Fails on buggy, passes on golden",
-  pass_on_both: "Passes on both",
-  fail_on_both: "Fails on both",
-  pass_on_buggy_fail_on_golden: "Passes on buggy, fails on golden",
-};
 
 export function renderOverview(panel) {
   const target = state.target;
@@ -135,7 +128,7 @@ function forbiddenChanges(submission) {
 function matrixTable(matrix) {
   const cell = (key, expected = false) => {
     const count = matrix[key] ?? 0;
-    return `<td class="${expected ? "expected" : ""} ${count ? "" : "zero"}" title="${CELLS[key]}">${count}</td>`;
+    return `<td class="${expected ? "expected" : ""} ${count ? "" : "zero"}" title="${labels().cells[key]}">${count}</td>`;
   };
   return `
     <table class="matrix" aria-label="Paired outcomes: buggy result by golden result">
@@ -168,7 +161,7 @@ function outcomeTable({ tests, other_outcomes: other }) {
           </td>
           <td>${result(row.buggy)}</td>
           <td>${result(row.golden)}</td>
-          <td>${row.cell ? CELLS[row.cell] : "Incomplete"}</td>
+          <td>${row.cell ? labels().cells[row.cell] : "Incomplete"}</td>
         </tr>`).join("")}
       </tbody>
     </table>`;

@@ -410,7 +410,7 @@ def _link(paths: RunPaths, path: Path) -> str:
     return (
         path.relative_to(paths.root).as_posix()
         if path.is_relative_to(paths.root)
-        else (path.as_posix())
+        else path.as_posix()
     )
 
 

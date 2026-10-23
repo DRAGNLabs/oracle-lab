@@ -3,7 +3,7 @@
 // rest) when toggled. Rows touching patched lines are marked strongly, rows touching
 // only a patched file faintly.
 
-import { ACTION_LABELS, CATEGORY_LABELS, DESCRIPTIONS, editFacts, tag } from "./labels.js";
+import { DESCRIPTIONS, labels, editFacts, tag } from "./labels.js";
 import { esc } from "./render.js";
 
 const NO_FILE = "(no file)";
@@ -16,7 +16,7 @@ export function showTimeline(container, trace, { lanesByFile, selected, onSelect
   const header = laneKeys
     .map((key) => {
       // The last two path parts, so `tests/conftest.py` and `oracle_tests/conftest.py` differ.
-      const label = lanesByFile ? key.split("/").slice(-2).join("/") : ACTION_LABELS[key];
+      const label = lanesByFile ? key.split("/").slice(-2).join("/") : labels().actions[key];
       const color = lanesByFile ? "" : ` style="--lane: var(--a-${key})"`;
       const tip = lanesByFile ? key : DESCRIPTIONS.action[key] || key;
       return `<div class="lane-head${lanesByFile ? "" : " typed"}"${color} data-tip="${esc(tip)}"><span>${esc(label)}</span></div>`;
@@ -53,7 +53,7 @@ function row(event, index, laneKeys, lanesByFile, isSelected, lastPart, factLabe
     // A chained command's exit code belongs to the whole chain; show it once, at the end.
     event.exit_code && lastPart ? tag(`exit ${event.exit_code}`, DESCRIPTIONS.tag.exit) : "",
     ...factLabels,
-    ...categories(event).map((category) => tag(CATEGORY_LABELS[category] || category, DESCRIPTIONS.tag[category], `cat-${category}`)),
+    ...categories(event).map((category) => tag(labels().categories[category] || category, DESCRIPTIONS.tag[category], `cat-${category}`)),
   ].join("");
   const expanded = isSelected && (event.action === "reasoning" || event.action === "message")
     ? `<div class="full-text">${esc(event.text)}</div>`
@@ -83,7 +83,7 @@ function factsByEdit(trace) {
 function lanes(trace, lanesByFile) {
   if (!lanesByFile) {
     const used = new Set(trace.events.map((event) => event.action));
-    return Object.keys(ACTION_LABELS).filter((key) => used.has(key));
+    return Object.keys(labels().actions).filter((key) => used.has(key));
   }
   const counts = new Map();
   const rank = new Map(); // 0: patched, 1: test, 2: other
@@ -113,9 +113,9 @@ function strongestOverlap(event) {
   return levels.includes("lines") ? "lines" : levels.includes("file") ? "file" : "none";
 }
 
-// Categories worth flagging on a row: everything except plain source and generated tests.
+// Categories worth flagging on a row, as the server names them.
 function categories(event) {
-  const shown = new Set(["test", "docs", "changelog", "config", "outside"]);
+  const shown = new Set(labels().flagged_categories);
   return [...new Set(event.touches.map((touch) => touch.category))].filter((category) => shown.has(category));
 }
 

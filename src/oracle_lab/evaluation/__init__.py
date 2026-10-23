@@ -48,7 +48,6 @@ def run_tests(
         "workdir": runtime.workdir,
         "output": "/tmp/oracle-results",
         "targets": targets,
-        "source_roots": runtime.source_roots,
         "import_modules": runtime.import_modules,
         "pytest_plugins": runtime.pytest_plugins,
     }
@@ -149,8 +148,8 @@ def run_version(
                 instance.base_commit, directory, reference=profile is Profile.REFERENCE
             )
             if version == "golden":
+                # The image's editable install picks up the patched sources directly.
                 workspace.apply_patch(instance.golden_patch, directory / "repair.patch")
-                workspace.rebuild()
             targets = setup(sandbox, workspace, directory)
             return run_tests(sandbox, config, targets, directory)
     except (RuntimeError, OSError, ValueError, DockerException) as exc:

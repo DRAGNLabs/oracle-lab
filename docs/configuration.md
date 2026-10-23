@@ -381,7 +381,7 @@ fills them in from the SWE-bench instance and its own pinned versions. An input
 file that sets either is rejected.
 
 - `runtime`: the source image, platform, workdir, Python, optional source import
-  path, rebuild command, source roots, import probes, required pytest plugins,
+  path, source roots, import probes, required pytest plugins,
   the repository's existing-test globs, and any test-tool versions that image
   needs.
 - `toolchain`: the Node image, `harnesses` (the pinned Codex, Claude Code, and
@@ -418,7 +418,7 @@ Its top-level fields:
 
 [`configs/classification/example.yaml`](../configs/classification/example.yaml)
 is a complete example. Paths are relative to the YAML file. As for runs, Oracle
-Bench generates `runtime` and `toolchain` and saves them with the attempt; they
+Lab generates `runtime` and `toolchain` and saves them with the attempt; they
 are not accepted as input.
 
 ## Sample configurations

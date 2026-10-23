@@ -21,11 +21,14 @@ CELL_BY_OUTCOMES = {cell.outcomes: cell for cell in MATRIX_CELLS}
 def incomplete_result(directory: Path, status: str, reason: str) -> VersionResult:
     """Record why a version produced no comparable outcomes, keeping partial evidence.
 
-    This runs on failure paths, so unreadable partial evidence is replaced rather
-    than raised. The original file stays on disk as raw evidence either way.
+    This runs on failure paths, so unreadable partial evidence is set aside rather
+    than raised: the runner's own file is kept as `tests.raw.json`.
     """
     path = directory / "tests.json"
     result = _partial_result(path)
+    if result is None:
+        path.replace(directory / "tests.raw.json")
+        result = VersionResult(status="running")
     result = result.model_copy(update={"status": status, "error": reason})
     write_result(path, result)
     return result
@@ -80,10 +83,11 @@ def pair_results(buggy: VersionResult, golden: VersionResult) -> PairedResult:
     )
 
 
-def _partial_result(path: Path) -> VersionResult:
+def _partial_result(path: Path) -> VersionResult | None:
+    """The saved result, a blank one when there is none, or None when it is unreadable."""
     if not path.exists():
         return VersionResult(status="running")
     try:
         return VersionResult.model_validate(read_json(path))
     except (OSError, ValueError):
-        return VersionResult(status="running")
+        return None

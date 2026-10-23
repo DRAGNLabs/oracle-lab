@@ -68,6 +68,8 @@ def test_unreadable_runner_output_becomes_an_explicit_incomplete_result(config, 
 
     assert result.status == "runner_error"
     assert "Unreadable runner output" in result.error
+    # The runner's own file is kept beside the normalized one.
+    assert "not an object" in (tmp_path / "tests.raw.json").read_text()
 
 
 def test_runner_interruption_survives_failed_partial_collection(config, tmp_path):

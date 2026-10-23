@@ -48,6 +48,10 @@ def test_the_listing_groups_tasks_by_problem_with_classification_first(session):
     assert set(listing["rating_definitions"]) == {"agree", "disagree"}
     assert "- **Disagree:** You would give a different answer" in listing["how_to_review"]
     assert "${" not in listing["how_to_review"]
+    labels = json.loads(json.dumps(listing["labels"]))  # as the page receives them
+    assert labels["actions"]["probe_code"] == "Probe code"
+    assert "source" not in labels["flagged_categories"]
+    assert labels["cells"]["fail_on_both"] == "Fail on both"
     [problem] = listing["problems"]
     assert (problem["instance_id"], problem["title"]) == ("owner__project-1", "Broken behavior.")
     assert [(task["id"], task["stage"]) for task in problem["tasks"]] == [

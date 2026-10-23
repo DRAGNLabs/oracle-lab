@@ -2,37 +2,20 @@
 // facts on rows and test file versions. One table feeds the hover text and the legend.
 
 import { esc } from "./render.js";
+import { state } from "./state.js";
 
-export const ACTION_LABELS = {
-  read: "Read",
-  search: "Search",
-  edit_test: "Edit test",
-  edit_source: "Edit source",
-  run_tests: "Run tests",
-  probe_code: "Probe code",
-  run_other: "Run other",
-  reasoning: "Reasoning",
-  message: "Message",
-  failed_call: "Failed call",
-};
-
-// File categories as the page names them.
-export const CATEGORY_LABELS = {
-  source: "source",
-  test: "existing test",
-  generated_test: "generated test",
-  docs: "docs",
-  changelog: "changelog",
-  config: "config",
-  outside: "outside repo",
-};
+// Names of action types, file categories, and matrix cells, from the server's listing,
+// which also names them in the judge's trace summary.
+export function labels() {
+  return state.listing.labels;
+}
 
 // What each color, tag, and fact on the page means. Tags show these on hover, and the
 // Legend tab lists them all, so the wording lives only here.
 export const DESCRIPTIONS = {
   action: {
     read: "Read a file, with a tool or a shell command such as cat, sed, or head.",
-    search: "Searched files by text or name: grep, rg, find, ls, or a search tool.",
+    search: "Searched file contents: grep, rg, ag, ack, git grep, or a search tool. find and ls are Run other.",
     edit_test: "Wrote or changed a test file: under the generated test directory, or a test file by path.",
     edit_source: "Wrote or changed a file that is not a test.",
     run_tests: "Ran pytest.",

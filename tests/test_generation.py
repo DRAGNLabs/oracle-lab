@@ -28,13 +28,20 @@ def test_only_new_regular_files_under_generated_directory_are_allowed():
     assert forbidden == ["app.py", "oracle_tests/escape", "tests/test_old.py"]
 
 
+def test_a_name_no_repository_path_may_have_is_a_forbidden_change():
+    before = {"a.py": {"kind": "file", "sha256": "1"}}
+    after = {**before, "-v": {"kind": "file", "sha256": "2"}}
+
+    assert changed_files(before, after, "oracle_tests") == ([], ["-v"])
+
+
 def test_bundle_tampering_is_rejected(tmp_path):
     paths = RunPaths.create(tmp_path)
     written = write_submission(paths, {"oracle_tests/test_new.py": "def test_a(): pass\n"})
-    assert verify_bundle(RunPaths.open(tmp_path)) == written
+    assert verify_bundle(RunPaths(tmp_path)) == written
     (paths.submission / "files/oracle_tests/test_new.py").write_text("modified")
     with pytest.raises(ValueError, match="checksum"):
-        verify_bundle(RunPaths.open(tmp_path))
+        verify_bundle(RunPaths(tmp_path))
 
 
 def test_unmanifested_files_are_not_transferred_to_evaluation(tmp_path):
@@ -42,7 +49,7 @@ def test_unmanifested_files_are_not_transferred_to_evaluation(tmp_path):
     write_submission(paths, {})
     (paths.submission / "files/extra.py").write_text("unexpected code")
     with pytest.raises(ValueError, match="unmanifested"):
-        verify_bundle(RunPaths.open(tmp_path))
+        verify_bundle(RunPaths(tmp_path))
 
 
 def test_empty_bundle_has_a_real_files_directory(tmp_path):

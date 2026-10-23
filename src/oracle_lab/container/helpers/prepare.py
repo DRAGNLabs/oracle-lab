@@ -1,4 +1,4 @@
-"""Finalize a disposable repository workspace after rebuilding (Python 3.6+)."""
+"""Finalize a disposable repository workspace after its reset (Python 3.6+)."""
 
 import json
 import os

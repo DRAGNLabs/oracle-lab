@@ -79,7 +79,7 @@ rated, and a sidebar with reference (the problem, the stage rubric, and for a
 judgment the trace legend and the selected trace event). Drag the divider to
 resize the sidebar. It shows the rater what the judge had:
 
-- the judge's answers and justifications beside three rating buttons, and after
+- the judge's answers and justifications beside two rating buttons, and after
   saving, a link to the next unreviewed task;
 - a Problem tab: the issue, the task record's other texts, the golden patch, and
   the reference tests;

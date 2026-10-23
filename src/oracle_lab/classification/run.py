@@ -19,7 +19,7 @@ from oracle_lab.classification.workspace import build_classification_workspace
 from oracle_lab.config import ClassificationConfig
 from oracle_lab.container.images import prepare_image
 from oracle_lab.container.sandbox import Profile, docker_client, open_sandbox
-from oracle_lab.harnesses import provenance, run_turn, turn_request
+from oracle_lab.harnesses import record_turn_error, run_turn, save_raw_answer, turn_request
 from oracle_lab.harnesses.launch import require_credential
 from oracle_lab.harnesses.retry import with_retries
 from oracle_lab.instance import resolve_source
@@ -28,7 +28,7 @@ from oracle_lab.paths import AttemptPaths, ClassifierPaths, OutputPaths
 from oracle_lab.results import (
     InstanceRecord,
     failed_turn,
-    last_error_message,
+    turn_failure,
     write_result,
     write_status,
 )
@@ -104,23 +104,11 @@ def _classification_stage(
         result = with_retries(one_turn, lambda: archive_files([judge.agent], judge.agent_history))
         assert result is not None
     except (RuntimeError, OSError, ValueError, DockerException) as error:
+        # A classification already saved is kept; a late failure such as cleanup
+        # doesn't undo it.
+        record_turn_error(judge, judge.classification_raw, request, error)
         if judge.classification.is_file():
             return read_saved_classification(judge.classification).result
-        if not judge.result.is_file():
-            write_json(
-                judge.result,
-                {
-                    "status": "failed",
-                    "duration_seconds": 0,
-                    "usage": None,
-                    "errors": [{"message": str(error)}],
-                    **provenance(request),
-                },
-            )
-        if not judge.classification_raw.is_file():
-            judge.classification_raw.write_text(
-                judge.final.read_text(errors="replace") if judge.final.is_file() else ""
-            )
         result = failed_turn(str(error))
         _save_classification(judge, instance, result)
     return result
@@ -128,14 +116,8 @@ def _classification_stage(
 
 def _classify(harness_result: dict, judge: ClassifierPaths) -> ClassificationResult:
     """Save the raw response and turn it into a classification or a failure."""
-    raw = judge.final.read_text(errors="replace") if judge.final.is_file() else ""
-    judge.classification_raw.write_text(raw)
-    if harness_result["status"] == "completed":
-        return parse_classification(raw)
-    reason = last_error_message(harness_result["errors"]) or (
-        f"Classifier harness ended with status {harness_result['status']}"
-    )
-    return failed_turn(reason, timed_out=harness_result["status"] == "timeout")
+    raw = save_raw_answer(judge, judge.classification_raw)
+    return turn_failure(harness_result, "Classifier") or parse_classification(raw)
 
 
 def _save_classification(

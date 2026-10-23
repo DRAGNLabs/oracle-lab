@@ -12,6 +12,7 @@ from fixtures import (
     instance_record,
     judgment_labels,
     run_config,
+    run_status,
     usage,
     write_submission,
 )
@@ -47,7 +48,7 @@ def saved_run(tmp_path):
     paths.config.write_text(yaml.safe_dump(config.model_dump(), sort_keys=False))
     paths.judge.rubric.write_text("# Frozen rubric\n\nChoose labels.\n")
     write_json(paths.runtime, {"image": "example/runtime"})
-    write_json(paths.status, {"stage": "finished", "state": "completed", "judge_status": "missing"})
+    write_json(paths.status, run_status(judge_status="missing"))
     write_result(paths.instance, instance_record())
     write_json(paths.results, evaluation_result())
     write_submission(paths)
@@ -153,7 +154,7 @@ def test_transient_harness_failure_is_archived_and_retried(tmp_path, monkeypatch
     assert output.status == "completed"
     assert attempts == 2
     delay.assert_called_once_with(30)
-    archived = list(paths.judge.history.iterdir())
+    archived = list(paths.judge.agent_history.iterdir())
     assert len(archived) == 1
     assert (archived[0] / "agent/trace.jsonl").read_text() == "attempt 1\n"
 
@@ -183,7 +184,7 @@ def test_transient_harness_failure_stops_after_three_retries(tmp_path, monkeypat
     assert output.status == "failed"
     assert turn.call_count == 4
     assert [call.args[0] for call in delay.call_args_list] == [30, 90, 180]
-    assert len(list(paths.judge.history.iterdir())) == 3
+    assert len(list(paths.judge.agent_history.iterdir())) == 3
 
 
 @pytest.mark.parametrize(

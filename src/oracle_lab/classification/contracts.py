@@ -19,6 +19,7 @@ from oracle_lab.results import (
     StrictModel,
     UnsuccessfulTurn,
     parse_json_object,
+    read_status,
 )
 
 CLASSIFICATION_LABELS = {
@@ -73,20 +74,10 @@ ORACLE_SOURCES = {
     "implicit": ("crash_or_exception", "hang_or_resource"),
     "human": ("domain_knowledge", "intent_only"),
 }
-OracleKind = Literal["specified", "derived", "implicit", "human"]
-OracleSource = Literal[
-    "docstring_or_comment",
-    "signature_or_type",
-    "repository_documentation",
-    "external_specification",
-    "code_logic",
-    "analogous_code",
-    "property_relation",
-    "api_convention",
-    "crash_or_exception",
-    "hang_or_resource",
-    "domain_knowledge",
-    "intent_only",
+# Both types are built from `ORACLE_SOURCES`, so a new kind or source is one edit.
+OracleKind = Literal[tuple(ORACLE_SOURCES)]  # pyright: ignore[reportInvalidTypeForm]
+OracleSource = Literal[  # pyright: ignore[reportInvalidTypeForm]
+    tuple(source for sources in ORACLE_SOURCES.values() for source in sources)
 ]
 
 
@@ -211,8 +202,8 @@ def latest_classification(
     attempt = AttemptPaths(attempts[0])
     artifact = attempt.judge.classification
     if not artifact.is_file():
-        detail = read_json(attempt.status) if attempt.status.is_file() else {}
-        error = detail.get("error", "The latest classification attempt is incomplete")
+        status = read_status(attempt.status) if attempt.status.is_file() else None
+        error = (status and status.error) or "The latest classification attempt is incomplete"
         return {"status": "invalid_artifact", "error": error}, attempt
     try:
         saved = read_saved_classification(artifact)

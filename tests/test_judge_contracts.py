@@ -7,9 +7,9 @@ from fixtures import judgment_labels as labels
 from oracle_lab.io import read_json, write_json
 from oracle_lab.judge.contracts import (
     CompletedJudgment,
+    SkippedJudgment,
     mark_judgments_stale,
     parse_judgment,
-    skipped_judgment,
 )
 from oracle_lab.paths import RunPaths
 from oracle_lab.results import MAX_JUSTIFICATION_LENGTH, failed_turn
@@ -146,7 +146,7 @@ def test_failure_results_distinguish_failure_from_timeout():
 
 
 def test_skipped_judgment_records_why_no_turn_was_run():
-    assert skipped_judgment("generation failed").model_dump() == {
+    assert SkippedJudgment(reason="generation failed").model_dump() == {
         "status": "skipped",
         "reason": "generation failed",
     }

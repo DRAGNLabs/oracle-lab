@@ -26,7 +26,7 @@ def summarize_job(job: dict) -> dict:
     }
     if not job["run_dir"]:
         return summary
-    paths = RunPaths.open(Path(job["run_dir"]))
+    paths = RunPaths(Path(job["run_dir"]))
     # A failed run can still have spent money, so cost is read before results.
     cost = read_run_cost(paths.cost)
     summary.update(

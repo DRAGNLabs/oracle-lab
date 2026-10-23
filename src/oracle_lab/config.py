@@ -232,7 +232,6 @@ class RuntimeConfig(ConfigModel):
     pythonpath: ContainerPath | None = None
     pytest_plugins: list[str] = Field(default_factory=list)
     pytest_version: Version | None = None
-    rebuild: str = "python -m pip install --no-deps --no-build-isolation -e ."
 
 
 class ToolchainConfig(ConfigModel):

@@ -16,6 +16,7 @@ from fixtures import (
     judgment_ratings,
     out_of_scope_classification,
     run_config,
+    run_status,
     traced_run,
 )
 
@@ -32,7 +33,7 @@ from oracle_lab.review.targets import ClassificationTarget, JudgmentTarget
 
 RUN_ID = "20260101T000000Z-aaaaaaaa"
 ATTEMPT = "owner__project-1/20260101T000000Z-bbbbbbbb"
-FINISHED = {"stage": "finished", "state": "completed", "updated_at": "2026-01-01T00:00:00+00:00"}
+FINISHED = run_status()
 
 
 def finished(paths: RunPaths) -> RunPaths:
@@ -101,7 +102,7 @@ def test_a_reviewed_run_fills_every_run_table(tmp_path):
 def test_a_run_that_stopped_early_keeps_its_unwritten_columns_null(tmp_path):
     paths = RunPaths.create(OutputPaths(tmp_path).runs / RUN_ID)
     paths.config.write_text(yaml.safe_dump(run_config().model_dump(mode="json")))
-    write_json(paths.status, {"stage": "build", "state": "failed", "error": "no image"})
+    write_json(paths.status, run_status(stage="build", state="failed", error="no image"))
 
     collected = collect(tmp_path)
 

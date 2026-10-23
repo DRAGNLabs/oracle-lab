@@ -12,7 +12,7 @@ from oracle_lab.config import RunConfig
 from oracle_lab.container.images import require_saved_image
 from oracle_lab.container.sandbox import Profile, docker_client, open_sandbox
 from oracle_lab.generation import verify_bundle
-from oracle_lab.harnesses import provenance, run_turn, turn_request
+from oracle_lab.harnesses import record_turn_error, run_turn, save_raw_answer, turn_request
 from oracle_lab.harnesses.launch import require_credential
 from oracle_lab.harnesses.retry import with_retries
 from oracle_lab.io import archive_files, read_json, require_files, write_json
@@ -24,9 +24,11 @@ from oracle_lab.results import (
     InstanceRecord,
     SubmissionManifest,
     failed_turn,
-    last_error_message,
     read_evaluation_result,
     read_instance_record,
+    read_status,
+    save_status,
+    turn_failure,
 )
 
 
@@ -57,10 +59,12 @@ def judge(config: RunConfig, paths: RunPaths) -> JudgmentResult:
         judgment = judge_stage(client, config, paths, image, instance, evaluation, manifest)
 
     if paths.status.is_file():
-        status = read_json(paths.status)
-        status["judge_status"] = judgment.status
-        status["updated_at"] = datetime.now(timezone.utc).isoformat()
-        write_json(paths.status, status)
+        status = read_status(paths.status)
+        update = {
+            "judge_status": judgment.status,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        save_status(paths.status, status.model_copy(update=update))
     return judgment
 
 
@@ -97,29 +101,11 @@ def judge_stage(
                     _save_judgment(result, paths)
             return result, None
 
-        with_retries(attempt, lambda: archive_files([paths.judge.agent], paths.judge.history))
+        with_retries(attempt, lambda: archive_files([paths.judge.agent], paths.judge.agent_history))
     except (RuntimeError, OSError, ValueError, DockerException) as error:
-        # A judge failure never touches generation or evaluation evidence. A result
+        # A judge failure never touches generation or evaluation evidence. A judgment
         # already saved is kept, since a late failure such as cleanup doesn't undo it.
-        attempt_path = paths.judge.result
-        if attempt_path.is_file():
-            saved = read_json(attempt_path)
-        else:
-            saved = {
-                "status": "failed",
-                "duration_seconds": 0,
-                "usage": None,
-                "errors": [],
-                **provenance(request),
-            }
-        saved["errors"] = [*saved["errors"], {"message": str(error)}]
-        write_json(attempt_path, saved)
-        if not paths.judge.judgment_raw.exists():
-            # Keep whatever the model managed to write before the failure.
-            final = paths.judge.final
-            paths.judge.judgment_raw.write_text(
-                final.read_text(errors="replace") if final.is_file() else ""
-            )
+        record_turn_error(paths.judge, paths.judge.judgment_raw, request, error)
         if not paths.judge.judgment.is_file():
             write_json(paths.judge.judgment, failed_turn(str(error)).model_dump())
     return validate_judgment(read_json(paths.judge.judgment))
@@ -127,15 +113,6 @@ def judge_stage(
 
 def _save_judgment(result: dict, paths: RunPaths) -> None:
     """Parse and save the final judge attempt after retry policy is exhausted."""
-    final = paths.judge.final
-    raw = final.read_text(errors="replace") if final.is_file() else ""
-    paths.judge.judgment_raw.write_text(raw)
-    if result["status"] == "completed":
-        judgment = parse_judgment(raw)
-    else:
-        # Prefer the harness's own last error over a generic status line.
-        reason = last_error_message(result["errors"]) or (
-            f"Judge harness ended with status {result['status']}"
-        )
-        judgment = failed_turn(reason, timed_out=result["status"] == "timeout")
+    raw = save_raw_answer(paths.judge, paths.judge.judgment_raw)
+    judgment = turn_failure(result, "Judge") or parse_judgment(raw)
     write_json(paths.judge.judgment, judgment.model_dump())

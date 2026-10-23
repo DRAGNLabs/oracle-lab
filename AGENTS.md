@@ -19,8 +19,6 @@ Read these references before changing related behavior:
 - `docs/containers.md` for Docker transport and image builds.
 - `docs/research-framing.md` for the research questions, oracle states, and
   failure-mode start list behind the judge rubrics.
-- `docs/features/data-export/implementation.md` for the planned output layout
-  and Hugging Face dataset export.
 
 ## Architecture and trust boundaries
 

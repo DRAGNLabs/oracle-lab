@@ -54,6 +54,4 @@ def runtime_for(record: dict) -> RuntimeConfig:
         python="/usr/local/bin/python",
         pythonpath=layout.pythonpath,
         pytest_plugins=list(layout.pytest_plugins),
-        # The image already contains an editable install of the checkout.
-        rebuild=":",
     )

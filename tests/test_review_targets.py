@@ -187,4 +187,4 @@ def test_find_targets_refuses_a_directory_without_targets(tmp_path):
 
 
 def test_run_paths_name_the_reviews_directory(tmp_path):
-    assert RunPaths.open(tmp_path).judge.reviews == tmp_path / "judge/reviews"
+    assert RunPaths(tmp_path).judge.reviews == tmp_path / "judge/reviews"

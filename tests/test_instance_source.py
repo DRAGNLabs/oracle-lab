@@ -55,7 +55,6 @@ def test_local_record_resolves_instance_and_runtime(tmp_path):
     assert runtime.source_roots == ["requests"]
     assert runtime.import_modules == ["requests"]
     assert runtime.existing_test_globs == ["test_requests.py", "tests"]
-    assert runtime.rebuild == ":"
 
 
 def test_unknown_repository_has_no_guessed_runtime():

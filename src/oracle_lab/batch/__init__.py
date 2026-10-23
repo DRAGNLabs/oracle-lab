@@ -14,6 +14,7 @@ from oracle_lab.config import ConfigModel, NonBlank, RunConfig, load_config
 from oracle_lab.container.lifecycle import preserve_failure
 from oracle_lab.io import digest, read_json, write_json
 from oracle_lab.paths import OutputPaths
+from oracle_lab.results import read_status
 from oracle_lab.run import run
 
 
@@ -121,7 +122,7 @@ def run_batch(
             try:
                 run_dir = run_one(load_config(Path(job["config"])))
                 job["run_dir"] = str(run_dir)
-                job["state"] = read_json(run_dir / "status.json")["state"]
+                job["state"] = read_status(run_dir / "status.json").state
             except KeyboardInterrupt:
                 job["state"] = "interrupted"
                 raise

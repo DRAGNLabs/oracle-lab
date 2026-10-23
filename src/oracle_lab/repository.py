@@ -1,4 +1,4 @@
-"""The repository checkout inside a sandbox: reset, rebuild, patch, baseline.
+"""The repository checkout inside a sandbox: reset, patch, baseline.
 
 Shared by generation and evaluation. Kept separate from Docker transport and
 image builds, and distinct from the judge's privileged evidence workspace.
@@ -31,7 +31,6 @@ class Repository:
         Those are compiled modules and install metadata, which ``git clean`` would delete.
         """
         self.sandbox.run(["git", "reset", "--hard", base_commit], timeout=self.setup_timeout)
-        self.rebuild()
         settings = directory / "workspace.json"
         write_json(
             settings,
@@ -50,13 +49,6 @@ class Repository:
                 self.sandbox.helpers + "/prepare.py",
                 "/tmp/oracle-workspace.json",
             ],
-            timeout=self.setup_timeout,
-        )
-
-    def rebuild(self) -> None:
-        # A source adapter's installation recipe is intentionally a shell script.
-        self.sandbox.run(
-            ["/bin/bash", "-c", "set -euo pipefail\n" + self.runtime.rebuild],
             timeout=self.setup_timeout,
         )
 

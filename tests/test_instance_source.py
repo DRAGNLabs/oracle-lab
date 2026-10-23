@@ -38,6 +38,7 @@ def test_local_record_resolves_instance_and_runtime(tmp_path):
                 "source": {"instance": record["instance_id"], "record": "record.json"},
                 "agent": {"model": "test-model"},
                 "task": {"prompt": str(Path(__file__).parents[1] / "prompts/agent/unit-tests.md")},
+                "output": "output",
             }
         )
     )
@@ -94,6 +95,7 @@ def resolve_record(tmp_path, *, instance="psf__requests-2148", **changes):
                 "source": {"instance": instance, "record": "record.json"},
                 "agent": {"model": "test-model"},
                 "task": {"prompt": str(Path(__file__).parents[1] / "prompts/agent/unit-tests.md")},
+                "output": "output",
             }
         )
     )
@@ -156,6 +158,7 @@ def test_swebench_record_is_read_from_the_pinned_split_file(tmp_path, monkeypatc
                 "source": {"instance": "psf__requests-1142"},
                 "agent": {"model": "test-model"},
                 "task": {"prompt": str(Path(__file__).parents[1] / "prompts/agent/unit-tests.md")},
+                "output": "output",
             }
         )
     )

@@ -27,8 +27,8 @@ def test_a_judgment_is_rated_on_its_answers_and_every_failure_mode_decision(tmp_
     judgment = completed_judgment(added_failure_modes=[added_failure_mode()])
     target = JudgmentTarget.load(judged_run(tmp_path, judgment).root)
 
-    assert target.reviews == tmp_path / "judge/reviews"
-    assert target.review_history == tmp_path / "judge/reviews-history"
+    assert target.judge.reviews == tmp_path / "judge/reviews"
+    assert target.judge.review_history == tmp_path / "judge/reviews-history"
     keys = target.rating_keys()
     assert keys[:3] == ["tests_issue", "attempt_detail", "cheating"]
     assert keys[3:-1] == [f"failure_modes.{key}" for key in FAILURE_MODES]
@@ -47,15 +47,15 @@ def test_a_null_judge_answer_is_not_reviewed(tmp_path):
 
 
 def test_an_in_scope_classification_is_reviewed_on_all_seven_questions(tmp_path):
-    target = ClassificationTarget.load(classified_attempt(tmp_path))
+    target = ClassificationTarget.load(classified_attempt(tmp_path).root)
 
-    assert target.reviews == tmp_path / "reviews"
+    assert target.judge.reviews == tmp_path / "judge/reviews"
     assert len(target.rating_keys()) == 7
 
 
 def test_an_out_of_scope_classification_is_reviewed_on_one_question(tmp_path):
     result = {"status": "completed", **out_of_scope_classification()}
-    target = ClassificationTarget.load(classified_attempt(tmp_path, result))
+    target = ClassificationTarget.load(classified_attempt(tmp_path, result).root)
 
     assert target.rating_keys() == ["task_nature"]
 
@@ -70,14 +70,14 @@ def test_judge_evidence_is_what_the_judge_was_shown_without_the_views(tmp_path):
 
 
 def test_classification_evidence_is_the_record_and_the_rubric(tmp_path):
-    evidence = ClassificationTarget.load(classified_attempt(tmp_path)).evidence()
+    evidence = ClassificationTarget.load(classified_attempt(tmp_path).root).evidence()
 
     assert list(evidence) == ["instance.json", "rubric.md"]
 
 
 def test_each_target_reads_the_issue_its_judge_read(tmp_path):
     judgment = JudgmentTarget.load(judged_run(tmp_path / "run").root)
-    classification = ClassificationTarget.load(classified_attempt(tmp_path / "attempt"))
+    classification = ClassificationTarget.load(classified_attempt(tmp_path / "attempt").root)
 
     assert judgment.issue() == "# Issue\n\nIncorrect result.\n"
     assert classification.issue() == "Broken behavior."
@@ -85,7 +85,7 @@ def test_each_target_reads_the_issue_its_judge_read(tmp_path):
 
 def test_a_judgment_adds_its_submission_to_the_views(tmp_path):
     judgment = JudgmentTarget.load(judged_run(tmp_path / "run").root)
-    classification = ClassificationTarget.load(classified_attempt(tmp_path / "attempt"))
+    classification = ClassificationTarget.load(classified_attempt(tmp_path / "attempt").root)
 
     (generated,) = judgment.submitted_files().values()
     assert generated.content == b"def test_generated(): pass\n"
@@ -116,7 +116,7 @@ def test_a_judgment_that_is_not_completed_is_refused(tmp_path, judgment, reason)
 
 def test_a_failed_classification_is_refused(tmp_path):
     with pytest.raises(TargetError, match="failed, not completed"):
-        ClassificationTarget.load(classified_attempt(tmp_path, FAILED))
+        ClassificationTarget.load(classified_attempt(tmp_path, FAILED).root)
 
 
 def test_find_targets_lists_a_data_repository(tmp_path):
@@ -155,7 +155,7 @@ def test_problems_group_targets_by_instance_with_classifications_first(tmp_path)
 
 def test_find_targets_accepts_one_run_or_one_attempt(tmp_path):
     run = judged_run(tmp_path / "run").root
-    attempt = classified_attempt(tmp_path / "attempt")
+    attempt = classified_attempt(tmp_path / "attempt").root
 
     assert [type(t) for t in find_targets(run)[0]] == [JudgmentTarget]
     assert [type(t) for t in find_targets(attempt)[0]] == [ClassificationTarget]

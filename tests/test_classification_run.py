@@ -1,6 +1,5 @@
 import json
 from contextlib import contextmanager
-from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
@@ -20,6 +19,7 @@ from oracle_lab.classification.workspace import (
 )
 from oracle_lab.config import ClassificationConfig
 from oracle_lab.io import read_json, write_json
+from oracle_lab.paths import AttemptPaths
 from oracle_lab.results import write_result
 
 
@@ -41,6 +41,7 @@ def classification_config() -> ClassificationConfig:
             "source": {"instance": "owner__project-1"},
             "classifier": {"model": "classifier-model"},
             "rubric": "rubric.md",
+            "output": "output",
             "runtime": {
                 "image": "example/image:latest",
                 "source_roots": ["package"],
@@ -52,14 +53,14 @@ def classification_config() -> ClassificationConfig:
 
 
 def test_workspace_resets_base_checkout_and_exposes_only_declared_inputs(tmp_path):
-    (tmp_path / "inputs").mkdir()
+    attempt = AttemptPaths.create(tmp_path)
     instance = instance_record()
-    write_result(tmp_path / "inputs/instance.json", instance)
-    (tmp_path / "inputs/rubric.md").write_text("rubric")
+    write_result(attempt.instance, instance)
+    attempt.judge.rubric.write_text("rubric")
     sandbox = RecordingSandbox()
 
     spec = build_classification_workspace(
-        sandbox, classification_config(), tmp_path, "sha256:image", instance
+        sandbox, classification_config(), attempt, "sha256:image", instance
     )
 
     assert sandbox.commands[0][0] == [
@@ -76,21 +77,20 @@ def test_workspace_resets_base_checkout_and_exposes_only_declared_inputs(tmp_pat
     ]
     assert {artifact.source for artifact in spec.artifacts} == {
         "inputs/instance.json",
-        "inputs/rubric.md",
+        "judge/rubric.md",
     }
-    assert (tmp_path / "workspace-spec.json").is_file()
+    assert attempt.judge.workspace_spec.is_file()
 
 
 VALID_CLASSIFICATION = json.dumps(in_scope_classification())
 
 
 def prepared_attempt(tmp_path):
-    (tmp_path / "inputs").mkdir()
-    (tmp_path / "agent").mkdir()
+    attempt = AttemptPaths.create(tmp_path)
     instance = instance_record()
-    write_result(tmp_path / "inputs/instance.json", instance)
-    (tmp_path / "inputs/rubric.md").write_text("# Classification rubric\n")
-    return tmp_path, instance
+    write_result(attempt.instance, instance)
+    attempt.judge.rubric.write_text("# Classification rubric\n")
+    return attempt, instance
 
 
 def install_stage_fakes(monkeypatch, final=VALID_CLASSIFICATION, status="completed"):
@@ -99,7 +99,7 @@ def install_stage_fakes(monkeypatch, final=VALID_CLASSIFICATION, status="complet
     sandbox_context = context_of(sandbox)
 
     def turn(_sandbox, request):
-        assert request.prompt == request.artifact_directory.parent / "inputs/rubric.md"
+        assert request.prompt == request.artifact_directory.parent / "rubric.md"
         request.artifact_directory.mkdir(parents=True, exist_ok=True)
         (request.artifact_directory / "final.txt").write_text(final)
         result = {
@@ -131,13 +131,13 @@ def test_stage_saves_raw_response_normalized_result_and_provenance(tmp_path, mon
     )
 
     assert result.status == "completed"
-    assert (attempt / "classification.raw.txt").read_text() == VALID_CLASSIFICATION
-    saved = read_json(attempt / "classification.json")
+    assert (attempt.judge.classification_raw).read_text() == VALID_CLASSIFICATION
+    saved = read_json(attempt.judge.classification)
     assert saved["instance_id"] == instance.instance_id
     assert saved["base_commit"] == instance.base_commit
     assert saved["source_record_sha256"] == instance.source.record_sha256
     assert saved["result"]["defect_mechanisms"] == ["validation_checking"]
-    assert read_json(attempt / "agent/result.json")["model"] == "classifier-model"
+    assert read_json(attempt.judge.result)["model"] == "classifier-model"
 
 
 def test_invalid_model_output_is_preserved_without_retry(tmp_path, monkeypatch):
@@ -151,8 +151,8 @@ def test_invalid_model_output_is_preserved_without_retry(tmp_path, monkeypatch):
     )
 
     assert result.status == "invalid_output"
-    assert (attempt / "classification.raw.txt").read_text() == "explanation before JSON"
-    assert read_json(attempt / "classification.json")["result"]["status"] == "invalid_output"
+    assert (attempt.judge.classification_raw).read_text() == "explanation before JSON"
+    assert read_json(attempt.judge.classification)["result"]["status"] == "invalid_output"
     assert turn.call_count == 1
 
 
@@ -183,9 +183,9 @@ def test_a_transient_failure_is_retried_and_its_attempt_archived(tmp_path, monke
 
     assert result.status == "completed"
     assert waits == [30]
-    (archived,) = (attempt / "agent-history").iterdir()
+    (archived,) = attempt.judge.agent_history.iterdir()
     assert read_json(archived / "agent/result.json")["status"] == "failed"
-    assert read_json(attempt / "agent/result.json")["status"] == "completed"
+    assert read_json(attempt.judge.result)["status"] == "completed"
 
 
 @pytest.mark.parametrize(
@@ -204,7 +204,7 @@ def test_harness_failure_has_explicit_saved_status(
 
     assert result.status == classification_status
     assert result.error == "harness failed"
-    assert read_json(attempt / "classification.json")["result"]["status"] == (classification_status)
+    assert read_json(attempt.judge.classification)["result"]["status"] == (classification_status)
 
 
 def test_workspace_or_transport_failure_is_saved(tmp_path, monkeypatch):
@@ -221,8 +221,8 @@ def test_workspace_or_transport_failure_is_saved(tmp_path, monkeypatch):
 
     assert result.status == "failed"
     assert result.error == "workspace failed"
-    assert read_json(attempt / "agent/result.json")["errors"][-1]["message"] == ("workspace failed")
-    assert (attempt / "classification.raw.txt").read_text() == ""
+    assert read_json(attempt.judge.result)["errors"][-1]["message"] == ("workspace failed")
+    assert (attempt.judge.classification_raw).read_text() == ""
 
 
 def test_late_container_cleanup_failure_keeps_completed_classification(tmp_path, monkeypatch):
@@ -241,7 +241,7 @@ def test_late_container_cleanup_failure_keeps_completed_classification(tmp_path,
     )
 
     assert result.status == "completed"
-    assert read_json(attempt / "classification.json")["result"]["status"] == "completed"
+    assert read_json(attempt.judge.classification)["result"]["status"] == "completed"
 
 
 def test_classify_resolves_builds_and_records_attempt_lifecycle(tmp_path, monkeypatch):
@@ -249,7 +249,7 @@ def test_classify_resolves_builds_and_records_attempt_lifecycle(tmp_path, monkey
     rubric.write_text("# Rubric\n")
     config = classification_config()
     config.rubric = str(rubric)
-    config.output = str(tmp_path / "classifications")
+    config.output = str(tmp_path / "output")
     instance = instance_record()
     stages = []
 
@@ -280,19 +280,21 @@ def test_classify_resolves_builds_and_records_attempt_lifecycle(tmp_path, monkey
 
     monkeypatch.setattr("oracle_lab.classification.run.measure_spend", measure_spend)
 
-    attempt = classify(config)
+    root = classify(config)
 
+    attempt = AttemptPaths(root)
+    assert root.parent == tmp_path / "output/classifications" / instance.instance_id
     assert stages == [("sha256:image", instance.instance_id)]
     assert spent == [([config.classifier.harness], "cost.json")]
-    assert (attempt / "inputs/instance.json").is_file()
-    assert (attempt / "inputs/rubric.md").read_text() == "# Rubric\n"
-    assert read_json(attempt / "image-build/runtime.json") == {"image": "sha256:image"}
-    assert read_json(attempt / "status.json")["state"] == "completed"
+    assert attempt.instance.is_file()
+    assert attempt.judge.rubric.read_text() == "# Rubric\n"
+    assert read_json(attempt.runtime) == {"image": "sha256:image"}
+    assert read_json(attempt.status)["state"] == "completed"
 
 
 def test_missing_credential_fails_before_resolving_or_starting_docker(tmp_path, monkeypatch):
     config = classification_config()
-    config.output = str(tmp_path / "classifications")
+    config.output = str(tmp_path / "output")
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     resolve = Mock()
     docker = Mock()
@@ -311,7 +313,7 @@ def test_build_failure_records_failed_stage_in_created_attempt(tmp_path, monkeyp
     rubric.write_text("# Rubric\n")
     config = classification_config()
     config.rubric = str(rubric)
-    config.output = str(tmp_path / "classifications")
+    config.output = str(tmp_path / "output")
     instance = instance_record()
 
     client_context = context_of(Mock())
@@ -330,7 +332,7 @@ def test_build_failure_records_failed_stage_in_created_attempt(tmp_path, monkeyp
     with pytest.raises(RuntimeError, match="image build failed"):
         classify(config)
 
-    attempts = list((Path(config.output) / instance.instance_id).iterdir())
+    attempts = list((tmp_path / "output/classifications" / instance.instance_id).iterdir())
     assert len(attempts) == 1
     status = read_json(attempts[0] / "status.json")
     assert status["stage"] == "build"

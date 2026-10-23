@@ -54,7 +54,9 @@ def test_the_golden_view_also_has_the_repair(tmp_path, upstream):
 
 def test_a_classification_has_only_the_buggy_base_commit(tmp_path, upstream):
     instance = instance_record(base_commit=upstream.base_commit)
-    target = ClassificationTarget.load(classified_attempt(tmp_path / "attempt", instance=instance))
+    target = ClassificationTarget.load(
+        classified_attempt(tmp_path / "attempt", instance=instance).root
+    )
 
     views = open_views(target, remote=upstream.url, cache=tmp_path / "c")
 

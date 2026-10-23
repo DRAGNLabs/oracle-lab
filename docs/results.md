@@ -1,14 +1,33 @@
 # Results and artifacts reference
 
-Every `oracle-lab run` creates a timestamped run directory under the configured
-`output` path. It is the complete record of one agent attempt: its inputs, the
-resolved dataset instance, the runtime, the agent's activity, the captured
-submission, the reference check, the paired evaluations, and the report.
-
-## Directory layout
+Every command writes under one output root, the config's `output` path. The
+sample configs use `output/` in the repository root, which Git ignores:
 
 ```text
-runs/<run-id>/
+output/
+├── runs/<run-id>/                              # oracle-lab run
+├── preflight/<run-id>/                         # oracle-lab preflight
+├── batches/<batch-id>/                         # oracle-lab batch
+├── classifications/<instance-id>/<attempt-id>/ # oracle-lab classify
+└── agreement/<UTC timestamp>/                  # oracle-lab agreement (default)
+```
+
+Run, batch, and attempt IDs are the UTC start time and a random suffix, such as
+`20261023T193937Z-9101b7e0`.
+
+Each LLM judge's files sit in a `judge/` directory beside what it judged: a run's
+`judge/` holds the generated-test judge, and an attempt's `judge/` holds the
+classifier. Human reviews of either are in that `judge/reviews/<rater>/`.
+
+## Run directory layout
+
+A run directory is the complete record of one agent attempt: its inputs, the
+resolved dataset instance, the runtime, the agent's activity, the captured
+submission, the reference check, the paired evaluations, the judgment, and the
+report.
+
+```text
+<output>/runs/<run-id>/
 ├── status.json
 ├── cost.json
 ├── report.md
@@ -122,35 +141,37 @@ still repeats its own reference check.
 
 ## Classification attempts
 
-Task classifications are stored centrally, not in run directories:
+Task classifications are stored per task instance, not in run directories:
 
 ```text
-classifications/<instance-id>/<timestamp>-<id>/
+<output>/classifications/<instance-id>/<attempt-id>/
+├── status.json
+├── cost.json
 ├── inputs/
 │   ├── config.resolved.yaml
-│   ├── instance.json
-│   └── rubric.md
+│   └── instance.json
 ├── image-build/
-├── agent/
-├── agent-history/ (when a transient failure was retried)
-├── workspace-spec.json
-├── classification.raw.txt
-├── classification.json
-├── cost.json
-├── status.json
-├── reviews/<rater>/{review.json,provenance.json} (after human review)
-└── reviews-history/<rater>/<UTC timestamp>/ (replaced reviews)
+└── judge/
+    ├── rubric.md
+    ├── workspace.log
+    ├── workspace-spec.json
+    ├── agent/
+    ├── agent-history/ (when a transient failure was retried)
+    ├── classification.raw.txt
+    ├── classification.json
+    ├── reviews/<rater>/{review.json,provenance.json} (after human review)
+    └── reviews-history/<rater>/<UTC timestamp>/ (replaced reviews)
 ```
 
 Every `classify` call creates a new attempt. The classifier's files are never
 changed; human reviews are added beside them, in the same format as
 [`judge/reviews/`](#judgereviews). Their provenance names
-`classification.json` as the reviewed output and the classifier's harness and
-model from `agent/result.json`.
+`judge/classification.json` as the reviewed output and the classifier's harness
+and model from `judge/agent/result.json`.
 
 A run's report finds its classification like this:
 
-1. It looks in the `classifications` directory beside the run's `runs` output.
+1. It looks in `classifications/` in the run's output root.
 2. It picks the newest attempt for the run's exact `instance_id`.
 3. It checks that attempt's base commit and source record checksum.
 
@@ -225,7 +246,7 @@ The human-readable summary, in this order:
   private ground truth, which is written on the host and never reaches the
   generation container.
 
-`oracle-lab report runs/<run-id>` rebuilds this file from saved data. It runs
+`oracle-lab report output/runs/<run-id>` rebuilds this file from saved data. It runs
 no tests and calls no model.
 
 The judge shows as `disabled` when the run has no frozen rubric, and as `missing`
@@ -376,7 +397,8 @@ limit. The other files in `agent/` match their namesakes under `generation/`.
 ### `judge/reviews/`
 
 One directory per human rater, written by `oracle-lab review`. See
-[human review](judging.md#human-review).
+[human review](judging.md#human-review). A classification attempt's
+`judge/reviews/` has the same format.
 
 - `review.json`: `{"ratings": {item: rating}, "other_failure_modes": [...]}`.
   Each rating is `agree` or `disagree`, for exactly the items the judge answered:
@@ -385,9 +407,9 @@ One directory per human rater, written by `oracle-lab review`. See
   `other_failure_modes` holds the rater's own labels, each with `name`,
   `description`, and `steps`; it is empty for a classification.
 - `provenance.json`: what the review was based on. `stage`, `rater`, the
-  reviewed output's path (`judge/judgment.json`) and SHA-256, the judge's
-  harness and model from `agent/result.json`, and the SHA-256 of the stage
-  rubric and of `workspace-spec.json`.
+  reviewed output's path (`judge/judgment.json` or `judge/classification.json`)
+  and SHA-256, the judge's harness and model from `judge/agent/result.json`, and
+  the SHA-256 of `judge/rubric.md` and of `judge/workspace-spec.json`.
 
 Saving again moves the earlier pair to `reviews-history/<rater>/<UTC
 timestamp>/`.
@@ -672,7 +694,7 @@ repair, private test, and environment work before any money is spent on a model.
 Running:
 
 ```sh
-uv run oracle-lab evaluate runs/<run-id>
+uv run oracle-lab evaluate output/runs/<run-id>
 ```
 
 does three things:
@@ -708,7 +730,7 @@ the nearest stage log.
 ## Agreement reports
 
 `oracle-lab agreement` writes a directory, by default
-`agreement/<UTC timestamp>/`, holding:
+`output/agreement/<UTC timestamp>/` in the current directory, holding:
 
 - `agreement.json`: `created_at`, the `inputs` it read, every `raters` ID, and
   per stage (`judge`, `classification`) the number of targets and reviews and,
@@ -727,9 +749,10 @@ See [agreement](judging.md#agreement) for what each figure means.
 
 ## Batch artifacts
 
-`oracle-lab batch` writes a batch directory with the original manifest, the
-resolved job list with its checksums, the batch status, `summary.json`, and
-`report.md`.
+`oracle-lab batch` writes `<output>/batches/<batch-id>/` with the original
+manifest, the resolved job list with its checksums, the batch status,
+`summary.json`, and `report.md`. Every job config must name the same output root,
+so a batch's runs are in that root's `runs/`.
 
 The summary keeps each job's state, run-directory link, paired matrix counts,
 and generation measurements. A job whose run has judge files also
@@ -740,7 +763,7 @@ recorded as such. They never make a job with a completed evaluation count as
 unfinished on `--resume`.
 
 The Markdown job table shows each run ID as plain text beside the linked
-instance name. You can then find the run under `runs/<run-id>` without following
+instance name. You can then find the run under `<output>/runs/<run-id>` without following
 a link. A job that failed before creating a run shows `—`.
 
 `summary.json` distinguishes three denominators:

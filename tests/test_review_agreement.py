@@ -72,7 +72,7 @@ def data(tmp_path):
     )
     review(run_b, "alice", judgment_ratings(failure_modes__never_saw_bug="disagree"))
     review(run_b, "bob", judgment_ratings())
-    review(attempt / "reviews", "alice", {"task_nature": "disagree"})
+    review(attempt.judge.reviews, "alice", {"task_nature": "disagree"})
     return tmp_path
 
 

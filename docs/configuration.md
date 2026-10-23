@@ -15,11 +15,12 @@ jobs:
   - config: pytest-10051-codex.yaml
 execution:
   continue_on_error: true
-output: ../../batches
 ```
 
 Run it with `oracle-lab batch <manifest>`. Paths are relative to the manifest.
-`configs/validation/batch.yaml` is an example.
+`configs/validation/batch.yaml` is an example. A manifest has no `output` of its
+own: every job config must name the same output root, and the batch directory is
+saved in that root's `batches/`.
 
 How a batch runs:
 
@@ -30,7 +31,8 @@ How a batch runs:
 
 A run configuration has six top-level sections: `source`, `agent`, `judge`
 (optional), `task`, `limits`, and `output`. Only `source.instance`,
-`agent.model`, and `task.prompt` are required. Unknown settings are rejected.
+`agent.model`, `task.prompt`, and `output` are required. Unknown settings are
+rejected.
 
 ## Minimal configuration
 
@@ -43,6 +45,8 @@ agent:
 
 task:
   prompt: ../prompts/agent/unit-tests.md
+
+output: ../output
 ```
 
 For a localized SWE-bench assignment:
@@ -234,7 +238,7 @@ Codex picks its credential from the provider alone.
 
 The optional judge rates the generated tests, with access to private evidence.
 When this section is present, `run` calls the judge after paired evaluation.
-`oracle-lab judge runs/<run-id>` reruns the same stage from saved evidence.
+`oracle-lab judge output/runs/<run-id>` reruns the same stage from saved evidence.
 Without this section, a run makes no judge model call.
 
 ```yaml
@@ -363,9 +367,12 @@ container starts.
 ## `output`
 
 - **Type:** host directory path
-- **Default:** `runs`
+- **Required**
 
-Parent directory for timestamped run directories.
+The output root, relative to the config file. Each command writes into its own
+directory there: `run` into `runs/`, `preflight` into `preflight/`, `batch` into
+`batches/`, and `classify` into `classifications/`. The sample configs use the
+repository's `output/`. See [results](results.md) for the layout.
 
 ## Resolved-only sections
 
@@ -406,7 +413,8 @@ Its top-level fields:
 - `rubric`: the path to the task-classification rubric.
 - `limits`: setup time and container memory and CPU. `evaluation_seconds` is
   unused.
-- `output`: defaults to `classifications`.
+- `output`: the output root, as for runs. Attempts are saved in its
+  `classifications/`.
 
 [`configs/classification/example.yaml`](../configs/classification/example.yaml)
 is a complete example. Paths are relative to the YAML file. As for runs, Oracle

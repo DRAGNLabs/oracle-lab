@@ -33,7 +33,7 @@ def test_test_visibility_is_explicit_and_paths_are_config_relative(tmp_path, vis
     config = load_config(config_file(tmp_path, "task", "existing_tests", visibility))
     assert config.task.existing_tests == visibility
     assert config.task.prompt == str((tmp_path / "../prompts/agent/smoke-tests.md").resolve())
-    assert config.output == str((tmp_path / "../runs").resolve())
+    assert config.output == str((tmp_path / "../output").resolve())
 
 
 PROMPTS = Path(__file__).parents[1] / "prompts" / "agent"
@@ -283,7 +283,7 @@ def test_classification_config_is_independent_and_resolves_paths():
     assert config.source.dataset == "verified"
     assert config.classifier.multi_agent is False
     assert config.rubric.endswith("/prompts/judge/task-classification-rubric.md")
-    assert config.output.endswith("/classifications")
+    assert config.output == str(path.parents[2] / "output")
     assert config.runtime is None
 
 

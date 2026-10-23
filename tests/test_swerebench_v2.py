@@ -21,6 +21,7 @@ def load(tmp_path, record=RECORD, instance=RECORD["instance_id"]):
                 "source": {"kind": "swerebench_v2", "instance": instance, "record": "record.json"},
                 "agent": {"model": "test-model"},
                 "task": {"prompt": str(Path(__file__).parents[1] / "prompts/agent/unit-tests.md")},
+                "output": "output",
             }
         )
     )

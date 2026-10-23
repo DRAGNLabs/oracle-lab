@@ -7,17 +7,17 @@ from fixtures import completed_judgment, evaluation_result, judge_attempt
 from oracle_lab.batch import load_batch_config, run_batch
 from oracle_lab.batch.summary import _aggregate_judgments
 from oracle_lab.io import read_json, write_json
-from oracle_lab.paths import RunPaths
+from oracle_lab.paths import OutputPaths, RunPaths
 
 
-def write_run_config(path: Path, instance: str) -> None:
+def write_run_config(path: Path, instance: str, output: str = "output") -> None:
     path.write_text(
         yaml.safe_dump(
             {
                 "source": {"instance": instance},
                 "agent": {"model": "test-model"},
                 "task": {"prompt": "prompt.md"},
-                "output": "runs",
+                "output": output,
             }
         )
     )
@@ -29,7 +29,6 @@ def write_batch_config(path: Path, jobs: list[str]) -> None:
             {
                 "name": "test-batch",
                 "jobs": [{"config": job} for job in jobs],
-                "output": "batches",
             }
         )
     )
@@ -106,10 +105,21 @@ def test_batch_paths_are_relative_and_all_jobs_validate(tmp_path):
     manifest = tmp_path / "batch.yaml"
     write_batch_config(manifest, ["one.yaml", "two.yaml"])
 
-    config, paths = load_batch_config(manifest)
+    _, paths, output = load_batch_config(manifest)
 
-    assert config.output == str(tmp_path / "batches")
+    assert output == OutputPaths(tmp_path / "output")
     assert paths == [tmp_path / "one.yaml", tmp_path / "two.yaml"]
+
+
+def test_batch_jobs_must_share_one_output_root(tmp_path):
+    (tmp_path / "prompt.md").write_text("Generate tests")
+    write_run_config(tmp_path / "one.yaml", "owner__one-1")
+    write_run_config(tmp_path / "two.yaml", "owner__two-2", output="elsewhere")
+    manifest = tmp_path / "batch.yaml"
+    write_batch_config(manifest, ["one.yaml", "two.yaml"])
+
+    with pytest.raises(ValueError, match="share one output root"):
+        load_batch_config(manifest)
 
 
 def test_batch_continues_after_failure_and_aggregates_results(tmp_path):
@@ -124,7 +134,7 @@ def test_batch_continues_after_failure_and_aggregates_results(tmp_path):
         calls.append(config.source.instance)
         if config.source.instance == "owner__one-1":
             raise RuntimeError("setup failed")
-        run_dir = tmp_path / "runs" / config.source.instance
+        run_dir = tmp_path / "output/runs" / config.source.instance
         fake_result(run_dir, config.source.instance, detected=True)
         return run_dir
 
@@ -153,7 +163,7 @@ def test_a_non_compliant_run_stays_in_the_denominator_but_is_never_detected(tmp_
     write_batch_config(manifest, ["one.yaml", "two.yaml"])
 
     def run_one(config):
-        run_dir = tmp_path / "runs" / config.source.instance
+        run_dir = tmp_path / "output/runs" / config.source.instance
         # Both runs have a fail-on-buggy, pass-on-golden test; only one is compliant.
         compliant = config.source.instance == "owner__one-1"
         fake_result(run_dir, config.source.instance, detected=True, compliant=compliant)
@@ -178,7 +188,7 @@ def test_resume_skips_completed_jobs_and_retries_failed_job(tmp_path):
     def first_run(config):
         if config.source.instance == "owner__two-2":
             raise RuntimeError("temporary failure")
-        run_dir = tmp_path / "runs" / config.source.instance
+        run_dir = tmp_path / "output/runs" / config.source.instance
         fake_result(run_dir, config.source.instance)
         return run_dir
 
@@ -187,7 +197,7 @@ def test_resume_skips_completed_jobs_and_retries_failed_job(tmp_path):
 
     def resumed_run(config):
         resumed.append(config.source.instance)
-        run_dir = tmp_path / "runs" / config.source.instance
+        run_dir = tmp_path / "output/runs" / config.source.instance
         fake_result(run_dir, config.source.instance, detected=True)
         return run_dir
 
@@ -208,7 +218,7 @@ def test_batch_aggregates_judge_labels_disagreements_and_costs(tmp_path):
 
     def run_one(config):
         instance = config.source.instance
-        run_dir = tmp_path / "runs" / instance
+        run_dir = tmp_path / "output/runs" / instance
         if instance == "unrelated-detected":
             fake_result(run_dir, instance, detected=True)
             fake_judgment(
@@ -278,7 +288,7 @@ def test_failed_judgment_does_not_make_completed_batch_job_resumable(tmp_path):
     write_batch_config(manifest, ["one.yaml"])
 
     def first_run(config):
-        run_dir = tmp_path / "runs" / config.source.instance
+        run_dir = tmp_path / "output/runs" / config.source.instance
         fake_result(run_dir, config.source.instance)
         fake_judgment(run_dir, status="failed")
         return run_dir
@@ -351,5 +361,5 @@ def test_a_failing_summary_does_not_hide_an_interrupted_job(tmp_path, monkeypatc
         run_batch(manifest, run_one=interrupted)
 
     assert error.value.__notes__ == ["The batch summary could not be updated."]
-    (batch_dir,) = (tmp_path / "batches").iterdir()
+    (batch_dir,) = (tmp_path / "output/batches").iterdir()
     assert read_json(batch_dir / "status.json") == {"state": "interrupted"}

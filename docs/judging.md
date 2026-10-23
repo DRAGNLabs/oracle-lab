@@ -10,7 +10,7 @@ A run with a `judge` section is judged automatically after paired evaluation.
 To judge a saved run for the first time, or again:
 
 ```sh
-uv run oracle-lab judge runs/<run-id>
+uv run oracle-lab judge output/runs/<run-id>
 ```
 
 The command needs the configured judge credential and the saved runtime image.
@@ -56,8 +56,8 @@ shared with raters and how their reviews come back. Start the review page with:
 uv run oracle-lab review <dir> --rater <id>
 ```
 
-`<dir>` is a run, a classification attempt, or a directory holding `runs/` and
-`classifications/`, such as a review data repository. The command starts a local
+`<dir>` is a run, a classification attempt, or an output root holding `runs/`
+and `classifications/`, such as `output/` or a review data repository. The command starts a local
 web server on `127.0.0.1` and opens the browser. `--port` picks the port and
 `--no-browser` prints the URL instead of opening it. Press Ctrl+C to stop.
 
@@ -98,8 +98,9 @@ resize the sidebar. It shows the rater what the judge had:
 - the stage rubric.
 
 Unsaved ratings stay in the browser until the rater saves. Saving writes the
-review under `reviews/<rater>/` beside the output it rates (`judge/reviews/` in a
-run); saving again moves the earlier review to `reviews-history/<rater>/`. The
+review under `judge/reviews/<rater>/` in the run or classification attempt, beside
+the output it rates; saving again moves the earlier review to
+`judge/reviews-history/<rater>/`. The
 page reads only the current rater's reviews, never another rater's. Rerunning
 the judge moves the reviews into `judge-history/` with the judgment they rated.
 
@@ -111,10 +112,10 @@ Once raters have reviewed, compute agreement over the reviewed set:
 uv run oracle-lab agreement ../oracle-lab-data
 ```
 
-It takes one or more runs, classification attempts, or directories holding
+It takes one or more runs, classification attempts, or output roots holding
 `runs/` and `classifications/`, and reads every rater's review. It writes
 `agreement.json` and `agreement.md` to `--output`, or by default to
-`agreement/<UTC timestamp>/` in the current directory. It needs no Docker,
+`output/agreement/<UTC timestamp>/` in the current directory. It needs no Docker,
 network, or credentials.
 
 The two stages are reported separately. Each submission question, each

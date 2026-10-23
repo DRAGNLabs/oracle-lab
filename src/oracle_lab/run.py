@@ -7,8 +7,6 @@ failed run names the stage it stopped in rather than leaving a silent directory.
 
 from __future__ import annotations
 
-import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -34,7 +32,7 @@ from oracle_lab.judge.contracts import (
 )
 from oracle_lab.judge.run import judge_stage
 from oracle_lab.localization import localize
-from oracle_lab.paths import RunPaths
+from oracle_lab.paths import OutputPaths, RunPaths
 from oracle_lab.report import report
 from oracle_lab.results import (
     EvaluationResult,
@@ -66,10 +64,8 @@ def run(config: RunConfig) -> Path:
     require_credentials(config)
     prompt_template = Path(config.task.prompt).read_text()
     validate_prompt_scope(prompt_template, config.task.scope)
-    run_dir = create_run_dir(Path(config.output))
-
-    # Setup the run results directory from the given root.
-    paths = RunPaths.create(run_dir)
+    paths = OutputPaths(Path(config.output)).new_run()
+    run_dir = paths.root
 
     stages = Stages(run_dir)
     try:
@@ -111,13 +107,6 @@ def run(config: RunConfig) -> Path:
     except Exception as exc:
         write_status(run_dir, stages.current, "failed", error=str(exc))
         raise
-    return run_dir
-
-
-def create_run_dir(output: Path) -> Path:
-    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]
-    run_dir = output / run_id
-    run_dir.mkdir(parents=True)
     return run_dir
 
 

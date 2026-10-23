@@ -1,13 +1,6 @@
 # Oracle Lab task-classification rubric
 
-Use this rubric to classify one Oracle Lab task. It is written for either a
-human rater or an LLM judge.
-
-Oracle Lab studies a different version of a task from a SWE-bench-style
-dataset. A test writer receives the buggy repository checkout and a general
-instruction to write tests. It does not receive the issue, gold repair,
-reference test, or existing tests. The evaluation checks whether a new test fails
-on the buggy checkout and passes after the hidden gold repair is applied.
+Use this rubric to classify one Oracle Lab task.
 
 This rubric classifies the task itself: its nature, defect mechanism, the setup
 needed to reproduce it, and the evidence available to infer correct behavior.
@@ -64,17 +57,10 @@ evidence rule stated in that question.
 
 ## Procedure
 
-1. Use the issue, gold repair, and reference-test changes to identify the
-   behavior that a valid test must fail on in the buggy checkout and pass on
-   after the repair.
-2. You must inspect the buggy repository checkout, including the production
-   code relevant to that behavior. Do not classify the task from the task
-   record alone.
-3. When answering Question 5, base the label only on evidence you found in the
-   buggy checkout without tests. Do not use the task record or existing tests
-   for that question.
-4. Answer the questions below.
-5. Return the JSON object in the required format. Use the exact label strings.
+1. Read all task data available to you, including the issue, gold repair,
+   reference-test changes, buggy/golden repository checkouts, etc.
+2. Answer the questions below.
+3. Return the JSON object in the required format. Use the exact label strings.
 
 ## Question 1: `task_nature`
 

@@ -18,7 +18,7 @@ from oracle_lab.config import RunConfig, RuntimeConfig, load_config
 from oracle_lab.io import digest, write_json
 from oracle_lab.judge.contracts import FAILURE_MODES, JUDGMENT_LABEL_KEYS
 from oracle_lab.judge.workspace import save_trace
-from oracle_lab.paths import RunPaths
+from oracle_lab.paths import AttemptPaths, RunPaths
 from oracle_lab.results import MATRIX_CELLS, InstanceRecord, SubmissionManifest, write_result
 
 # The run config tests start from, independent of the sample configs.
@@ -416,28 +416,29 @@ def traced_run(root: Path) -> RunPaths:
 
 def classified_attempt(
     root: Path, result: dict | None = None, instance: InstanceRecord | None = None
-) -> Path:
+) -> AttemptPaths:
     """A classification attempt on disk, holding every file its classifier read."""
+    paths = AttemptPaths.create(root)
     instance = instance or instance_record()
-    write_result(root / "inputs/instance.json", instance)
-    (root / "inputs/config.resolved.yaml").write_text("source: owner__project-1\n")
-    (root / "inputs/rubric.md").write_text("# Classification rubric\n")
-    write_json(root / "agent/result.json", judge_attempt(model="classifier-model"))
+    write_result(paths.instance, instance)
+    paths.config.write_text("source: owner__project-1\n")
+    paths.judge.rubric.write_text("# Classification rubric\n")
+    write_json(paths.judge.result, judge_attempt(model="classifier-model"))
     write_json(
-        root / "workspace-spec.json",
+        paths.judge.workspace_spec,
         {"image": "example/runtime", "base_commit": instance.base_commit, "artifacts": []},
     )
     write_json(
-        root / "classification.json",
+        paths.judge.classification,
         {
             "instance_id": instance.instance_id,
             "base_commit": instance.base_commit,
             "source_record_sha256": instance.source.record_sha256,
-            "rubric_sha256": digest((root / "inputs/rubric.md").read_bytes()),
+            "rubric_sha256": digest(paths.judge.rubric.read_bytes()),
             "result": result or {"status": "completed", **in_scope_classification()},
         },
     )
-    return root
+    return paths
 
 
 def git(directory: Path, *args: str) -> str:

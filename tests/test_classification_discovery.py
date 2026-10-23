@@ -29,22 +29,22 @@ def classification(result=None, **identity):
 
 def test_returns_newest_matching_attempt(tmp_path):
     paths, root = prepared_run(tmp_path)
-    write_json(root / "20260101T000000Z-old" / "classification.json", classification())
+    write_json(root / "20260101T000000Z-old" / "judge" / "classification.json", classification())
     write_json(
-        root / "20260201T000000Z-new" / "classification.json",
+        root / "20260201T000000Z-new" / "judge" / "classification.json",
         classification(result={"status": "failed", "error": "model unavailable"}),
     )
 
     result, attempt = latest(paths)
 
     assert result == {"status": "failed", "error": "model unavailable"}
-    assert attempt.name == "20260201T000000Z-new"
+    assert attempt.root.name == "20260201T000000Z-new"
 
 
 def test_rejects_mismatched_provenance(tmp_path):
     paths, root = prepared_run(tmp_path)
     write_json(
-        root / "20260101T000000Z-attempt" / "classification.json",
+        root / "20260101T000000Z-attempt" / "judge" / "classification.json",
         classification(base_commit="b" * 40),
     )
 
@@ -65,7 +65,7 @@ def test_missing_classification_is_explicit(tmp_path):
 
 def test_incomplete_latest_attempt_does_not_fall_back(tmp_path):
     paths, root = prepared_run(tmp_path)
-    write_json(root / "20260101T000000Z-old" / "classification.json", classification())
+    write_json(root / "20260101T000000Z-old" / "judge" / "classification.json", classification())
     write_json(
         root / "20260201T000000Z-new" / "status.json",
         {"stage": "build", "state": "failed", "error": "image build failed"},
@@ -74,12 +74,12 @@ def test_incomplete_latest_attempt_does_not_fall_back(tmp_path):
     result, attempt = latest(paths)
 
     assert result == {"status": "invalid_artifact", "error": "image build failed"}
-    assert attempt.name == "20260201T000000Z-new"
+    assert attempt.root.name == "20260201T000000Z-new"
 
 
 def test_corrupt_latest_artifact_is_explicit(tmp_path):
     paths, root = prepared_run(tmp_path)
-    artifact = root / "20260201T000000Z-new" / "classification.json"
+    artifact = root / "20260201T000000Z-new" / "judge" / "classification.json"
     artifact.parent.mkdir(parents=True)
     artifact.write_text("not JSON")
 
@@ -87,4 +87,4 @@ def test_corrupt_latest_artifact_is_explicit(tmp_path):
 
     assert result["status"] == "invalid_artifact"
     assert result["error"]
-    assert attempt == artifact.parent
+    assert attempt.judge.classification == artifact

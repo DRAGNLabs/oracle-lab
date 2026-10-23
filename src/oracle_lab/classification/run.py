@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import uuid
 from collections.abc import Callable
 from pathlib import Path
 
@@ -24,7 +23,8 @@ from oracle_lab.harnesses import provenance, run_turn, turn_request
 from oracle_lab.harnesses.launch import require_credential
 from oracle_lab.harnesses.retry import with_retries
 from oracle_lab.instance import resolve_source
-from oracle_lab.io import archive_files, digest, utc_stamp, write_json
+from oracle_lab.io import archive_files, digest, write_json
+from oracle_lab.paths import AttemptPaths, ClassifierPaths, OutputPaths
 from oracle_lab.results import (
     InstanceRecord,
     failed_turn,
@@ -39,88 +39,76 @@ def classify(config: ClassificationConfig) -> Path:
     """Resolve, prepare, and classify one problem in a new immutable attempt."""
     require_credential(config.classifier)
     instance, config.runtime = resolve_source(config.source)
-    attempt_id = utc_stamp() + "-" + uuid.uuid4().hex[:8]
-    attempt = Path(config.output) / instance.instance_id / attempt_id
-    for directory in (attempt / "inputs", attempt / "image-build", attempt / "agent"):
-        directory.mkdir(parents=True, exist_ok=True)
+    attempt = OutputPaths(Path(config.output)).new_attempt(instance.instance_id)
     stage = "resolve"
     try:
-        write_status(attempt, stage)
-        rubric = attempt / "inputs/rubric.md"
-        rubric.write_bytes(Path(config.rubric).read_bytes())
-        config.rubric = str(rubric.resolve())
-        (attempt / "inputs/config.resolved.yaml").write_text(
-            yaml.safe_dump(config.model_dump(), sort_keys=False)
-        )
-        write_result(attempt / "inputs/instance.json", instance)
+        write_status(attempt.root, stage)
+        attempt.judge.rubric.write_bytes(Path(config.rubric).read_bytes())
+        config.rubric = str(attempt.judge.rubric.resolve())
+        attempt.config.write_text(yaml.safe_dump(config.model_dump(), sort_keys=False))
+        write_result(attempt.instance, instance)
 
         with docker_client() as client:
             stage = "build"
-            write_status(attempt, stage)
-            image = prepare_image(client, config, attempt / "image-build")
-            write_json(attempt / "image-build/runtime.json", {"image": image})
+            write_status(attempt.root, stage)
+            image = prepare_image(client, config, attempt.build)
+            write_json(attempt.runtime, {"image": image})
 
             stage = "classify"
-            write_status(attempt, stage)
+            write_status(attempt.root, stage)
             with measure_spend(
-                [config.classifier], attempt / "cost.json", lambda: write_status(attempt, "cost")
+                [config.classifier], attempt.cost, lambda: write_status(attempt.root, "cost")
             ):
                 result = _classification_stage(client, config, attempt, image, instance)
 
         state = "completed" if result.status == "completed" else "completed_with_errors"
-        write_status(attempt, "finished", state, classification_status=result.status)
+        write_status(attempt.root, "finished", state, classification_status=result.status)
     except KeyboardInterrupt:
-        write_status(attempt, stage, "interrupted")
+        write_status(attempt.root, stage, "interrupted")
         raise
     except Exception as error:
-        write_status(attempt, stage, "failed", error=str(error))
+        write_status(attempt.root, stage, "failed", error=str(error))
         raise
-    return attempt
+    return attempt.root
 
 
 def _classification_stage(
     client: DockerClient,
     config: ClassificationConfig,
-    attempt: Path,
+    attempt: AttemptPaths,
     image: str,
     instance: InstanceRecord,
 ) -> ClassificationResult:
+    judge = attempt.judge
     request = turn_request(
         config,
         config.classifier,
-        attempt / "inputs/rubric.md",
+        judge.rubric,
         config.require_runtime().workdir,
-        attempt / "agent",
+        judge.agent,
     )
-    classification = attempt / "classification.json"
-    result_path = attempt / "agent/result.json"
-    raw = attempt / "classification.raw.txt"
-    final = attempt / "agent/final.txt"
 
     def one_turn(will_retry: Callable[[dict], bool]) -> tuple[dict, ClassificationResult | None]:
-        log = attempt / "workspace.log"
-        with open_sandbox(client, image, config, Profile.CLASSIFICATION, log) as sandbox:
+        with open_sandbox(client, image, config, Profile.CLASSIFICATION, judge.log) as sandbox:
             build_classification_workspace(sandbox, config, attempt, image, instance)
             harness_result = run_turn(sandbox, request)
             if will_retry(harness_result):
                 return harness_result, None
-            result = _classify(harness_result, attempt)
+            result = _classify(harness_result, judge)
             # Save before container cleanup so a late cleanup failure cannot replace a
             # valid model response with an annotation failure.
-            _save_classification(attempt, instance, result)
+            _save_classification(judge, instance, result)
         return harness_result, result
 
     try:
-        result = with_retries(
-            one_turn, lambda: archive_files([attempt / "agent"], attempt / "agent-history")
-        )
+        result = with_retries(one_turn, lambda: archive_files([judge.agent], judge.agent_history))
         assert result is not None
     except (RuntimeError, OSError, ValueError, DockerException) as error:
-        if classification.is_file():
-            return read_saved_classification(classification).result
-        if not result_path.is_file():
+        if judge.classification.is_file():
+            return read_saved_classification(judge.classification).result
+        if not judge.result.is_file():
             write_json(
-                result_path,
+                judge.result,
                 {
                     "status": "failed",
                     "duration_seconds": 0,
@@ -129,18 +117,19 @@ def _classification_stage(
                     **provenance(request),
                 },
             )
-        if not raw.is_file():
-            raw.write_text(final.read_text(errors="replace") if final.is_file() else "")
+        if not judge.classification_raw.is_file():
+            judge.classification_raw.write_text(
+                judge.final.read_text(errors="replace") if judge.final.is_file() else ""
+            )
         result = failed_turn(str(error))
-        _save_classification(attempt, instance, result)
+        _save_classification(judge, instance, result)
     return result
 
 
-def _classify(harness_result: dict, attempt: Path) -> ClassificationResult:
+def _classify(harness_result: dict, judge: ClassifierPaths) -> ClassificationResult:
     """Save the raw response and turn it into a classification or a failure."""
-    final = attempt / "agent/final.txt"
-    raw = final.read_text(errors="replace") if final.is_file() else ""
-    (attempt / "classification.raw.txt").write_text(raw)
+    raw = judge.final.read_text(errors="replace") if judge.final.is_file() else ""
+    judge.classification_raw.write_text(raw)
     if harness_result["status"] == "completed":
         return parse_classification(raw)
     reason = last_error_message(harness_result["errors"]) or (
@@ -150,7 +139,7 @@ def _classify(harness_result: dict, attempt: Path) -> ClassificationResult:
 
 
 def _save_classification(
-    attempt: Path,
+    judge: ClassifierPaths,
     instance: InstanceRecord,
     result: ClassificationResult,
 ) -> None:
@@ -158,7 +147,7 @@ def _save_classification(
         instance_id=instance.instance_id,
         base_commit=instance.base_commit,
         source_record_sha256=instance.source.record_sha256,
-        rubric_sha256=digest((attempt / "inputs/rubric.md").read_bytes()),
+        rubric_sha256=digest(judge.rubric.read_bytes()),
         result=result,
     )
-    write_json(attempt / "classification.json", saved.model_dump(mode="json"))
+    write_json(judge.classification, saved.model_dump(mode="json"))

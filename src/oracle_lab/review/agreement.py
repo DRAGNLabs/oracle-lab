@@ -14,6 +14,7 @@ from itertools import combinations
 from pathlib import Path
 
 from oracle_lab.io import utc_stamp, write_json
+from oracle_lab.paths import OutputPaths
 from oracle_lab.review.contracts import (
     RATINGS,
     AddedLabelRatings,
@@ -39,7 +40,7 @@ ADDED_TITLE = "Failure modes the judge added"
 def agreement(paths: Sequence[Path], output: Path | None = None) -> Path:
     """Compute agreement over every target under `paths` and save it. Returns the directory."""
     report = compute_agreement(paths)
-    directory = output or Path.cwd() / "agreement" / utc_stamp()
+    directory = output or OutputPaths(Path.cwd() / "output").agreement / utc_stamp()
     directory.mkdir(parents=True, exist_ok=True)
     write_json(directory / "agreement.json", report.model_dump(mode="json"))
     (directory / "agreement.md").write_text(render_agreement(report))

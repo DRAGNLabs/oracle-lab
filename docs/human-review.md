@@ -54,13 +54,13 @@ uv run oracle-lab batch <batch>.yaml
 uv run oracle-lab classify <classification-config>.yaml
 ```
 
-Copy each run and attempt to review into the data repository, keeping the same
-layout:
+Copy each run and attempt to review into the data repository, keeping the
+layout of the output root:
 
 ```sh
-cp -r runs/<run-id> ../oracle-lab-data/runs/
-mkdir -p ../oracle-lab-data/classifications/<instance-id>
-cp -r classifications/<instance-id>/<attempt> ../oracle-lab-data/classifications/<instance-id>/
+mkdir -p ../oracle-lab-data/runs ../oracle-lab-data/classifications/<instance-id>
+cp -r output/runs/<run-id> ../oracle-lab-data/runs/
+cp -r output/classifications/<instance-id>/<attempt> ../oracle-lab-data/classifications/<instance-id>/
 ```
 
 Only a completed judgment or classification can be reviewed. Check the set
@@ -91,7 +91,7 @@ file is usually `evaluation/results.json`.
 ### Collect reviews
 
 Merge every rater branch into a local branch. Raters write to different
-`reviews/<rater>/` directories, so the merge has no conflicts.
+`judge/reviews/<rater>/` directories, so the merge has no conflicts.
 
 ```sh
 cd oracle-lab-data
@@ -170,8 +170,8 @@ git commit -m "Reviews by <your-id>"
 git push -u origin reviews/<your-id>
 ```
 
-Only your own `reviews/<your-id>/` and `reviews-history/<your-id>/` directories
-should appear in `git status`. Do not open other raters' branches.
+Only your own `judge/reviews/<your-id>/` and `judge/reviews-history/<your-id>/`
+directories should appear in `git status`. Do not open other raters' branches.
 
 ### Get new targets
 

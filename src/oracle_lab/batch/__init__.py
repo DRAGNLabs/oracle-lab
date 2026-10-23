@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import shutil
-import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Callable
 
@@ -15,6 +13,7 @@ from oracle_lab.batch.summary import write_summary
 from oracle_lab.config import ConfigModel, NonBlank, RunConfig, load_config
 from oracle_lab.container.lifecycle import preserve_failure
 from oracle_lab.io import digest, read_json, write_json
+from oracle_lab.paths import OutputPaths
 from oracle_lab.run import run
 
 
@@ -34,7 +33,6 @@ class BatchConfig(ConfigModel):
     name: NonBlank
     jobs: Annotated[list[BatchJob], Field(min_length=1)]
     execution: BatchExecution = Field(default_factory=BatchExecution)
-    output: str = "batches"
 
     @model_validator(mode="after")
     def unique_configs(self) -> BatchConfig:
@@ -44,18 +42,23 @@ class BatchConfig(ConfigModel):
         return self
 
 
-def load_batch_config(path: Path) -> tuple[BatchConfig, list[Path]]:
+def load_batch_config(path: Path) -> tuple[BatchConfig, list[Path], OutputPaths]:
+    """The batch, its job config paths, and the output root they all share.
+
+    The batch directory is saved beside its runs, so every job must name the same
+    output root.
+    """
     raw = yaml.safe_load(path.read_text())
     if not isinstance(raw, dict):
         raise ValueError("Batch configuration must be a YAML mapping")
     config = BatchConfig.model_validate(raw)
     base = path.resolve().parent
     configs = [(base / job.config).resolve() for job in config.jobs]
-    for job_path in configs:
-        # Validate every job before the first paid model call.
-        load_config(job_path)
-    config.output = str((base / config.output).resolve())
-    return config, configs
+    # Validate every job before the first paid model call.
+    outputs = {load_config(job_path).output for job_path in configs}
+    if len(outputs) != 1:
+        raise ValueError(f"Batch jobs must share one output root, not {sorted(outputs)}")
+    return config, configs, OutputPaths(Path(outputs.pop()))
 
 
 def _write_manifest(batch_dir: Path, config: BatchConfig, jobs: list[dict]) -> None:
@@ -66,10 +69,8 @@ def _write_manifest(batch_dir: Path, config: BatchConfig, jobs: list[dict]) -> N
 
 
 def _new_batch(path: Path) -> tuple[Path, BatchConfig, list[dict]]:
-    config, paths = load_batch_config(path)
-    batch_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]
-    batch_dir = Path(config.output) / batch_id
-    batch_dir.mkdir(parents=True)
+    config, paths, output = load_batch_config(path)
+    batch_dir = output.new_batch()
     shutil.copyfile(path, batch_dir / "batch.input.yaml")
     jobs = [
         {
@@ -93,7 +94,6 @@ def _resume_batch(batch_dir: Path) -> tuple[Path, BatchConfig, list[dict]]:
         name=resolved["name"],
         jobs=[BatchJob(config=job["config"]) for job in resolved["jobs"]],
         execution=resolved["execution"],
-        output=str(batch_dir.parent),
     )
     jobs = resolved["jobs"]
     for job in jobs:

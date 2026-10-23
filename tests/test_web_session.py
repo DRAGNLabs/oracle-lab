@@ -142,7 +142,7 @@ def test_an_out_of_scope_classification_is_reviewed_on_one_question(data, open_s
         "ratings": {"task_nature": "disagree"},
         "other_failure_modes": [],
     }
-    assert (data / attempt / "reviews/rater-1/provenance.json").is_file()
+    assert (data / attempt / "judge/reviews/rater-1/provenance.json").is_file()
 
 
 def test_files_and_evidence_are_served_as_text(session):

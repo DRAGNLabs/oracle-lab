@@ -9,6 +9,7 @@ from typing import Annotated, Literal
 from pydantic import Field, ValidationError, field_validator, model_validator
 
 from oracle_lab.io import read_json
+from oracle_lab.paths import AttemptPaths
 from oracle_lab.results import (
     CommitId,
     ExposedArtifact,
@@ -162,7 +163,7 @@ def read_saved_classification(path: Path) -> SavedClassification:
 
 def latest_classification(
     classifications: Path, instance: InstanceRecord
-) -> tuple[dict, Path | None]:
+) -> tuple[dict, AttemptPaths | None]:
     """The newest attempt for this instance under `classifications`, or explicit absence.
 
     The newest attempt is used even when it failed, so a failure never silently
@@ -173,11 +174,10 @@ def latest_classification(
     if not attempts:
         return {"status": "missing"}, None
 
-    attempt = attempts[0]
-    artifact = attempt / "classification.json"
+    attempt = AttemptPaths(attempts[0])
+    artifact = attempt.judge.classification
     if not artifact.is_file():
-        status_path = attempt / "status.json"
-        detail = read_json(status_path) if status_path.is_file() else {}
+        detail = read_json(attempt.status) if attempt.status.is_file() else {}
         error = detail.get("error", "The latest classification attempt is incomplete")
         return {"status": "invalid_artifact", "error": error}, attempt
     try:

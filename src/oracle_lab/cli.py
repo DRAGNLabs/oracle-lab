@@ -92,7 +92,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "paths", type=Path, nargs="+", help="Runs, classification attempts, or directories of both"
     )
     agreement_parser.add_argument(
-        "--output", type=Path, help="Default: agreement/<UTC timestamp>/ here"
+        "--output", type=Path, help="Default: output/agreement/<UTC timestamp>/ here"
     )
 
     return parser

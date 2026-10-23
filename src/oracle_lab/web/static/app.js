@@ -1,18 +1,19 @@
 // The review page: one rater rates one LLM output at a time against its evidence.
-// This entry point routes between the target list and one target, and owns the
-// keyboard and the help dialog. Plain JavaScript modules, no build step.
+// This entry point routes between the home page and a rating page, and owns the
+// keyboard, the hover text, and the help dialog. Plain JavaScript
+// modules, no build step.
 
 import { openFinder } from "./finder.js";
 import { showListing } from "./listing.js";
-import { RATINGS, RATING_NAMES, rate, select } from "./rail.js";
-import { esc } from "./render.js";
+import { RATINGS, rate, select } from "./rail.js";
+import { esc, markdown } from "./render.js";
 import { openTarget } from "./review.js";
 import { api, state } from "./state.js";
-
-const HELP_SEEN = "oracle-review:help-seen";
+import { onTraceKey } from "./trace.js";
 
 document.getElementById("help-button").addEventListener("click", showHelp);
 document.addEventListener("keydown", onKey);
+document.addEventListener("mouseover", showTip);
 window.addEventListener("hashchange", route);
 route();
 
@@ -24,11 +25,12 @@ async function route() {
       state.listing = await api("/api/targets");
       document.getElementById("rater").textContent = `Rating as ${state.listing.rater}`;
     }
-    if (hash.startsWith("/review/")) {
+    const rating = hash.startsWith("/review/");
+    document.getElementById("help-button").hidden = !rating;
+    if (rating) {
       await openTarget(decodeURIComponent(hash.slice("/review/".length)));
     } else {
       showListing();
-      if (!helpSeen()) showHelp();
     }
   } catch (error) {
     app.innerHTML = `<p class="message error">${esc(error.message)}</p>`;
@@ -44,9 +46,11 @@ function onKey(event) {
   if (document.querySelector("dialog[open]")) return;
   const typing = event.target.closest?.("input, textarea, select, [contenteditable]");
   if (typing || event.ctrlKey || event.metaKey || event.altKey) return;
-  if (event.key === "?") {
+  if (state.target && onTraceKey(event)) {
+    event.preventDefault();
+  } else if (state.target && event.key === "?") {
     showHelp();
-  } else if (state.target && ["1", "2", "3"].includes(event.key)) {
+  } else if (state.target && ["1", "2"].includes(event.key)) {
     event.preventDefault();
     rate(state.selected, RATINGS[Number(event.key) - 1], { advance: true });
   } else if (state.target && event.key === "j") {
@@ -56,24 +60,27 @@ function onKey(event) {
   }
 }
 
-function showHelp() {
-  const definitions = state.listing?.rating_definitions;
-  document.getElementById("help-ratings").innerHTML = definitions
-    ? RATINGS.map((key) => `<dt class="${key}">${RATING_NAMES[key]}</dt><dd>${esc(definitions[key])}</dd>`).join("")
-    : "";
-  const dialog = document.getElementById("help");
-  if (!dialog.open) dialog.showModal();
-  try {
-    localStorage.setItem(HELP_SEEN, "1");
-  } catch {
-    // The dialog shows again next time.
+// One floating description for whatever element under the cursor has `data-tip`.
+// The rating buttons show their own.
+const tooltip = document.getElementById("tooltip");
+function showTip(event) {
+  const target = event.target.closest?.("[data-tip]");
+  if (!target || target.closest(".rate")) {
+    tooltip.hidden = true;
+    return;
   }
+  tooltip.textContent = target.dataset.tip;
+  tooltip.hidden = false;
+  const box = target.getBoundingClientRect();
+  const left = Math.min(box.left, window.innerWidth - tooltip.offsetWidth - 8);
+  const below = box.bottom + 6 + tooltip.offsetHeight < window.innerHeight;
+  tooltip.style.left = `${Math.max(left, 8)}px`;
+  tooltip.style.top = `${below ? box.bottom + 6 : box.top - tooltip.offsetHeight - 6}px`;
 }
 
-function helpSeen() {
-  try {
-    return Boolean(localStorage.getItem(HELP_SEEN));
-  } catch {
-    return false;
-  }
+// The reviewer's instructions, from `web/templates/how-to-review.md`.
+function showHelp() {
+  document.getElementById("help-body").innerHTML = markdown(state.listing?.how_to_review || "");
+  const dialog = document.getElementById("help");
+  if (!dialog.open) dialog.showModal();
 }

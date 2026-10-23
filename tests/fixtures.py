@@ -10,11 +10,14 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import NamedTuple
 
+import yaml
+
 import oracle_lab.container
 from oracle_lab.classification.contracts import CLASSIFICATION_LABELS
 from oracle_lab.config import RunConfig, RuntimeConfig, load_config
 from oracle_lab.io import digest, write_json
-from oracle_lab.judge.contracts import JUDGMENT_LABEL_KEYS
+from oracle_lab.judge.contracts import FAILURE_MODES, JUDGMENT_LABEL_KEYS
+from oracle_lab.judge.workspace import save_trace
 from oracle_lab.paths import RunPaths
 from oracle_lab.results import MATRIX_CELLS, InstanceRecord, SubmissionManifest, write_result
 
@@ -123,6 +126,8 @@ def judgment_labels(**changes) -> dict:
         "tests_issue": "yes",
         "attempt_detail": "correct_assertion",
         "cheating": "no",
+        "failure_modes": failure_modes(),
+        "added_failure_modes": [],
     }
     labels.update(changes)
     labels.setdefault(
@@ -134,6 +139,41 @@ def judgment_labels(**changes) -> dict:
         },
     )
     return labels
+
+
+def failure_modes(**present: list[int]) -> dict:
+    """Every start-list decision: absent, except the keys given with their steps."""
+    return {
+        key: {
+            "decision": "present",
+            "steps": present[key],
+            "justification": f"The trace shows {key} at these steps.",
+        }
+        if key in present
+        else {"decision": "absent"}
+        for key in FAILURE_MODES
+    }
+
+
+def added_failure_mode(**changes) -> dict:
+    """A failure mode the judge named itself."""
+    mode = {
+        "name": "Tested only defaults",
+        "definition": "Every test calls the function with its default arguments only.",
+        "steps": [4],
+        "justification": "Step 4 writes tests that never pass an argument.",
+    }
+    mode.update(changes)
+    return mode
+
+
+def judgment_ratings(**changes: str) -> dict[str, str]:
+    """A rater's agreement with every item of the default judgment: its three answers
+    and each start-list decision. Keyword names use `__` for the `.` in item keys."""
+    ratings = {key: "agree" for key in ("tests_issue", "attempt_detail", "cheating")}
+    ratings |= {f"failure_modes.{key}": "agree" for key in FAILURE_MODES}
+    ratings |= {key.replace("__", "."): rating for key, rating in changes.items()}
+    return ratings
 
 
 def completed_judgment(**changes) -> dict:
@@ -269,19 +309,25 @@ REPAIR = (
 
 
 def judged_run(
-    root: Path, judgment: dict | None = None, instance: InstanceRecord | None = None
+    root: Path,
+    judgment: dict | None = None,
+    instance: InstanceRecord | None = None,
+    config: RunConfig | None = None,
+    files: dict[str, str] | None = None,
 ) -> RunPaths:
-    """A judged run on disk, holding every file its judge read."""
+    """A judged run on disk, holding every file its judge read. `files` is the submission."""
     paths = RunPaths.create(root)
     instance = instance or instance_record(golden_patch=REPAIR)
     write_result(paths.instance, instance)
-    paths.config.write_text("instance: owner__project-1\n")
+    config = config or run_config()
+    paths.config.write_text(yaml.safe_dump(config.model_dump(mode="json"), sort_keys=False))
     paths.judge.rubric.write_text("# Judge rubric\n")
     (paths.ground_truth / "issue.md").write_text("# Issue\n\nIncorrect result.\n")
     (paths.ground_truth / "fix.patch").write_text(instance.golden_patch)
     (paths.generation / "session.log").write_text("agent session\n")
+    (paths.generation / "trace.jsonl").write_text("")
     (paths.generation / "workspace.diff").write_text("generated diff\n")
-    write_submission(paths)
+    write_submission(paths, files)
     write_json(paths.results, detecting_result())
     for version in ("buggy", "golden"):
         write_json(paths.evaluation / version / "tests.json", {"status": "completed"})
@@ -301,6 +347,70 @@ def judged_run(
     )
     write_json(paths.judge.result, judge_attempt())
     write_json(paths.judge.judgment, completed_judgment() if judgment is None else judgment)
+    save_trace(paths)
+    return paths
+
+
+TRACE_PATCH = """\
+diff --git a/pkg/mod.py b/pkg/mod.py
+--- a/pkg/mod.py
++++ b/pkg/mod.py
+@@ -10,3 +10,3 @@ def parse(text):
+     value = text.strip()
+-    return value.lower()
++    return value
+"""
+TRACE_TEST = "from pkg.mod import parse\n\n\ndef test_parse():\n    assert parse(' A ') == 'a'\n"
+TRACE_TEST_ID = "oracle_tests/test_mod.py::test_parse"
+
+
+def traced_run(root: Path) -> RunPaths:
+    """A judged Codex run with a short agent trace: it reads the patched line, probes
+    the function, writes one test, and runs it."""
+    config = run_config()
+    config.agent.harness = "codex"
+    instance = instance_record(golden_patch=TRACE_PATCH)
+    files = {"oracle_tests/test_mod.py": TRACE_TEST}
+    paths = judged_run(root, instance=instance, config=config, files=files)
+    outcome = {
+        "test_id": TRACE_TEST_ID,
+        "buggy": "pass",
+        "golden": "fail",
+        "cell": "pass_on_buggy_fail_on_golden",
+        "golden_failure": {"exception_type": "builtins.AssertionError", "message": "assert"},
+    }
+    write_json(paths.results, evaluation_result(tests=[outcome]))
+    write = "apply_patch <<'PATCH'\n*** Begin Patch\n*** Add File: oracle_tests/test_mod.py\n"
+    write += "".join(f"+{line}\n" for line in TRACE_TEST.splitlines()) + "*** End Patch\nPATCH"
+    items = [
+        {"type": "reasoning", "text": "**Reading**"},
+        {
+            "type": "command_execution",
+            "command": "/bin/sh -lc \"sed -n '1,40p' pkg/mod.py; ls\"",
+            "aggregated_output": "    return value.lower()\n",
+            "exit_code": 0,
+        },
+        {
+            "type": "command_execution",
+            "command": "python -c 'from pkg.mod import parse; print(parse(\" A \"))'",
+            "aggregated_output": "a\n",
+            "exit_code": 0,
+        },
+        {"type": "command_execution", "command": write, "aggregated_output": "", "exit_code": 0},
+        {
+            "type": "command_execution",
+            "command": "python -m pytest -q oracle_tests",
+            "aggregated_output": "1 passed in 0.01s\n",
+            "exit_code": 0,
+        },
+    ]
+    (paths.generation / "trace.jsonl").write_text(
+        "\n".join(
+            json.dumps({"type": "item.completed", "item": {"id": str(index), **item}})
+            for index, item in enumerate(items)
+        )
+    )
+    save_trace(paths)
     return paths
 
 

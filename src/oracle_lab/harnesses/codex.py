@@ -12,10 +12,15 @@ from oracle_lab.harnesses.launch import (
     run_agent_turn,
     turn_status,
 )
+from oracle_lab.harnesses.steps import OtherTool, Shell, Step, numbered_events
 from oracle_lab.results import Usage
 
 # Codex writes its final response to a file instead of the JSON event stream.
 LAST_MESSAGE_PATH = "/tmp/oracle-agent/final.txt"
+
+
+# Whether `read_steps` reasoning is the model's own text or a CLI-written summary.
+REASONING = "summary"
 
 
 def parse_trace(path: Path) -> dict:
@@ -41,6 +46,39 @@ def parse_trace(path: Path) -> dict:
         "turn_completed": completed,
         "turn_failed": failed,
     }
+
+
+def read_steps(path: Path) -> list[Step]:
+    """The run's steps. Every action is a `command_execution`, so every tool step is `Shell`.
+
+    `reasoning` and `agent_message` items become reasoning and message steps. Only
+    `item.completed` events are read; `item.started` repeats the command without output.
+    Codex records no timestamps.
+    """
+    steps = []
+    for line, event in numbered_events(path):
+        item = event.get("item")
+        if event.get("type") != "item.completed" or not isinstance(item, dict):
+            continue
+        kind = item.get("type")
+        if kind == "command_execution":
+            steps.append(
+                Step(
+                    "tool",
+                    line,
+                    action=Shell(item.get("command", "")),
+                    output=item.get("aggregated_output", ""),
+                    exit_code=item.get("exit_code"),
+                )
+            )
+        elif kind == "reasoning":
+            steps.append(Step("reasoning", line, text=item.get("text", "")))
+        elif kind == "agent_message":
+            steps.append(Step("message", line, text=item.get("text", "")))
+        else:
+            fields = {key: value for key, value in item.items() if key not in {"id", "type"}}
+            steps.append(Step("tool", line, action=OtherTool(str(kind), fields)))
+    return steps
 
 
 def _usage(raw: dict | None) -> dict | None:

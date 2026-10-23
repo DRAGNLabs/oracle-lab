@@ -6,6 +6,7 @@ from oracle_lab.config import ClassificationConfig, HarnessConfig, RunConfig
 from oracle_lab.container.sandbox import Sandbox
 from oracle_lab.harnesses import claude, codex, opencode
 from oracle_lab.harnesses.launch import AgentTurnRequest, require_credential
+from oracle_lab.harnesses.steps import Step
 from oracle_lab.harnesses.transcript import render_session
 from oracle_lab.io import write_json
 from oracle_lab.paths import RunPaths
@@ -26,6 +27,16 @@ def run_turn(sandbox: Sandbox, request: AgentTurnRequest) -> dict:
     summary.update(provenance(request))
     write_json(request.artifact_directory / "result.json", summary)
     return summary
+
+
+def read_steps(harness: str, path: Path) -> list[Step]:
+    """A saved trace's steps, read by the adapter of the harness that wrote it."""
+    return HARNESSES[harness].read_steps(path)
+
+
+def reasoning_kind(harness: str) -> str:
+    """Whether the harness's reasoning steps are raw model text or summaries."""
+    return HARNESSES[harness].REASONING
 
 
 def provenance(request: AgentTurnRequest) -> dict:

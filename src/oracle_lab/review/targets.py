@@ -2,7 +2,8 @@
 
 Each kind of target knows everything particular to its stage: the questions its
 judge could answer, the repository views and evidence files the judge read, and
-where its files live.
+where its files live. Raters work through targets one problem at a time: a
+`Problem` is one task instance and its targets, in the order they are rated.
 """
 
 from __future__ import annotations
@@ -20,9 +21,14 @@ from oracle_lab.classification.contracts import (
     read_saved_classification,
 )
 from oracle_lab.classification.workspace import CLASSIFICATION_ROOT, classification_evidence
-from oracle_lab.config import repo_path
+from oracle_lab.config import RunConfig, load_config, repo_path
 from oracle_lab.io import read_json
-from oracle_lab.judge.contracts import JUDGMENT_LABELS, CompletedJudgment, validate_judgment
+from oracle_lab.judge.contracts import (
+    FAILURE_MODES,
+    JUDGMENT_LABELS,
+    CompletedJudgment,
+    validate_judgment,
+)
 from oracle_lab.judge.workspace import JUDGE_ROOT, judge_evidence
 from oracle_lab.paths import RunPaths
 from oracle_lab.results import (
@@ -98,9 +104,26 @@ class ReviewTarget(ABC):
     def submitted_files(self) -> dict[str, SubmittedFile]:
         """Generated test files added to the judge's repository views."""
 
-    def answered_questions(self) -> list[str]:
-        """The questions the LLM answered. A `null` answer is not reviewed."""
-        return [key for key in self.labels if getattr(self.answers, key, None) is not None]
+    def rating_keys(self) -> list[str]:
+        """Every item a rater rates, in rail order: the questions the LLM answered (a
+        `null` answer is not reviewed), then for a judgment each start-list failure
+        mode as `failure_modes.<key>` and each added one as `added_failure_modes.<index>`."""
+        keys = [key for key in self.labels if getattr(self.answers, key, None) is not None]
+        if isinstance(self.answers, CompletedJudgment):
+            keys += [f"failure_modes.{key}" for key in FAILURE_MODES]
+            keys += [
+                f"added_failure_modes.{n}" for n in range(len(self.answers.added_failure_modes))
+            ]
+        return keys
+
+    def rating_label(self, key: str) -> str:
+        """What the rail and the agreement report call one rating item."""
+        section, _, name = key.partition(".")
+        if section == "failure_modes":
+            return FAILURE_MODES[name]
+        if section == "added_failure_modes" and isinstance(self.answers, CompletedJudgment):
+            return self.answers.added_failure_modes[int(name)].name
+        return self.labels[key]
 
     def evidence(self) -> dict[str, bytes]:
         """The files the judge read besides the repository views, by path in its workspace.
@@ -135,6 +158,7 @@ class JudgmentTarget(ReviewTarget):
         answers = validate_judgment(read_json(paths.judge.judgment))
         if not isinstance(answers, CompletedJudgment):
             raise TargetError(f"The judgment is {answers.status}, not completed")
+        load_config(paths.config, resolved=True)  # the page labels each run from it
         return cls(root, read_instance_record(paths.instance), answers)
 
     @property
@@ -163,6 +187,10 @@ class JudgmentTarget(ReviewTarget):
 
     def issue(self) -> str:
         return (self.paths.ground_truth / "issue.md").read_text()
+
+    def config(self) -> RunConfig:
+        """The run's resolved configuration, which names its harness, model, and scope."""
+        return load_config(self.paths.config, resolved=True)
 
     def evaluation(self) -> EvaluationResult:
         return read_evaluation_result(self.paths.results)
@@ -246,6 +274,43 @@ class UnreviewableTarget:
     stage: Stage
     root: Path
     reason: str
+
+
+@dataclass(frozen=True)
+class Problem:
+    """One task instance and every target that rates something about it."""
+
+    instance_id: str
+    classifications: list[ClassificationTarget]  # ordered by attempt directory
+    judgments: list[JudgmentTarget]  # ordered by run ID, which starts with a timestamp
+
+    @property
+    def tasks(self) -> list[ReviewTarget]:
+        """The targets in the order a rater works through them: classification first."""
+        return [*self.classifications, *self.judgments]
+
+    @property
+    def instance(self) -> InstanceRecord:
+        """The task record, from the first task; every target copies the same dataset record."""
+        return self.tasks[0].instance
+
+    def issue(self) -> str:
+        return self.tasks[0].issue()
+
+
+def find_problems(targets: list[ReviewTarget]) -> list[Problem]:
+    """The targets grouped by task instance, ordered by instance ID."""
+    by_instance: dict[str, list[ReviewTarget]] = {}
+    for target in sorted(targets, key=lambda target: target.root):
+        by_instance.setdefault(target.instance.instance_id, []).append(target)
+    return [
+        Problem(
+            instance_id,
+            [target for target in members if isinstance(target, ClassificationTarget)],
+            [target for target in members if isinstance(target, JudgmentTarget)],
+        )
+        for instance_id, members in sorted(by_instance.items())
+    ]
 
 
 def find_targets(path: Path) -> tuple[list[ReviewTarget], list[UnreviewableTarget]]:

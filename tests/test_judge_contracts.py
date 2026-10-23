@@ -1,6 +1,7 @@
 import json
 
 import pytest
+from fixtures import added_failure_mode, failure_modes
 from fixtures import judgment_labels as labels
 
 from oracle_lab.io import read_json, write_json
@@ -182,3 +183,45 @@ def test_marking_stale_retains_the_previous_annotation(tmp_path):
     first = read_json(paths.judge.judgment)
     mark_judgments_stale(paths)
     assert read_json(paths.judge.judgment) == first
+
+
+def test_parser_accepts_failure_mode_decisions_and_added_labels():
+    raw = json.dumps(
+        labels(
+            failure_modes=failure_modes(changed_test_to_pass=[23, 24]),
+            added_failure_modes=[added_failure_mode()],
+        )
+    )
+
+    judgment = parse_judgment(raw)
+
+    assert judgment.status == "completed"
+    assert judgment.failure_modes["changed_test_to_pass"].steps == [23, 24]
+    assert judgment.failure_modes["never_saw_bug"].decision == "absent"
+    assert judgment.added_failure_modes[0].name == "Tested only defaults"
+
+
+def test_every_start_label_must_be_decided():
+    decided = failure_modes()
+    del decided["flagged_bug"]
+
+    result = parse_judgment(json.dumps(labels(failure_modes=decided)))
+
+    assert result.status == "invalid_output"
+    assert "flagged_bug" in result.error
+
+
+@pytest.mark.parametrize(
+    "decision",
+    [
+        {"decision": "present", "steps": [], "justification": "Step 3 shows it."},
+        {"decision": "present", "justification": "No steps cited."},
+        {"decision": "present", "steps": [3]},
+        {"decision": "absent", "justification": "Absent labels carry nothing else."},
+        {"decision": "maybe"},
+    ],
+)
+def test_a_present_label_needs_steps_and_a_justification_and_an_absent_one_nothing(decision):
+    decided = failure_modes() | {"never_saw_bug": decision}
+
+    assert parse_judgment(json.dumps(labels(failure_modes=decided))).status == "invalid_output"

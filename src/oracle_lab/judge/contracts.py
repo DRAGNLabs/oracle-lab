@@ -33,6 +33,62 @@ JUDGMENT_LABELS = {
 }
 JUDGMENT_LABEL_KEYS = tuple(JUDGMENT_LABELS)
 
+# The start list of failure modes the judge decides for every run, by key, with the
+# title raters see. Hypotheses, not a validated codebook: see docs/research-framing.md.
+FAILURE_MODES = {
+    "never_saw_bug": "Never saw the bug",
+    "saw_bug_untested": "Saw the bug, didn't test it",
+    "copied_buggy_output": "Copied the buggy output",
+    "copied_existing_tests": "Copied existing tests",
+    "ignored_available_docs": "Ignored available docs",
+    "contradicted_read_docs": "Read docs, contradicted them",
+    "changed_test_to_pass": "Changed test to pass",
+    "doubted_moved_on": "Doubted, moved on",
+    "explained_bug_away": "Explained the bug away",
+    "flagged_bug": "Flagged the bug",
+}
+FailureModeKey = Literal[
+    "never_saw_bug",
+    "saw_bug_untested",
+    "copied_buggy_output",
+    "copied_existing_tests",
+    "ignored_available_docs",
+    "contradicted_read_docs",
+    "changed_test_to_pass",
+    "doubted_moved_on",
+    "explained_bug_away",
+    "flagged_bug",
+]
+# Trace step numbers, as the review page's timeline shows them. When the trace could
+# not be built, they are line numbers of the raw harness trace instead.
+TraceSteps = Annotated[list[Annotated[int, Field(ge=0)]], Field(min_length=1)]
+
+
+class PresentFailureMode(StrictModel):
+    """A start-list failure mode the judge found, and the steps it rests on."""
+
+    decision: Literal["present"]
+    steps: TraceSteps
+    justification: Justification
+
+
+class AbsentFailureMode(StrictModel):
+    decision: Literal["absent"]
+
+
+FailureModeDecision = Annotated[
+    PresentFailureMode | AbsentFailureMode, Field(discriminator="decision")
+]
+
+
+class AddedFailureMode(StrictModel):
+    """A failure mode outside the start list, named and defined by the judge."""
+
+    name: Annotated[str, Field(min_length=1, max_length=80)]
+    definition: Justification
+    steps: TraceSteps
+    justification: Justification
+
 
 class JudgmentLabels(StrictModel):
     """Issue-attempt answer and the applicable detail for yes or no."""
@@ -65,6 +121,19 @@ class JudgmentLabels(StrictModel):
         "other_circumvention",
     ]
     justifications: dict[str, Justification]
+    # Every start-list key, decided. The submission questions' justifications above
+    # do not cover these; each present decision carries its own.
+    failure_modes: dict[FailureModeKey, FailureModeDecision]
+    added_failure_modes: list[AddedFailureMode]
+
+    @model_validator(mode="after")
+    def failure_modes_cover_the_start_list(self) -> JudgmentLabels:
+        if set(self.failure_modes) != set(FAILURE_MODES):
+            raise ValueError(
+                f"failure_modes must decide exactly the start-list labels {sorted(FAILURE_MODES)}, "
+                f"not {sorted(self.failure_modes)}"
+            )
+        return self
 
     @model_validator(mode="after")
     def conditional_fields_match_answer(self) -> JudgmentLabels:

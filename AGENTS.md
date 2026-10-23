@@ -17,6 +17,10 @@ Read these references before changing related behavior:
 - `docs/judging.md` for the LLM judge and the human review page.
 - `docs/human-review.md` for sharing review sets with raters.
 - `docs/containers.md` for Docker transport and image builds.
+- `docs/research-framing.md` for the research questions, oracle states, and
+  failure-mode start list behind the judge rubrics.
+- `docs/features/judgment-pivot/implementation.md` for the planned merge of the
+  trace viewer into the generation judgment and review page.
 
 ## Architecture and trust boundaries
 
@@ -75,7 +79,7 @@ The pipeline stages run in this order, and each is one module or package that
 Supporting these:
 
 - `src/oracle_lab/cli.py`: the command interface: `run`, `preflight`, `batch`,
-  `evaluate`, `judge`, `classify`, `review`, `agreement`, and `report`.
+  `evaluate`, `judge`, `classify`, `review`, `agreement`, `trace`, and `report`.
 - `src/oracle_lab/run.py`: the stage sequence and run status.
 - `src/oracle_lab/preflight.py`: `preflight`, which runs the stages before
   generation plus an environment check, without calling a model.
@@ -83,11 +87,13 @@ Supporting these:
 - `src/oracle_lab/classification/`: standalone task classification, run with
   `classify` outside the run stages. Its `contracts.py`, `workspace.py`, and
   `run.py` mirror `judge/`. Reports read the newest matching attempt.
-- `src/oracle_lab/review/`: human review of the LLM judges.
+- `src/oracle_lab/review/`: human review of the LLM judges, one problem (task
+  instance) at a time.
   - `contracts.py`: the rating scale, the review, its provenance, and the
     agreement report.
   - `targets.py`: `JudgmentTarget` and `ClassificationTarget`, which hold
-    everything particular to each stage, and finding them on disk.
+    everything particular to each stage, finding them on disk, and grouping them
+    into a `Problem` per instance, in rating order.
   - `sources.py`: the judge's buggy and golden views, rebuilt from a shallow Git
     fetch.
   - `store.py`: saving and reading reviews.
@@ -96,6 +102,12 @@ Supporting these:
   page asks, `server.py` serves it over HTTP on `127.0.0.1`, and `static/` is the
   page itself: one ES module per view, with pinned libraries in `static/vendor/`.
   It holds no review logic of its own.
+- `src/oracle_lab/trace/`: a run's agent trace as typed, annotated events, for
+  the review page's Agent trace and Test files tabs. Harness adapters turn traces
+  into shared steps (`harnesses/steps.py`); `shell.py` classifies shell commands
+  with tree-sitter-bash; `facts.py` adds patch overlap and test file versions;
+  `build.py` reads the run with the strict contracts. It annotates facts only,
+  never failure modes.
 - `src/oracle_lab/spend.py`: the OpenRouter key spend measured around a run's
   model stages, saved as `cost.json`.
 - `src/oracle_lab/config.py`, `paths.py`, `results.py`: the input contract, the

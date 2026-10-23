@@ -1,24 +1,30 @@
 """What the review page shows: one rater's view of the targets under a directory.
 
 Each method answers one request the page makes, as JSON-ready data. Repository
-views and evidence are built on first use and kept for the session.
+views, evidence, and agent traces are built on first use and kept for the session.
 """
 
 from __future__ import annotations
 
 import threading
 from pathlib import Path
+from string import Template
 
+from oracle_lab.io import read_json
+from oracle_lab.results import InstanceRecord
 from oracle_lab.review.contracts import RATING_DEFINITIONS, require_rater
 from oracle_lab.review.sources import SourceView, open_views
 from oracle_lab.review.store import read_review, save_review
 from oracle_lab.review.targets import (
-    ClassificationTarget,
     JudgmentTarget,
+    Problem,
     ReviewTarget,
     UnreviewableTarget,
+    find_problems,
     find_targets,
 )
+
+HOW_TO_REVIEW = Path(__file__).resolve().parent / "templates/how-to-review.md"
 
 # The task record's readable texts beside the issue, by dataset field, in page order.
 RECORD_TEXTS = {
@@ -43,25 +49,36 @@ class ReviewSession:
         self.unreviewable: dict[str, UnreviewableTarget] = {
             _target_id(root, item.root): item for item in unreviewable
         }
+        self._ids = {target.root: target_id for target_id, target in self.targets.items()}
+        self.problems: dict[str, Problem] = {
+            problem.instance_id: problem for problem in find_problems(targets)
+        }
         self._remote = remote
         self._cache = cache
         self._lock = threading.Lock()
         self._views: dict[str, dict[str, SourceView]] = {}
         self._evidence: dict[str, dict[str, bytes]] = {}
+        self._traces: dict[str, dict] = {}
 
     def listing(self) -> dict:
-        """Every target with this rater's progress, and every target that cannot be reviewed."""
+        """Every problem with its tasks in rating order and this rater's progress, and
+        every target that cannot be reviewed.
+
+        Each task carries its stage, its label (harness, model, and scope for a run),
+        its question keys, and whether this rater has saved a review.
+        """
         return {
             "rater": self.rater,
             "rating_definitions": RATING_DEFINITIONS,
-            "targets": [
+            "how_to_review": how_to_review(),
+            "problems": [
                 {
-                    "id": target_id,
-                    "stage": target.stage,
-                    "instance_id": target.instance.instance_id,
-                    "reviewed": read_review(target, self.rater) is not None,
+                    "instance_id": problem.instance_id,
+                    "repo": problem.instance.repo,
+                    "title": _issue_title(problem.instance),
+                    "tasks": [self._task(self._ids[target.root]) for target in problem.tasks],
                 }
-                for target_id, target in self.targets.items()
+                for problem in self.problems.values()
             ],
             "unreviewable": [
                 {"id": target_id, "stage": item.stage, "reason": item.reason}
@@ -69,8 +86,34 @@ class ReviewSession:
             ],
         }
 
+    def problem(self, instance_id: str) -> dict:
+        """What every rating page's Problem tab shows: the instance, the issue, the
+        record's other texts, the golden patch, and the reference tests."""
+        if instance_id not in self.problems:
+            raise LookupError(f"No such problem: {instance_id}")
+        problem = self.problems[instance_id]
+        instance = problem.instance
+        record = instance.original_record
+        return {
+            "instance_id": instance_id,
+            "repo": instance.repo,
+            "dataset": instance.source.name,
+            "base_commit": instance.base_commit,
+            "issue": problem.issue(),
+            "record_texts": [
+                {"title": title, "text": record[field]}
+                for field, title in RECORD_TEXTS.items()
+                if isinstance(record.get(field), str) and record[field].strip()
+            ],
+            "repair_patch": instance.golden_patch,
+            "reference_test_patch": instance.reference_test_patch,
+            "reference_test_ids": instance.reference_test_ids,
+        }
+
     def overview(self, target_id: str) -> dict:
-        """What the page shows first: the questions, the answers, and the core evidence."""
+        """The rating page's own data: the questions, the answers, the stage rubric, and,
+        for a judgment, the outcomes and the submission. The problem's issue, patches,
+        and record texts come from `problem`."""
         target = self._target(target_id)
         answers = target.answers.model_dump(mode="json")
         review = read_review(target, self.rater)
@@ -79,27 +122,16 @@ class ReviewSession:
             "stage": target.stage,
             "instance_id": target.instance.instance_id,
             "views": list(target.views),
-            "questions": [
-                {
-                    "key": key,
-                    "label": target.labels[key],
-                    "answer": answers[key],
-                    "justification": answers["justifications"][key],
-                }
-                for key in target.answered_questions()
-            ],
-            "review": review.ratings if review else None,
+            # Every rating item in rail order, with its section ("submission",
+            # "failure_modes", or "added_failure_modes"), the judge's answer or
+            # decision, its steps for a failure mode, and its justification.
+            "questions": _rating_items(target, answers),
+            "review": review.model_dump() if review else None,
             "stage_rubric": target.stage_rubric.read_text(),
-            "issue": target.issue(),
-            "repair_patch": target.instance.golden_patch,
-            "reference_test_patch": target.instance.reference_test_patch,
-            "reference_test_ids": target.instance.reference_test_ids,
             "evidence": sorted(self._evidence_of(target_id)),
         }
         if isinstance(target, JudgmentTarget):
             overview |= _judgment_details(target)
-        elif isinstance(target, ClassificationTarget):
-            overview |= _classification_details(target)
         return overview
 
     def tree(self, target_id: str, view: str) -> dict:
@@ -117,9 +149,39 @@ class ReviewSession:
             raise LookupError(f"No such evidence file: {name}")
         return {"name": name, **_text(evidence[name])}
 
+    def trace(self, target_id: str) -> dict:
+        """A judged run's agent trace as saved when it was judged (`judge/trace.json`).
+
+        Read once per session. A run whose trace could not be built has none.
+        """
+        target = self._target(target_id)
+        if not isinstance(target, JudgmentTarget):
+            raise LookupError(f"{target_id} has no agent trace")
+        with self._lock:
+            if target_id not in self._traces:
+                if not target.paths.judge.trace.is_file():
+                    raise LookupError(
+                        "This run's trace could not be built when it was judged; "
+                        "the judge read the raw trace (agent-trace.jsonl in Evidence)."
+                    )
+                self._traces[target_id] = read_json(target.paths.judge.trace)
+            return self._traces[target_id]
+
     def submit(self, target_id: str, raw: str) -> dict:
         review = save_review(self._target(target_id), self.rater, raw)
-        return {"review": review.ratings}
+        return {"review": review.model_dump()}
+
+    def _task(self, target_id: str) -> dict:
+        """One target as the home page lists it, with this rater's progress."""
+        target = self._target(target_id)
+        return {
+            "id": target_id,
+            "stage": target.stage,
+            "instance_id": target.instance.instance_id,
+            "run": _run_label(target) if isinstance(target, JudgmentTarget) else None,
+            "questions": target.rating_keys(),
+            "reviewed": read_review(target, self.rater) is not None,
+        }
 
     def _target(self, target_id: str) -> ReviewTarget:
         if target_id not in self.targets:
@@ -147,7 +209,11 @@ def _judgment_details(target: JudgmentTarget) -> dict:
     """The paired outcomes and the submission the judge rated."""
     evaluation = target.evaluation()
     manifest = target.manifest()
+    prompt = target.paths.prompt
     return {
+        "run": _run_label(target),
+        "test_target": evaluation.test_target.text if evaluation.test_target else None,
+        "prompt": prompt.read_text() if prompt.is_file() else None,
         "outcomes": {
             "matrix": {cell.value: entry.count for cell, entry in evaluation.matrix.items()},
             "tests": [outcome.model_dump(mode="json") for outcome in evaluation.tests],
@@ -163,16 +229,54 @@ def _judgment_details(target: JudgmentTarget) -> dict:
     }
 
 
-def _classification_details(target: ClassificationTarget) -> dict:
-    """The task record's texts the classifier read besides the issue."""
-    record = target.instance.original_record
+def how_to_review() -> str:
+    """The reviewer's instructions as Markdown, with each rating's definition filled in."""
+    ratings = "\n".join(
+        f"- **{rating.capitalize()}:** {definition}"
+        for rating, definition in RATING_DEFINITIONS.items()
+    )
+    return Template(HOW_TO_REVIEW.read_text()).substitute(ratings=ratings)
+
+
+def _rating_items(target: ReviewTarget, answers: dict) -> list[dict]:
+    """Every rating item in rail order, as the rail shows it."""
+    items = []
+    for key in target.rating_keys():
+        section, _, name = key.partition(".")
+        item = {"key": key, "label": target.rating_label(key)}
+        if section == "failure_modes":
+            decision = answers["failure_modes"][name]
+            item |= {"section": section, "answer": decision["decision"]}
+            item |= {field: decision.get(field) for field in ("steps", "justification")}
+        elif section == "added_failure_modes":
+            added = answers["added_failure_modes"][int(name)]
+            item |= {"section": section, "answer": "present", "definition": added["definition"]}
+            item |= {field: added[field] for field in ("steps", "justification")}
+        else:
+            item |= {
+                "section": "submission",
+                "answer": answers[key],
+                "justification": answers["justifications"][key],
+            }
+        items.append(item)
+    return items
+
+
+def _run_label(target: JudgmentTarget) -> dict:
+    """What tells a problem's runs apart: the agent and the prompt's scope."""
+    config = target.config()
     return {
-        "record_texts": [
-            {"title": title, "text": record[field]}
-            for field, title in RECORD_TEXTS.items()
-            if isinstance(record.get(field), str) and record[field].strip()
-        ],
+        "harness": config.agent.harness,
+        "model": config.agent.model,
+        "scope": config.task.scope,
     }
+
+
+def _issue_title(instance: InstanceRecord) -> str:
+    """The issue's first line, as dataset issues start with their title."""
+    issue = instance.original_record.get("problem_statement")
+    lines = issue.strip().splitlines() if isinstance(issue, str) else []
+    return lines[0].lstrip("# ").strip() if lines else ""
 
 
 def _text(content: bytes) -> dict:

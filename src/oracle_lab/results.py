@@ -333,17 +333,23 @@ def failed_turn(error: str, *, timed_out: bool = False) -> UnsuccessfulTurn:
     return UnsuccessfulTurn(status="timed_out" if timed_out else "failed", error=error)
 
 
-_FENCED_JSON = re.compile(r"\A\s*```(?:json)?[ \t]*\r?\n(?P<body>.*?)\r?\n```\s*\Z", re.DOTALL)
+# A fenced block on its own lines, anywhere in the answer.
+_FENCED_JSON = re.compile(
+    r"^```(?:json)?[ \t]*\r?\n(?P<body>.*?)\r?\n```[ \t]*$", re.DOTALL | re.MULTILINE
+)
 
 
 def parse_json_object(raw: str) -> dict:
-    """The one JSON object a model answered with, bare or inside one Markdown fence."""
+    """The one JSON object a model answered with: bare, or inside one Markdown fence
+    that ends the answer. Prose before the fence is ignored; the raw answer keeps it."""
     candidate = raw
-    if raw.lstrip().startswith("```"):
-        match = _FENCED_JSON.fullmatch(raw)
-        if match is None:
-            raise ValueError("Expected exactly one JSON object inside one Markdown fence")
-        candidate = match.group("body")
+    if not raw.lstrip().startswith(("{", "[")):
+        fences = list(_FENCED_JSON.finditer(raw))
+        if len(fences) != 1 or raw[fences[0].end() :].strip():
+            raise ValueError(
+                "Expected exactly one JSON object in one Markdown fence that ends the answer"
+            )
+        candidate = fences[0].group("body")
     value = json.loads(candidate)
     if not isinstance(value, dict):
         raise ValueError("Model output must be a JSON object")

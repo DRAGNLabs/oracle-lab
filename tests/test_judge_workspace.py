@@ -1,6 +1,8 @@
+import json
 from unittest.mock import Mock
 
 import pytest
+import yaml
 from fixtures import RUN_CONFIG, detecting_result, instance_record, run_config, write_submission
 
 from oracle_lab.config import JudgeConfig
@@ -9,9 +11,13 @@ from oracle_lab.generation import verify_bundle
 from oracle_lab.io import read_json, write_json
 from oracle_lab.judge.workspace import JUDGE_ROOT, build_judge_workspace
 from oracle_lab.paths import RunPaths
-from oracle_lab.results import read_evaluation_result
+from oracle_lab.results import read_evaluation_result, write_result
 
 SAMPLE = RUN_CONFIG
+# One reasoning step, in the Claude format the sample config's harness reads.
+CLAUDE_TRACE = json.dumps(
+    {"type": "assistant", "message": {"content": [{"type": "thinking", "thinking": "Reading"}]}}
+)
 
 
 def prepared_run(tmp_path):
@@ -29,6 +35,7 @@ def prepared_run(tmp_path):
     reference_patch = "diff --git a/tests/test_core.py b/tests/test_core.py\n"
     (paths.ground_truth / "fix.patch").write_text(fix)
     (paths.generation / "session.log").write_text("agent session\n")
+    (paths.generation / "trace.jsonl").write_text(CLAUDE_TRACE)
     (paths.generation / "workspace.diff").write_text("generated diff\n")
     manifest = write_submission(
         paths, {"oracle_tests/test_generated.py": "def test_generated():\n    assert True\n"}
@@ -69,6 +76,8 @@ def prepared_run(tmp_path):
             "PASS_TO_PASS": [],
         },
     )
+    write_result(paths.instance, instance)
+    paths.config.write_text(yaml.safe_dump(config.model_dump(mode="json"), sort_keys=False))
     return config, paths, instance, files, read_evaluation_result(paths.results)
 
 
@@ -132,6 +141,25 @@ def test_workspace_exposes_complete_hashed_bundle_and_identical_tests(tmp_path):
     assert "fail_on_buggy_pass_on_golden" in instructions
     assert "`evidence/buggy-tests.json` and `evidence/golden-tests.json`" in instructions
     assert "| `oracle_tests/test_generated.py::test_generated` | `fail` | `pass` |" in instructions
+    summary = sandbox.uploaded[JUDGE_ROOT + "/evidence/agent-trace.md"].decode()
+    assert "- 0 · Reasoning · Reading" in summary
+    assert read_json(paths.judge.trace)["events"][0]["text"] == "Reading"
+    assert JUDGE_ROOT + "/evidence/agent-trace.json" in destinations
+
+
+def test_without_a_built_trace_the_judge_reads_the_raw_trace(tmp_path):
+    config, paths, instance, files, evaluation = prepared_run(tmp_path)
+    paths.config.write_text("not: a run config\n")  # the trace cannot be built
+    sandbox = fake_sandbox(files)
+
+    spec = build_judge_workspace(
+        sandbox, config, paths, "example/runtime", instance, evaluation, verify_bundle(paths)
+    )
+
+    destinations = {artifact.destination for artifact in spec.artifacts}
+    assert JUDGE_ROOT + "/evidence/agent-trace.jsonl" in destinations
+    assert JUDGE_ROOT + "/evidence/agent-trace.md" not in destinations
+    assert not paths.judge.trace.exists()
 
 
 def test_workspace_falls_back_to_explicit_repository_copies(tmp_path):

@@ -9,6 +9,7 @@ from oracle_lab.classification.contracts import (
 from oracle_lab.config import RunConfig, load_config
 from oracle_lab.io import read_json
 from oracle_lab.judge.contracts import (
+    FAILURE_MODES,
     JUDGMENT_LABELS,
     read_judgment_state,
 )
@@ -208,6 +209,7 @@ def _judge_lines(judgment: dict) -> list[str]:
             "| " + " | ".join(judgment[key] or "—" for key in JUDGMENT_LABELS) + " |",
             "",
             *_justification_lines(judgment["justifications"]),
+            *_failure_mode_lines(judgment),
         ]
     elif status == "stale":
         lines += [f"Stale: {judgment['reason']}", ""]
@@ -222,6 +224,38 @@ def _judge_lines(judgment: dict) -> list[str]:
         lines += ["Missing: the judge was configured, but no judgment is saved.", ""]
     else:
         lines += ["Disabled.", ""]
+    return lines
+
+
+def _failure_mode_lines(judgment: dict) -> list[str]:
+    """The failure modes the judge found, with their steps and justifications, and the
+    start-list labels it found absent."""
+    decisions = judgment["failure_modes"]
+    present = [key for key in FAILURE_MODES if decisions[key]["decision"] == "present"]
+    absent = [FAILURE_MODES[key] for key in FAILURE_MODES if key not in present]
+    lines = ["### Failure modes", ""]
+    found = [
+        (FAILURE_MODES[key], decisions[key]["steps"], decisions[key]["justification"])
+        for key in present
+    ] + [
+        (
+            f"{mode['name']} (judge's own: {mode['definition']})",
+            mode["steps"],
+            mode["justification"],
+        )
+        for mode in judgment["added_failure_modes"]
+    ]
+    if not found:
+        lines += ["None found.", ""]
+    for title, steps, justification in found:
+        lines += [
+            f"**{title}**, steps {', '.join(map(str, steps))}:",
+            "",
+            *_blockquote(justification),
+            "",
+        ]
+    if absent:
+        lines += [f"Absent: {'; '.join(absent)}.", ""]
     return lines
 
 

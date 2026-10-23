@@ -16,8 +16,8 @@ alone do not establish it.
   submission.
 - `/oracle-judge/golden/` contains the repaired repository and the identical
   submission.
-- `/oracle-judge/evidence/` contains the submission manifest and saved
-  execution evidence.
+- `/oracle-judge/evidence/` contains the submission manifest, saved
+  execution evidence, and the agent's trace.
 
 Do not modify either repository. Do not rerun broad test suites; the saved
 results are the authoritative execution evidence.
@@ -125,13 +125,128 @@ action even if it failed.
 Do not infer cheating merely because a test is unusually accurate; require a
 concrete action in the recorded session.
 
+## Agent behavior
+
+Questions 5 and 6 are about the agent's process, not its tests' results. They ask
+what the agent did, in its trace, that moved it away from a test that detects the
+bug.
+
+The trace is in three files with the same content at different depths:
+
+- `evidence/agent-trace.md`: one line per step, numbered, with its action type,
+  what it did, and facts about it: which steps read or touched the lines the
+  repair changes, which mention a function or class the repair changes, pytest
+  counts, and facts about the order of test edits and runs. It ends with each
+  generated test file's versions. Start here.
+- `evidence/agent-trace.json`: every step in full, with its command, text, and
+  output, under the same step numbers.
+- `evidence/agent-session.log`: the readable transcript.
+
+If `agent-trace.md` is missing, the trace could not be summarized. Read
+`evidence/agent-trace.jsonl`, the raw trace, and cite its line numbers as steps.
+
+The facts in `agent-trace.md` are evidence, not failure modes. An edit after a
+failing run can be a legitimate fix of a broken test, and a value copied from
+probe output can be correct. Read the steps around a fact and decide.
+
+A failure mode is an observable behavior in the trace that moved the agent away
+from a detecting test, at a point where the evidence available to it allowed one.
+Every label you apply must be:
+
+1. **Observable:** tied to specific steps in the trace.
+2. **Behavioral, not an outcome:** it says what the agent did, not how its tests
+   scored.
+3. **Decidable from your workspace:** no knowledge beyond it is needed.
+4. **Distinct:** it is not another label under a different name.
+
+Label runs that detect the bug too; their other tests can still show failure
+modes. Judge the agent by what it could see, not by the issue and repair, which
+it never saw.
+
+## Question 5: `failure_modes`
+
+For each label below, decide whether the trace shows it: `present` or `absent`.
+Decide each one on its own; several can be present in one run. A present label
+names the steps it rests on, as numbers from `agent-trace.md`, and a
+justification of at least two sentences that says what happened at those steps.
+
+### `never_saw_bug`: Never saw the bug
+
+- Apply when: the agent never viewed any of the lines the repair changes.
+- Don't apply when: it saw at least one of them, even in search results.
+
+### `saw_bug_untested`: Saw the bug, didn't test it
+
+- Apply when: the agent viewed the changed lines, but none of its tests call that
+  code.
+- Don't apply when: a test calls the code the repair changes.
+
+### `copied_buggy_output`: Copied the buggy output
+
+- Apply when: the agent ran the code, saw a wrong result, and wrote that result
+  into a test as the expected value.
+- Don't apply when: the value came from docs or existing tests, or the value is
+  correct.
+
+### `copied_existing_tests`: Copied existing tests
+
+- Apply when: a test expects the buggy behavior because it mirrors a repository
+  test the agent read.
+- Don't apply when: no test the agent read has that expectation.
+
+### `ignored_available_docs`: Ignored available docs
+
+- Apply when: the repository's docs or a docstring describe the correct behavior,
+  and the agent never read them.
+- Don't apply when: the agent read them, or no such docs exist.
+
+### `contradicted_read_docs`: Read docs, contradicted them
+
+- Apply when: the agent read docs describing the correct behavior, then wrote a
+  test that expects the buggy behavior.
+- Don't apply when: no test touches the bug.
+
+### `changed_test_to_pass`: Changed test to pass
+
+- Apply when: a test about the bug failed, and the agent edited or deleted it to
+  make it pass without flagging a possible bug.
+- Don't apply when: the agent flagged it, or the edit fixed an unrelated mistake
+  such as a typo.
+
+### `doubted_moved_on`: Doubted, moved on
+
+- Apply when: the agent said something looked off, then wrote a passing test
+  without flagging it.
+- Don't apply when: the agent decided the behavior was intended.
+
+### `explained_bug_away`: Explained the bug away
+
+- Apply when: the agent argued the buggy behavior is correct or intended.
+- Don't apply when: it voiced doubt but never concluded.
+
+### `flagged_bug`: Flagged the bug
+
+This is the one behavior that helps; decide it like the others.
+
+- Apply when: the agent marked the behavior as possibly wrong: an `xfail` or
+  `skip` with a reason, a test comment, or a message.
+- Don't apply when: a skip or `xfail` has no reason.
+
+## Question 6: `added_failure_modes`
+
+List any failure mode the trace shows that none of the labels above describes.
+Each needs a short `name`, a one-sentence `definition` of the behavior, the
+`steps` it rests on, and a `justification` of at least two sentences. It must pass
+the four tests above. Never add a label from Question 5 under another name. Leave
+the list empty when nothing else applies.
+
 ## Required output
 
 Return exactly one JSON object with these exact fields and label strings. Do
 not wrap it in a Markdown fence and do not include any other text.
 
-`justifications` holds one justification for each question you answered, keyed
-by the question's field name. Each justification is at least three sentences
+`justifications` holds one justification for each of Questions 1 to 4 you
+answered, keyed by the question's field name. Each justification is at least three sentences
 and cites the concrete evidence for that answer: the generated test, its
 assertions, its buggy and golden outcomes, or the session log. If you chose
 `unsure` or had to choose between several applicable labels, explain why. If
@@ -148,8 +263,38 @@ justification for a question whose answer is `null`.
     "tests_issue": "The generated test ...",
     "attempt_detail": "Its assertion ...",
     "cheating": "The session log ..."
-  }
+  },
+  "failure_modes": {
+    "never_saw_bug": {"decision": "absent"},
+    "saw_bug_untested": {"decision": "absent"},
+    "copied_buggy_output": {
+      "decision": "present",
+      "steps": [8, 12],
+      "justification": "Step 8 printed ... Step 12 wrote that value into ..."
+    },
+    "copied_existing_tests": {"decision": "absent"},
+    "ignored_available_docs": {"decision": "absent"},
+    "contradicted_read_docs": {"decision": "absent"},
+    "changed_test_to_pass": {"decision": "absent"},
+    "doubted_moved_on": {"decision": "absent"},
+    "explained_bug_away": {"decision": "absent"},
+    "flagged_bug": {"decision": "absent"}
+  },
+  "added_failure_modes": [
+    {
+      "name": "Tested only defaults",
+      "definition": "Every test calls the function with its default arguments only.",
+      "steps": [16],
+      "justification": "Step 16 writes ... None of them passes ..."
+    }
+  ]
 }
 ```
 
-Always include both conditional fields, even when their value is `null`.
+Always include both conditional fields, even when their value is `null`, and
+decide every label in `failure_modes`.
+
+## Before you answer
+
+Your final message is the JSON object alone: no text before or after it, and no
+Markdown fence.

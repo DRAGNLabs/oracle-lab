@@ -1,7 +1,7 @@
 # Judging
 
-An LLM judge rates a run's submission, and human raters then rate the judge's
-answers. This guide covers both commands. The [results reference](results.md)
+An LLM judge rates a run's submission and the agent's behavior in its trace, and
+human raters then rate the judge's answers. This guide covers both commands. The [results reference](results.md)
 describes the files they write.
 
 ## The LLM judge
@@ -22,6 +22,13 @@ The command needs the configured judge credential and the saved runtime image.
 - A rerun first moves the whole previous attempt to
   `judge-history/<UTC timestamp>/`, then rebuilds the workspace.
 
+Besides the four submission questions, the judge decides whether each failure
+mode on a start list is present in the agent's trace, citing trace steps for each
+present one, and may add failure modes of its own. The start list and its reasons
+are in [research framing](research-framing.md#start-list). The workspace builds
+the trace on the host and saves it as `judge/trace.json`; the judge reads a
+summary of it and the full trace with the same step numbers.
+
 ## Human review
 
 Raters measure the two LLM judges, the generated-test judge and the task
@@ -30,12 +37,15 @@ themselves. Each answer gets one rating:
 
 | Rating | Meaning |
 |---|---|
-| `correct` | The rater would give the same answer. |
-| `defensible` | The rater would answer differently, but the judge's answer is reasonable given the evidence and the stage rubric. |
-| `incorrect` | The evidence or the stage rubric contradicts the judge's answer. |
+| `agree` | The rater would give the same answer, given the evidence and the stage rubric. |
+| `disagree` | The rater would give a different answer, given the evidence and the stage rubric. |
 
-A question the judge answered `null` is not rated, so a judgment has up to 4
-ratings, an in-scope classification 7, and an out-of-scope one 1. Only a
+A question the judge answered `null` is not rated. A judgment is rated on up to
+4 submission answers, every start-list failure-mode decision (present or
+absent), and each failure mode the judge added; an in-scope classification on 7
+answers, and an out-of-scope one on 1. A rater may also add failure modes the
+judge missed that are outside the start list, each with a name, a description,
+and the trace steps. Only a
 completed judgment or classification can be reviewed; a failed, skipped, or
 stale one is listed with the reason it cannot be.
 
@@ -57,13 +67,30 @@ the instance's base commit, cached under `~/.cache/oracle-lab/repos/` (or
 `$XDG_CACHE_HOME/oracle-lab/repos/`). Later reviews of the same commit reuse the
 cache.
 
-The page shows the rater what the judge had:
+The page opens on a home page that lists every problem (task instance) with its
+tasks in rating order: the task classification first, then each run's judgment,
+labeled with harness, model, and scope. It shows each task's progress, including
+ratings not saved yet, and filters by stage, harness, and unfinished tasks. Each
+task opens its rating page, titled Problem Classification or Generation
+Judgment.
 
-- the judge's answers and justifications beside three rating buttons;
-- for a judgment, the issue, the paired-outcome matrix and per-test outcomes,
-  the generated tests, the repair, and the reference tests;
-- for a classification, the task record's issue, issue comments or pull request
-  texts, the repair, and the reference tests;
+A rating page has three columns: the questions to rate, tabs with what the judge
+rated, and a sidebar with reference (the problem, the stage rubric, and for a
+judgment the trace legend and the selected trace event). Drag the divider to
+resize the sidebar. It shows the rater what the judge had:
+
+- the judge's answers and justifications beside three rating buttons, and after
+  saving, a link to the next unreviewed task;
+- a Problem tab: the issue, the task record's other texts, the golden patch, and
+  the reference tests;
+- for a judgment, an Overview of the run: the agent, the localized target, the
+  prompt, the paired-outcome matrix and per-test outcomes, which patched lines
+  the agent saw, edit facts, and the generated tests;
+- for a judgment, the agent trace as a timeline of typed events, with each
+  event's input and output in the sidebar, and a Test files tab with each generated
+  file's versions and the pytest runs between them. Both show facts only, such as
+  which events touch the patched lines, never failure-mode labels. A legend
+  explains every color and tag, and every tag describes itself on hover;
 - the repository views the judge read, with a file finder: buggy and golden for
   a judgment, with a side-by-side view of the repair, and the buggy checkout
   only for a classification;
@@ -90,18 +117,20 @@ It takes one or more runs, classification attempts, or directories holding
 `agreement/<UTC timestamp>/` in the current directory. It needs no Docker,
 network, or credentials.
 
-The two stages are reported separately. For each question it reports:
+The two stages are reported separately. Each submission question, each
+classification question, and each start-list failure mode is a question. The
+failure modes judges added are named freely and differ by run, so they are
+pooled into one question, and also listed one by one with their ratings. The
+report counts the raters' own failure-mode labels by name. For each question it
+reports:
 
-- **Rating counts:** how many `correct`, `defensible`, and `incorrect` ratings
-  the question received across every target and rater.
-- **Judge quality:** the share of ratings that are `correct`, and the share that
-  are `correct` or `defensible`.
+- **Rating counts:** how many `agree` and `disagree` ratings the question
+  received across every target and rater.
+- **Judge agreed with:** the share of ratings that are `agree`.
 - **Raw agreement:** of every pair of raters who rated the same target, the share
   that gave the same rating.
-- **Krippendorff's alpha:** agreement beyond what chance would produce, treating
-  the ratings as ordered: `correct`, `defensible`, `incorrect`. So two raters a
-  step apart disagree less than two raters at opposite ends. 1 is perfect
-  agreement and 0 is chance level.
+- **Krippendorff's alpha:** agreement beyond what chance would produce. 1 is
+  perfect agreement and 0 is chance level.
 
 Read alpha beside raw agreement. When nearly every rating is the same, alpha is
 low or undefined even if raters agree, because there is little variation to

@@ -22,29 +22,12 @@
 
   <main id="app" aria-live="polite"></main>
 
-  <dialog id="help" aria-labelledby="help-title">
-    <h2 id="help-title">How to review</h2>
-    <p>
-      You are rating the judge's answers. You are not answering the questions
-      yourself.
-    </p>
-    <p>
-      For each question, read the judge's answer and its justification, check
-      them against the evidence, and choose one rating:
-    </p>
-    <dl id="help-ratings"></dl>
-    <p>
-      Rate each question on its own. If an earlier answer is wrong, rate the
-      later ones as if it were right. The stage rubric defines every question
-      and label.
-    </p>
-    <p class="keys">
-      <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> rate the selected question.
-      <kbd>j</kbd> and <kbd>k</kbd> move between questions.
-      <kbd>Ctrl</kbd> <kbd>P</kbd> finds a file.
-    </p>
+  <dialog id="help" aria-label="How to review">
+    <article class="prose" id="help-body"></article>
     <form method="dialog"><button class="primary" autofocus>Start reviewing</button></form>
   </dialog>
+
+  <div id="tooltip" role="tooltip" hidden></div>
 
   <dialog id="finder" aria-label="Find a file">
     <input type="search" id="finder-input" placeholder="Type part of a file path" autocomplete="off" spellcheck="false">

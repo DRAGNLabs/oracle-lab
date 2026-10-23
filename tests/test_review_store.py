@@ -3,13 +3,13 @@
 import json
 
 import pytest
-from fixtures import classified_attempt, judged_run
+from fixtures import classified_attempt, judged_run, judgment_ratings
 
 from oracle_lab.io import digest, read_json, write_json
 from oracle_lab.review.store import read_review, save_review
 from oracle_lab.review.targets import ClassificationTarget, JudgmentTarget
 
-RATINGS = {"tests_issue": "correct", "attempt_detail": "defensible", "cheating": "correct"}
+RATINGS = judgment_ratings(attempt_detail="disagree")
 
 
 def submitted(**changes) -> str:
@@ -22,7 +22,7 @@ def test_a_review_is_saved_with_its_provenance(tmp_path):
     save_review(target, "rater-1", submitted())
 
     directory = tmp_path / "judge/reviews/rater-1"
-    assert read_json(directory / "review.json") == {"ratings": RATINGS}
+    assert read_json(directory / "review.json") == {"ratings": RATINGS, "other_failure_modes": []}
     assert read_json(directory / "provenance.json") == {
         "stage": "judge",
         "rater": "rater-1",
@@ -37,7 +37,7 @@ def test_a_review_is_saved_with_its_provenance(tmp_path):
 
 def test_a_classification_review_names_the_classifier(tmp_path):
     target = ClassificationTarget.load(classified_attempt(tmp_path))
-    ratings = {key: "correct" for key in target.answered_questions()}
+    ratings = {key: "agree" for key in target.rating_keys()}
 
     save_review(target, "rater-1", json.dumps({"ratings": ratings}))
 
@@ -51,19 +51,19 @@ def test_saving_again_moves_the_earlier_review_to_history(tmp_path):
     target = JudgmentTarget.load(judged_run(tmp_path).root)
     save_review(target, "rater-1", submitted())
 
-    save_review(target, "rater-1", submitted(cheating="incorrect"))
+    save_review(target, "rater-1", submitted(cheating="disagree"))
 
-    assert read_review(target, "rater-1").ratings["cheating"] == "incorrect"
+    assert read_review(target, "rater-1").ratings["cheating"] == "disagree"
     (earlier,) = (tmp_path / "judge/reviews-history/rater-1").iterdir()
-    assert read_json(earlier / "review.json") == {"ratings": RATINGS}
+    assert read_json(earlier / "review.json")["ratings"] == RATINGS
     assert (earlier / "provenance.json").is_file()
 
 
 def test_an_incomplete_review_is_refused_and_nothing_is_written(tmp_path):
     target = JudgmentTarget.load(judged_run(tmp_path).root)
-    partial = json.dumps({"ratings": {"tests_issue": "correct"}})
+    partial = json.dumps({"ratings": {"tests_issue": "agree"}})
 
-    with pytest.raises(ValueError, match="answered questions"):
+    with pytest.raises(ValueError, match="items the judge answered"):
         save_review(target, "rater-1", partial)
 
     assert not (tmp_path / "judge/reviews").exists()

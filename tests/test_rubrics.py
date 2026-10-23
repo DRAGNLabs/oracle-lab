@@ -11,7 +11,7 @@ from oracle_lab.classification.contracts import (
     OutOfScopeClassification,
     parse_classification,
 )
-from oracle_lab.judge.contracts import JudgmentLabels, parse_judgment
+from oracle_lab.judge.contracts import FAILURE_MODES, JudgmentLabels, parse_judgment
 
 RUBRICS = Path(__file__).parents[1] / "prompts/judge"
 JUDGE_RUBRIC = RUBRICS / "generated-test-evaluation-rubric.md"
@@ -79,8 +79,15 @@ def test_both_rubrics_ask_exactly_the_fields_their_parsers_read():
         "attempt_detail",
         "no_attempt_reason",
         "cheating",
+        "failure_modes",
+        "added_failure_modes",
     ]
     assert list(questions(CLASSIFICATION_RUBRIC)) == CLASSIFICATION_FIELDS
+
+
+def test_the_judge_rubric_defines_exactly_the_start_list():
+    defined = re.findall(r"^### `([a-z_]+)`: (.+)$", JUDGE_RUBRIC.read_text(), re.MULTILINE)
+    assert dict(defined) == FAILURE_MODES
 
 
 def output_examples(path: Path) -> list[str]:

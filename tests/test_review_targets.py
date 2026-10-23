@@ -2,50 +2,62 @@
 
 import pytest
 from fixtures import (
+    added_failure_mode,
     classified_attempt,
     completed_judgment,
+    instance_record,
     judged_run,
     out_of_scope_classification,
 )
 
+from oracle_lab.judge.contracts import FAILURE_MODES
 from oracle_lab.paths import RunPaths
 from oracle_lab.review.targets import (
     ClassificationTarget,
     JudgmentTarget,
     TargetError,
+    find_problems,
     find_targets,
 )
 
 FAILED = {"status": "failed", "error": "The harness crashed."}
 
 
-def test_a_judgment_is_reviewed_on_the_questions_it_answered(tmp_path):
-    target = JudgmentTarget.load(judged_run(tmp_path).root)
+def test_a_judgment_is_rated_on_its_answers_and_every_failure_mode_decision(tmp_path):
+    judgment = completed_judgment(added_failure_modes=[added_failure_mode()])
+    target = JudgmentTarget.load(judged_run(tmp_path, judgment).root)
 
     assert target.reviews == tmp_path / "judge/reviews"
     assert target.review_history == tmp_path / "judge/reviews-history"
-    assert target.answered_questions() == ["tests_issue", "attempt_detail", "cheating"]
+    keys = target.rating_keys()
+    assert keys[:3] == ["tests_issue", "attempt_detail", "cheating"]
+    assert keys[3:-1] == [f"failure_modes.{key}" for key in FAILURE_MODES]
+    assert keys[-1] == "added_failure_modes.0"
+    assert target.rating_label("failure_modes.flagged_bug") == "Flagged the bug"
+    assert target.rating_label("added_failure_modes.0") == "Tested only defaults"
+    assert target.rating_label("cheating") == "Cheating attempt"
 
 
 def test_a_null_judge_answer_is_not_reviewed(tmp_path):
     judgment = completed_judgment(tests_issue="unsure", attempt_detail=None)
     target = JudgmentTarget.load(judged_run(tmp_path, judgment).root)
 
-    assert target.answered_questions() == ["tests_issue", "cheating"]
+    assert target.rating_keys()[:2] == ["tests_issue", "cheating"]
+    assert target.rating_keys()[2].startswith("failure_modes.")
 
 
 def test_an_in_scope_classification_is_reviewed_on_all_seven_questions(tmp_path):
     target = ClassificationTarget.load(classified_attempt(tmp_path))
 
     assert target.reviews == tmp_path / "reviews"
-    assert len(target.answered_questions()) == 7
+    assert len(target.rating_keys()) == 7
 
 
 def test_an_out_of_scope_classification_is_reviewed_on_one_question(tmp_path):
     result = {"status": "completed", **out_of_scope_classification()}
     target = ClassificationTarget.load(classified_attempt(tmp_path, result))
 
-    assert target.answered_questions() == ["task_nature"]
+    assert target.rating_keys() == ["task_nature"]
 
 
 def test_judge_evidence_is_what_the_judge_was_shown_without_the_views(tmp_path):
@@ -126,6 +138,21 @@ def test_find_targets_lists_a_data_repository(tmp_path):
     assert all("failed, not completed" in item.reason for item in unreviewable)
 
 
+def test_problems_group_targets_by_instance_with_classifications_first(tmp_path):
+    other = instance_record(instance_id="other__project-2")
+    judged_run(tmp_path / "runs/run-b")
+    judged_run(tmp_path / "runs/run-a")
+    judged_run(tmp_path / "runs/run-c", instance=other)
+    classified_attempt(tmp_path / "classifications/owner__project-1/attempt-1")
+
+    problems = find_problems(find_targets(tmp_path)[0])
+
+    assert [problem.instance_id for problem in problems] == ["other__project-2", "owner__project-1"]
+    assert [target.root.name for target in problems[1].tasks] == ["attempt-1", "run-a", "run-b"]
+    assert problems[1].issue() == "Broken behavior."
+    assert JudgmentTarget.load(tmp_path / "runs/run-a").config().agent.harness == "claude"
+
+
 def test_find_targets_accepts_one_run_or_one_attempt(tmp_path):
     run = judged_run(tmp_path / "run").root
     attempt = classified_attempt(tmp_path / "attempt")
@@ -142,6 +169,15 @@ def test_a_run_without_a_judgment_is_unreviewable_with_its_reason(tmp_path):
 
     assert targets == []
     assert unreviewable[0].reason == "The run has no judgment"
+
+
+def test_a_run_with_an_invalid_config_is_unreviewable(tmp_path):
+    paths = judged_run(tmp_path / "runs/run-a")
+    paths.config.write_text("source: {}\n")
+
+    _, [item] = find_targets(tmp_path)
+
+    assert "validation error" in item.reason
 
 
 def test_find_targets_refuses_a_directory_without_targets(tmp_path):

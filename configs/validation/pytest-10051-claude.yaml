@@ -24,4 +24,4 @@ task:
   scope: localized
   existing_tests: hide_all
 
-output: ../../runs
+output: ../../output

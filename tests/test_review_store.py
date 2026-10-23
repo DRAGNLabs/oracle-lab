@@ -36,14 +36,14 @@ def test_a_review_is_saved_with_its_provenance(tmp_path):
 
 
 def test_a_classification_review_names_the_classifier(tmp_path):
-    target = ClassificationTarget.load(classified_attempt(tmp_path))
+    target = ClassificationTarget.load(classified_attempt(tmp_path).root)
     ratings = {key: "agree" for key in target.rating_keys()}
 
     save_review(target, "rater-1", json.dumps({"ratings": ratings}))
 
-    provenance = read_json(tmp_path / "reviews/rater-1/provenance.json")
+    provenance = read_json(tmp_path / "judge/reviews/rater-1/provenance.json")
     assert provenance["stage"] == "classification"
-    assert provenance["reviewed_output"] == "classification.json"
+    assert provenance["reviewed_output"] == "judge/classification.json"
     assert provenance["judge_model"] == "classifier-model"
 
 

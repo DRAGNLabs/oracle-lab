@@ -127,7 +127,7 @@ class ReviewSession:
             # decision, its steps for a failure mode, and its justification.
             "questions": _rating_items(target, answers),
             "review": review.model_dump() if review else None,
-            "stage_rubric": target.stage_rubric.read_text(),
+            "stage_rubric": target.judge.rubric.read_text(),
             "evidence": sorted(self._evidence_of(target_id)),
         }
         if isinstance(target, JudgmentTarget):
@@ -253,11 +253,7 @@ def _rating_items(target: ReviewTarget, answers: dict) -> list[dict]:
             item |= {"section": section, "answer": "present", "definition": added["definition"]}
             item |= {field: added[field] for field in ("steps", "justification")}
         else:
-            item |= {
-                "section": "submission",
-                "answer": answers[key],
-                "justification": answers["justifications"][key],
-            }
+            item |= {"section": "submission", **answers[key]}
         items.append(item)
     return items
 

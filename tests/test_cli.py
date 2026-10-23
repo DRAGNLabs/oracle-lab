@@ -27,8 +27,6 @@ def test_saved_run_config_is_loaded_once_at_cli_boundary(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("shell_value", [None, "from-shell"])
 def test_run_loads_local_keys_without_overriding_shell(tmp_path, monkeypatch, shell_value):
-    import os
-
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     if shell_value is not None:

@@ -6,19 +6,19 @@ import json
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import Field, ValidationError, field_validator, model_validator
+from pydantic import AfterValidator, Field, ValidationError, model_validator
 
 from oracle_lab.io import read_json
+from oracle_lab.paths import AttemptPaths
 from oracle_lab.results import (
+    Answered,
     CommitId,
     ExposedArtifact,
     InstanceRecord,
-    Justification,
     Sha256,
     StrictModel,
     UnsuccessfulTurn,
     parse_json_object,
-    require_justifications,
 )
 
 CLASSIFICATION_LABELS = {
@@ -26,103 +26,137 @@ CLASSIFICATION_LABELS = {
     "defect_mechanisms": "Defect mechanisms",
     "primary_assertion_target": "Primary assertion target",
     "required_test_setup": "Required test setup",
-    "code_only_oracle_availability": "Code-only oracle availability",
+    "oracle_kind": "Oracle kind",
+    "oracle_source": "Oracle source",
     "required_test_scope": "Required test scope",
     "benchmark_quality": "Benchmark quality",
 }
 
 
-class InScopeClassification(StrictModel):
-    status: Literal["completed"] = "completed"
-    task_nature: Literal["behavioral_bug", "performance_problem"]
-    defect_mechanisms: Annotated[
-        list[
-            Literal[
-                "control_logic",
-                "computation_algorithm",
-                "data_state",
-                "validation_checking",
-                "error_handling",
-                "interface_contract",
-                "parsing_serialization",
-                "resource_lifecycle",
-                "concurrency_timing",
-                "configuration_environment",
-                "compatibility",
-                "performance_resource_use",
-                "presentation_output",
-                "other",
-            ]
-        ],
-        Field(min_length=1),
-    ]
-    primary_assertion_target: Literal[
-        "return_value_or_status",
-        "exception_behavior",
-        "state_mutation",
-        "produced_output_or_artifact",
-        "external_interaction",
-        "resource_or_performance",
-        "nondeterminism",
-        "import_build_or_collection",
-    ]
-    required_test_setup: Literal[
-        "none",
-        "special_input",
-        "existing_state",
-        "sequence",
-        "environment_or_dependency",
-        "concurrency_or_timing",
-    ]
-    code_only_oracle_availability: Literal[
-        "local_contract",
-        "repository_pattern",
-        "repository_documentation",
-        "api_convention",
-        "general_property",
-        "domain_knowledge",
-        "unavailable_or_ambiguous",
-    ]
-    required_test_scope: Literal[
-        "unit",
-        "component",
-        "multi_module",
-        "integration",
-        "environment_or_platform",
-        "performance_or_concurrency",
-    ]
-    benchmark_quality: Literal[
-        "usable",
-        "unclear_expected_behavior",
-        "reference_test_or_repair_misaligned",
-        "unreliable_environment_or_execution",
-        "solution_or_oracle_leakage",
-        "unfair_without_issue",
-    ]
-    justifications: dict[str, Justification]
+DefectMechanism = Literal[
+    "control_logic",
+    "computation_algorithm",
+    "data_state",
+    "validation_checking",
+    "error_handling",
+    "interface_contract",
+    "parsing_serialization",
+    "resource_lifecycle",
+    "concurrency_timing",
+    "configuration_environment",
+    "compatibility",
+    "performance_resource_use",
+    "presentation_output",
+    "other",
+]
 
-    @field_validator("defect_mechanisms")
-    @classmethod
-    def mechanisms_must_be_unique(cls, value: list[str]) -> list[str]:
-        if len(value) != len(set(value)):
-            raise ValueError("defect_mechanisms must not contain duplicates")
-        return value
+
+def _unique(value: list[str]) -> list[str]:
+    if len(value) != len(set(value)):
+        raise ValueError("defect_mechanisms must not contain duplicates")
+    return value
+
+
+DefectMechanisms = Annotated[list[DefectMechanism], Field(min_length=1), AfterValidator(_unique)]
+
+
+# Test oracle kinds, after Barr et al., "The Oracle Problem in Software Testing: A
+# Survey" (IEEE TSE, 2015), with the sources each one admits.
+ORACLE_SOURCES = {
+    "specified": (
+        "docstring_or_comment",
+        "signature_or_type",
+        "repository_documentation",
+        "external_specification",
+    ),
+    "derived": ("code_logic", "analogous_code", "property_relation", "api_convention"),
+    "implicit": ("crash_or_exception", "hang_or_resource"),
+    "human": ("domain_knowledge", "intent_only"),
+}
+OracleKind = Literal["specified", "derived", "implicit", "human"]
+OracleSource = Literal[
+    "docstring_or_comment",
+    "signature_or_type",
+    "repository_documentation",
+    "external_specification",
+    "code_logic",
+    "analogous_code",
+    "property_relation",
+    "api_convention",
+    "crash_or_exception",
+    "hang_or_resource",
+    "domain_knowledge",
+    "intent_only",
+]
+
+
+class InScopeClassification(StrictModel):
+    """Every question's answer and justification, for a task in scope."""
+
+    status: Literal["completed"] = "completed"
+    task_nature: Answered[Literal["behavioral_bug", "performance_problem"]]
+    defect_mechanisms: Answered[DefectMechanisms]
+    primary_assertion_target: Answered[
+        Literal[
+            "return_value_or_status",
+            "exception_behavior",
+            "state_mutation",
+            "produced_output_or_artifact",
+            "external_interaction",
+            "resource_or_performance",
+            "nondeterminism",
+            "import_build_or_collection",
+        ]
+    ]
+    required_test_setup: Answered[
+        Literal[
+            "none",
+            "special_input",
+            "existing_state",
+            "sequence",
+            "environment_or_dependency",
+            "concurrency_or_timing",
+        ]
+    ]
+    oracle_kind: Answered[OracleKind]
+    oracle_source: Answered[OracleSource]
+    required_test_scope: Answered[
+        Literal[
+            "unit",
+            "component",
+            "multi_module",
+            "integration",
+            "environment_or_platform",
+            "performance_or_concurrency",
+        ]
+    ]
+    benchmark_quality: Answered[
+        Literal[
+            "usable",
+            "unclear_expected_behavior",
+            "reference_test_or_repair_misaligned",
+            "unreliable_environment_or_execution",
+            "solution_or_oracle_leakage",
+            "unfair_without_issue",
+        ]
+    ]
 
     @model_validator(mode="after")
-    def justify_every_answer(self) -> InScopeClassification:
-        require_justifications(self.justifications, set(CLASSIFICATION_LABELS))
+    def source_belongs_to_kind(self) -> InScopeClassification:
+        kind, source = self.oracle_kind.answer, self.oracle_source.answer
+        if source not in ORACLE_SOURCES[kind]:
+            raise ValueError(
+                f"oracle_source {source!r} is not a {kind} oracle source; "
+                f"choose one of {list(ORACLE_SOURCES[kind])}"
+            )
         return self
 
 
 class OutOfScopeClassification(StrictModel):
-    status: Literal["completed"] = "completed"
-    task_nature: Literal["out_of_scope"]
-    justifications: dict[str, Justification]
+    """A task out of scope answers only the first question."""
 
-    @model_validator(mode="after")
-    def justify_the_one_answer(self) -> OutOfScopeClassification:
-        require_justifications(self.justifications, {"task_nature"})
-        return self
+    status: Literal["completed"] = "completed"
+    task_nature: Answered[Literal["out_of_scope"]]
 
 
 ClassificationResult = InScopeClassification | OutOfScopeClassification | UnsuccessfulTurn
@@ -149,7 +183,8 @@ def parse_classification(raw: str) -> ClassificationResult:
     try:
         value = parse_json_object(raw)
         value["status"] = "completed"
-        if value.get("task_nature") == "out_of_scope":
+        nature = value.get("task_nature")
+        if isinstance(nature, dict) and nature.get("answer") == "out_of_scope":
             return OutOfScopeClassification.model_validate(value)
         return InScopeClassification.model_validate(value)
     except (json.JSONDecodeError, ValidationError, ValueError) as error:
@@ -162,7 +197,7 @@ def read_saved_classification(path: Path) -> SavedClassification:
 
 def latest_classification(
     classifications: Path, instance: InstanceRecord
-) -> tuple[dict, Path | None]:
+) -> tuple[dict, AttemptPaths | None]:
     """The newest attempt for this instance under `classifications`, or explicit absence.
 
     The newest attempt is used even when it failed, so a failure never silently
@@ -173,11 +208,10 @@ def latest_classification(
     if not attempts:
         return {"status": "missing"}, None
 
-    attempt = attempts[0]
-    artifact = attempt / "classification.json"
+    attempt = AttemptPaths(attempts[0])
+    artifact = attempt.judge.classification
     if not artifact.is_file():
-        status_path = attempt / "status.json"
-        detail = read_json(status_path) if status_path.is_file() else {}
+        detail = read_json(attempt.status) if attempt.status.is_file() else {}
         error = detail.get("error", "The latest classification attempt is incomplete")
         return {"status": "invalid_artifact", "error": error}, attempt
     try:

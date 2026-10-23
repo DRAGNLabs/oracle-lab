@@ -16,10 +16,10 @@ from oracle_lab.config import RunConfig, validate_prompt_scope
 from oracle_lab.container.sandbox import Profile, Sandbox, docker_client
 from oracle_lab.evaluation import run_version
 from oracle_lab.evaluation.outcomes import pair_results
-from oracle_lab.paths import RunPaths
+from oracle_lab.paths import OutputPaths, RunPaths
 from oracle_lab.repository import Repository
 from oracle_lab.results import InstanceRecord, VersionResult, write_result, write_status
-from oracle_lab.run import Stages, create_run_dir, prepare
+from oracle_lab.run import Stages, prepare
 
 # Stands in for an agent's submission. It cannot fail, so any failure comes from
 # the environment.
@@ -35,8 +35,8 @@ def preflight(config: RunConfig) -> Path:
     """Check one instance, and return its directory under `<output>/preflight/`."""
     prompt_template = Path(config.task.prompt).read_text()
     validate_prompt_scope(prompt_template, config.task.scope)
-    run_dir = create_run_dir(Path(config.output) / "preflight")
-    paths = RunPaths.create(run_dir)
+    paths = OutputPaths(Path(config.output)).new_preflight()
+    run_dir = paths.root
 
     stages = Stages(run_dir)
     try:

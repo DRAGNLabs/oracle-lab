@@ -22,7 +22,7 @@ from oracle_lab.config import JudgeConfig, RuntimeConfig, load_config
 from oracle_lab.evaluation import archive_previous_evaluation
 from oracle_lab.harnesses import require_credentials
 from oracle_lab.io import read_json, write_json
-from oracle_lab.paths import RunPaths
+from oracle_lab.paths import OutputPaths, RunPaths
 from oracle_lab.results import (
     EvaluationResult,
     LocalizedTarget,
@@ -79,7 +79,7 @@ def configured_pipeline(tmp_path, with_judge):
     prompt = tmp_path / "prompt.md"
     prompt.write_text("Generate tests")
     config = load_config(SAMPLE)
-    config.output = str(tmp_path / "runs")
+    config.output = str(tmp_path / "output")
     config.task.prompt = str(prompt)
     config.judge = None
     if with_judge:
@@ -174,6 +174,7 @@ def test_normal_lifecycle_runs_only_a_configured_judge(
 
     run_dir = run_module.run(config)
 
+    assert run_dir.parent == OutputPaths(Path(config.output)).runs
     final = read_json(run_dir / "status.json")
     assert final["state"] == "completed"
     assert final["judge_status"] == expected_status
@@ -256,7 +257,7 @@ def test_a_localize_failure_stops_the_run_at_that_stage(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match="matches nowhere"):
         run_module.run(config)
 
-    (run_dir,) = Path(config.output).iterdir()
+    (run_dir,) = OutputPaths(Path(config.output)).runs.iterdir()
     final = read_json(run_dir / "status.json")
     assert (final["stage"], final["state"]) == ("localize", "failed")
     assert not RunPaths.open(run_dir).prompt.exists()
@@ -403,7 +404,7 @@ def test_judge_interruption_remains_an_interrupted_judge_stage(tmp_path, monkeyp
     with pytest.raises(KeyboardInterrupt):
         run_module.run(config)
 
-    run_dir = next((tmp_path / "runs").iterdir())
+    (run_dir,) = OutputPaths(Path(config.output)).runs.iterdir()
     status = read_json(run_dir / "status.json")
     assert status["stage"] == "judge"
     assert status["state"] == "interrupted"
@@ -435,7 +436,7 @@ def test_reevaluation_marks_existing_judgment_stale_without_calling_a_model(tmp_
 
     judgment = read_json(paths.judge.judgment)
     assert judgment["status"] == "stale"
-    assert judgment["previous_judgment"]["tests_issue"] == "yes"
+    assert judgment["previous_judgment"]["tests_issue"]["answer"] == "yes"
     assert read_json(run_dir / "status.json")["judge_status"] == "stale"
     judge_call.assert_not_called()
 
@@ -449,7 +450,7 @@ def test_preflight_checks_the_environment_without_credentials_or_generation(tmp_
 
     run_dir = preflight_module.preflight(config)
 
-    assert run_dir.parent == Path(config.output) / "preflight"
+    assert run_dir.parent == OutputPaths(Path(config.output)).preflight
     final = read_json(run_dir / "status.json")
     assert (final["stage"], final["state"]) == ("finished", "passed")
     run_module.check_reference.assert_called_once()
@@ -467,6 +468,6 @@ def test_a_preflight_failure_records_the_stage_it_stopped_in(tmp_path, monkeypat
     with pytest.raises(RuntimeError, match="did not pass"):
         preflight_module.preflight(config)
 
-    (run_dir,) = (Path(config.output) / "preflight").iterdir()
+    (run_dir,) = OutputPaths(Path(config.output)).preflight.iterdir()
     final = read_json(run_dir / "status.json")
     assert (final["stage"], final["state"]) == ("environment", "failed")

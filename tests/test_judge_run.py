@@ -95,7 +95,7 @@ def test_standalone_judge_saves_prompt_raw_output_provenance_and_labels(tmp_path
     assert paths.judge.judgment_raw.read_text() == VALID_JUDGMENT
     judgment = read_json(paths.judge.judgment)
     assert judgment["status"] == "completed"
-    assert judgment["tests_issue"] == "yes"
+    assert judgment["tests_issue"]["answer"] == "yes"
     result = read_json(paths.judge.result)
     assert result["model"] == "judge-model"
     assert result["harness"] == "claude"
@@ -299,7 +299,7 @@ def test_late_failure_keeps_the_judgment_the_attempt_already_produced(tmp_path, 
 
     judgment = read_json(paths.judge.judgment)
     assert judgment["status"] == "completed"
-    assert judgment["tests_issue"] == "yes"
+    assert judgment["tests_issue"]["answer"] == "yes"
     attempt = read_json(paths.judge.result)
     assert attempt["errors"][-1]["message"] == "Could not remove benchmark container"
 

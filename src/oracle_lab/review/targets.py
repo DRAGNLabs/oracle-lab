@@ -30,7 +30,14 @@ from oracle_lab.judge.contracts import (
     validate_judgment,
 )
 from oracle_lab.judge.workspace import JUDGE_ROOT, judge_evidence
-from oracle_lab.paths import RunPaths
+from oracle_lab.paths import (
+    AttemptPaths,
+    ClassifierPaths,
+    JudgePaths,
+    JudgmentPaths,
+    OutputPaths,
+    RunPaths,
+)
 from oracle_lab.results import (
     EvaluationResult,
     InstanceRecord,
@@ -73,28 +80,13 @@ class ReviewTarget(ABC):
 
     @property
     @abstractmethod
-    def reviewed_output(self) -> Path: ...
+    def judge(self) -> JudgePaths:
+        """The judge's directory: its rubric, workspace, turn, and the reviews of it."""
 
     @property
     @abstractmethod
-    def stage_rubric(self) -> Path: ...
-
-    @property
-    @abstractmethod
-    def workspace_spec(self) -> Path: ...
-
-    @property
-    @abstractmethod
-    def agent_result(self) -> Path:
-        """The judge turn's result, which names its harness and model."""
-
-    @property
-    @abstractmethod
-    def reviews(self) -> Path: ...
-
-    @property
-    def review_history(self) -> Path:
-        return self.reviews.with_name("reviews-history")
+    def reviewed_output(self) -> Path:
+        """The judge's normalized output that raters rate."""
 
     @abstractmethod
     def issue(self) -> str:
@@ -166,24 +158,12 @@ class JudgmentTarget(ReviewTarget):
         return RunPaths.open(self.root)
 
     @property
+    def judge(self) -> JudgmentPaths:
+        return self.paths.judge
+
+    @property
     def reviewed_output(self) -> Path:
-        return self.paths.judge.judgment
-
-    @property
-    def stage_rubric(self) -> Path:
-        return self.paths.judge.rubric
-
-    @property
-    def workspace_spec(self) -> Path:
-        return self.paths.judge.workspace_spec
-
-    @property
-    def agent_result(self) -> Path:
-        return self.paths.judge.result
-
-    @property
-    def reviews(self) -> Path:
-        return self.paths.judge.reviews
+        return self.judge.judgment
 
     def issue(self) -> str:
         return (self.paths.ground_truth / "issue.md").read_text()
@@ -221,13 +201,13 @@ class ClassificationTarget(ReviewTarget):
 
     @classmethod
     def load(cls, root: Path) -> Self:
-        output = root / "classification.json"
-        if not output.is_file():
+        paths = AttemptPaths(root)
+        if not paths.judge.classification.is_file():
             raise TargetError("The attempt has no classification")
-        saved = read_saved_classification(output)
+        saved = read_saved_classification(paths.judge.classification)
         if saved.result.status != "completed":
             raise TargetError(f"The classification is {saved.result.status}, not completed")
-        instance = read_instance_record(root / "inputs/instance.json")
+        instance = read_instance_record(paths.instance)
         if saved.instance_id != instance.instance_id:
             raise TargetError(
                 f"The classification is for {saved.instance_id}, not {instance.instance_id}"
@@ -235,24 +215,16 @@ class ClassificationTarget(ReviewTarget):
         return cls(root, instance, saved.result)
 
     @property
+    def paths(self) -> AttemptPaths:
+        return AttemptPaths(self.root)
+
+    @property
+    def judge(self) -> ClassifierPaths:
+        return self.paths.judge
+
+    @property
     def reviewed_output(self) -> Path:
-        return self.root / "classification.json"
-
-    @property
-    def stage_rubric(self) -> Path:
-        return self.root / "inputs/rubric.md"
-
-    @property
-    def workspace_spec(self) -> Path:
-        return self.root / "workspace-spec.json"
-
-    @property
-    def agent_result(self) -> Path:
-        return self.root / "agent/result.json"
-
-    @property
-    def reviews(self) -> Path:
-        return self.root / "reviews"
+        return self.judge.classification
 
     def issue(self) -> str:
         return self.instance.original_record.get("problem_statement", "")
@@ -261,7 +233,7 @@ class ClassificationTarget(ReviewTarget):
         return {}  # The classifier read the plain buggy checkout.
 
     def _evidence_table(self, staging: Path) -> list[tuple[Path, str]]:
-        return classification_evidence(self.root)
+        return classification_evidence(self.paths)
 
 
 TARGET_KINDS: tuple[type[ReviewTarget], ...] = (JudgmentTarget, ClassificationTarget)
@@ -316,7 +288,7 @@ def find_problems(targets: list[ReviewTarget]) -> list[Problem]:
 def find_targets(path: Path) -> tuple[list[ReviewTarget], list[UnreviewableTarget]]:
     """Every review target under `path`, and every candidate that cannot be reviewed.
 
-    `path` is a run, a classification attempt, or a directory holding `runs/<run>/`
+    `path` is a run, a classification attempt, or an output root holding `runs/<run>/`
     and `classifications/<instance>/<attempt>/`, such as the review data repository.
     """
     if _is_run(path):
@@ -324,10 +296,11 @@ def find_targets(path: Path) -> tuple[list[ReviewTarget], list[UnreviewableTarge
     elif _is_attempt(path):
         candidates = [(ClassificationTarget, path)]
     else:
-        candidates = [(JudgmentTarget, run) for run in _directories(path / "runs")]
+        output = OutputPaths(path)
+        candidates = [(JudgmentTarget, run) for run in _directories(output.runs)]
         candidates += [
             (ClassificationTarget, attempt)
-            for instance in _directories(path / "classifications")
+            for instance in _directories(output.classifications)
             for attempt in _directories(instance)
         ]
     if not candidates:
@@ -350,11 +323,13 @@ def _read(source: Path) -> bytes:
 
 
 def _is_run(path: Path) -> bool:
-    return (path / "inputs/config.resolved.yaml").is_file() and (path / "judge").is_dir()
+    # A classification attempt also has a resolved config and a judge directory.
+    paths = RunPaths(path)
+    return paths.config.is_file() and paths.generation.is_dir()
 
 
 def _is_attempt(path: Path) -> bool:
-    return (path / "classification.json").is_file()
+    return AttemptPaths(path).judge.classification.is_file()
 
 
 def _directories(path: Path) -> list[Path]:

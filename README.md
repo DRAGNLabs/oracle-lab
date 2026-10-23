@@ -20,7 +20,7 @@ Copy the local secrets file and add your API keys:
 Run from the repository root:
 
 ```sh
-uv sync --extra dataset --extra dev
+uv sync --extra dev
 
 uv run oracle-lab run configs/smoke.yaml
 ```
@@ -79,10 +79,10 @@ uv run oracle-lab run configs/smoke.yaml
 uv run oracle-lab preflight configs/smoke.yaml [more configs...]
 
 # Rerun saved tests in fresh containers; no agent or model calls.
-uv run oracle-lab evaluate runs/<run-id>
+uv run oracle-lab evaluate output/runs/<run-id>
 
 # Run the configured semantic judge after paired evaluation.
-uv run oracle-lab judge runs/<run-id>
+uv run oracle-lab judge output/runs/<run-id>
 
 # Classify one problem independently of a benchmark run.
 uv run oracle-lab classify configs/classification/example.yaml
@@ -95,11 +95,15 @@ uv run oracle-lab review ../oracle-lab-data --rater <your-id>
 # Agreement between raters, and how often they found the LLM judges right.
 uv run oracle-lab agreement ../oracle-lab-data
 
+# Export runs, classifications, and reviews as a dataset; --repo uploads it to a
+# private Hugging Face dataset (needs HF_TOKEN).
+uv run oracle-lab export ../oracle-lab-data --out dataset/ [--repo <owner>/<name>]
+
 # Rebuild report.md from saved data. The session log is never regenerated.
-uv run oracle-lab report runs/<run-id>
+uv run oracle-lab report output/runs/<run-id>
 
 # Continue pending or failed jobs without repeating completed jobs.
-uv run oracle-lab batch --resume batches/<batch-id>
+uv run oracle-lab batch --resume output/batches/<batch-id>
 
 uv run oracle-lab --help
 ```
@@ -120,35 +124,39 @@ The YAML interface defines:
 | `judge`  | Optional semantic-judge rubric, harness, model, and stopping limit           |
 | `task`   | Repository/localized scope, prompt, generated directory, and test visibility |
 | `limits` | Setup/evaluation timeouts and container CPU/memory limits                    |
-| `output` | Run-directory location                                                       |
+| `output` | Output root that every command writes into                                   |
 
 See the [complete configuration reference](docs/configuration.md) for every
 setting, default, validation rule, and harness-specific behavior.
 
 ### Results
 
-| Artifact in `runs/<run-id>/` | Contents                                                  |
-| ---------------------------- | --------------------------------------------------------- |
-| `report.md`                  | Human-readable run summary and artifact links             |
-| `status.json`                | The latest stage and its state, with any error            |
-| `cost.json`                  | What the run's model stages spent on the OpenRouter key   |
-| `inputs/`                    | Frozen prompt, resolved config, private instance, target  |
-| `image-build/`               | Runtime image, build inputs, provenance, and logs         |
-| `reference-check/`           | Private fail-on-buggy/pass-on-golden validation           |
-| `generation/`                | Agent command, transcript, raw events, and workspace diff |
-| `submission/`                | Captured generated tests, hashes, and violations          |
-| `evaluation/`                | Paired result plus buggy and golden executions            |
-| `judge/`                     | Judge workspace manifest, model evidence, and judgment    |
-| `ground-truth/`              | Private issue text and golden repair, for readers         |
+Everything is written under the output root, `output/` in the sample configs:
+`runs/`, `preflight/`, `batches/`, `classifications/`, and `agreement/`.
+
+| Artifact in `output/runs/<run-id>/` | Contents                                                  |
+| ----------------------------------- | --------------------------------------------------------- |
+| `report.md`                         | Human-readable run summary and artifact links             |
+| `status.json`                       | The latest stage and its state, with any error            |
+| `cost.json`                         | What the run's model stages spent on the OpenRouter key   |
+| `inputs/`                           | Frozen prompt, resolved config, private instance, target  |
+| `image-build/`                      | Runtime image, build inputs, provenance, and logs         |
+| `reference-check/`                  | Private fail-on-buggy/pass-on-golden validation           |
+| `generation/`                       | Agent command, transcript, raw events, and workspace diff |
+| `submission/`                       | Captured generated tests, hashes, and violations          |
+| `evaluation/`                       | Paired result plus buggy and golden executions            |
+| `judge/`                            | Judge workspace manifest, evidence, judgment, and reviews |
+| `ground-truth/`                     | Private issue text and golden repair, for readers         |
 
 Standalone classifications are stored separately under
-`classifications/<instance-id>/<attempt-id>/`; they are not copied into run directories.
+`output/classifications/<instance-id>/<attempt-id>/`, with the classifier's files
+and their reviews in `judge/`; they are not copied into run directories.
 
 See the [complete results and artifacts reference](docs/results.md) for the full
 directory layout, JSON fields, logs, evaluation artifacts, and reevaluation
 behavior. [Judging](docs/judging.md) covers the LLM judge.
 
-For initial batch plots, run `uv sync --extra dataset --extra dev --extra analysis`
+For initial batch plots, run `uv sync --extra dev --extra analysis`
 and open [notebooks/initial-results.ipynb](notebooks/initial-results.ipynb) with
 the project's `.venv` kernel. Set `BATCH_DIR` in its first code cell to choose
 which saved batch to inspect.
@@ -182,7 +190,7 @@ uv run ruff check src tests
 uv run ruff format --check src tests
 
 # Docker integration checks after a smoke run has prepared its image.
-ORACLE_LAB_SMOKE_RUN=runs/<run-id> uv run pytest -q -m docker
+ORACLE_LAB_SMOKE_RUN=output/runs/<run-id> uv run pytest -q -m docker
 ```
 
 Local tests cover configuration, credentials, agent traces, artifacts, pytest

@@ -13,7 +13,7 @@ from oracle_lab.judge.contracts import (
     JUDGMENT_LABELS,
     read_judgment_state,
 )
-from oracle_lab.paths import RunPaths
+from oracle_lab.paths import AttemptPaths, RunPaths
 from oracle_lab.results import (
     MATRIX_CELLS,
     VERSIONS,
@@ -141,7 +141,7 @@ def _pipeline_lines(
         judge_params = "—"
     judge_result = status
     if status == "completed":
-        judge_result += f", tests issue: {judgment['tests_issue']}"
+        judge_result += f", tests issue: {judgment['tests_issue']['answer']}"
     elif status == "skipped":
         judge_result += " (no tests)"
     rows.append(("Judge", judge_params, judge_result))
@@ -206,16 +206,17 @@ def _judge_lines(judgment: dict) -> list[str]:
         lines += [
             "| Tests issue? | Attempt detail | No-attempt reason | Cheating |",
             "|---|---|---|---|",
-            "| " + " | ".join(judgment[key] or "—" for key in JUDGMENT_LABELS) + " |",
+            "| " + " | ".join(_answer(judgment[key]) for key in JUDGMENT_LABELS) + " |",
             "",
-            *_justification_lines(judgment["justifications"]),
+            *_justification_lines(judgment, JUDGMENT_LABELS),
             *_failure_mode_lines(judgment),
         ]
     elif status == "stale":
         lines += [f"Stale: {judgment['reason']}", ""]
         previous = judgment.get("previous_judgment", {})
         if previous.get("status") == "completed":
-            lines += [f"Previous tests-issue answer: `{previous['tests_issue']}`.", ""]
+            answer = previous["tests_issue"]["answer"]
+            lines += [f"Previous tests-issue answer: `{answer}`.", ""]
     elif status == "skipped":
         lines += [f"Skipped: {judgment['reason']}", ""]
     elif status in {"invalid_output", "invalid_artifact", "failed", "timed_out"}:
@@ -259,52 +260,42 @@ def _failure_mode_lines(judgment: dict) -> list[str]:
     return lines
 
 
-def _classification(paths: RunPaths) -> tuple[dict, Path | None]:
-    """The newest classification for this run's instance.
-
-    Classifications live in a `classifications` directory beside the runs
-    directory, and a run lives at `<runs>/<run-id>`.
-    """
+def _classification(paths: RunPaths) -> tuple[dict, AttemptPaths | None]:
+    """The newest classification for this run's instance, in the run's output root."""
     # Early or synthetic runs may have no frozen instance; classification is optional.
     if not paths.instance.is_file():
         return {"status": "missing"}, None
-    classifications = paths.root.parent.parent / "classifications"
-    return latest_classification(classifications, read_instance_record(paths.instance))
+    return latest_classification(paths.output.classifications, read_instance_record(paths.instance))
 
 
-def _classification_lines(classification: dict, attempt: Path | None) -> list[str]:
+def _classification_lines(classification: dict, attempt: AttemptPaths | None) -> list[str]:
     status = classification["status"]
     lines = ["## Task classification", ""]
-    attempt_result = attempt / "agent/result.json" if attempt is not None else None
-    if attempt_result is not None and attempt_result.is_file():
-        classifier = read_agent_attempt(attempt_result)
+    if attempt is not None and attempt.judge.result.is_file():
+        classifier = read_agent_attempt(attempt.judge.result)
         lines += [
-            f"Classifier: {_harness_text(classifier)}. Cost: {_cost(attempt / 'cost.json')}.",
+            f"Classifier: {_harness_text(classifier)}. Cost: {_cost(attempt.cost)}.",
             "",
         ]
     if status == "completed":
-        if classification["task_nature"] == "out_of_scope":
-            lines += [f"Task nature: `{classification['task_nature']}`.", ""]
+        if classification["task_nature"]["answer"] == "out_of_scope":
+            lines += ["Task nature: `out_of_scope`.", ""]
         else:
             lines += [
                 "| Facet | Label |",
                 "|---|---|",
                 *[
-                    f"| {label} | `{_classification_value(classification[key])}` |"
+                    f"| {label} | `{_answer(classification[key])}` |"
                     for key, label in CLASSIFICATION_LABELS.items()
                 ],
                 "",
             ]
-        lines += _justification_lines(classification["justifications"])
+        lines += _justification_lines(classification, CLASSIFICATION_LABELS)
     elif status == "missing":
         lines += ["Missing: no classification is saved for this problem.", ""]
     else:
         lines += [f"{status}: {classification['error']}", ""]
     return lines
-
-
-def _classification_value(value: object) -> str:
-    return ", ".join(value) if isinstance(value, list) else str(value)
 
 
 def _usage_lines(results: EvaluationResult, judge_attempt: AgentAttempt | None) -> list[str]:
@@ -349,7 +340,7 @@ def _cost(path: Path) -> str:
     return text
 
 
-def _file_lines(paths: RunPaths, attempt: Path | None) -> list[str]:
+def _file_lines(paths: RunPaths, attempt: AttemptPaths | None) -> list[str]:
     groups = [
         (
             "Ground truth",
@@ -400,10 +391,10 @@ def _file_lines(paths: RunPaths, attempt: Path | None) -> list[str]:
             (
                 "Classification",
                 [
-                    ("result", attempt / "classification.json"),
-                    ("raw", attempt / "classification.raw.txt"),
-                    ("rubric", attempt / "inputs/rubric.md"),
-                    ("trace", attempt / "agent/trace.jsonl"),
+                    ("result", attempt.judge.classification),
+                    ("raw", attempt.judge.classification_raw),
+                    ("rubric", attempt.judge.rubric),
+                    ("trace", attempt.judge.agent / "trace.jsonl"),
                 ],
             )
         )
@@ -427,9 +418,19 @@ def _blockquote(text: str) -> list[str]:
     return ["> " + line for line in text.splitlines()]
 
 
-def _justification_lines(justifications: dict[str, str]) -> list[str]:
+def _answer(answered: dict | None) -> str:
+    """A question's answer as a table cell: a dash when it does not apply."""
+    if answered is None:
+        return "—"
+    answer = answered["answer"]
+    return ", ".join(answer) if isinstance(answer, list) else answer
+
+
+def _justification_lines(result: dict, labels: dict[str, str]) -> list[str]:
     """Each answered question's justification, under the question's field name."""
     lines = []
-    for question, text in justifications.items():
-        lines += [f"`{question}`:", "", *_blockquote(text), ""]
+    for question in labels:
+        if result.get(question) is not None:
+            text = result[question]["justification"]
+            lines += [f"`{question}`:", "", *_blockquote(text), ""]
     return lines

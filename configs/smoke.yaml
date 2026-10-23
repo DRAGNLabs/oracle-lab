@@ -26,4 +26,4 @@ task:
   scope: repository
   existing_tests: hide_all
 
-output: ../runs
+output: ../output

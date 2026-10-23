@@ -7,11 +7,13 @@ from pathlib import Path
 import pytest
 
 from oracle_lab.classification.contracts import (
+    ORACLE_SOURCES,
     InScopeClassification,
     OutOfScopeClassification,
     parse_classification,
 )
 from oracle_lab.judge.contracts import FAILURE_MODES, JudgmentLabels, parse_judgment
+from oracle_lab.results import Answered
 
 RUBRICS = Path(__file__).parents[1] / "prompts/judge"
 JUDGE_RUBRIC = RUBRICS / "generated-test-evaluation-rubric.md"
@@ -21,34 +23,38 @@ CLASSIFICATION_FIELDS = [
     "defect_mechanisms",
     "primary_assertion_target",
     "required_test_setup",
-    "code_only_oracle_availability",
+    "oracle_kind",
+    "oracle_source",
     "required_test_scope",
     "benchmark_quality",
 ]
 
 
 def questions(path: Path) -> dict[str, set[str]]:
-    """Each `## Question N: `field`` section's bulleted labels, without `null`."""
+    """Each `Question N: `field`` section's bulleted labels. A question is a level-2 or
+    level-3 heading; any other heading at those levels ends it."""
     found: dict[str, set[str]] = {}
     field = None
     for line in path.read_text().splitlines():
-        if line.startswith("## "):
-            match = re.fullmatch(r"## Question \d+: `([a-z_]+)`", line)
+        if re.match(r"#{2,3} ", line):
+            match = re.fullmatch(r"#{2,3} Question \d+: `([a-z_]+)`", line)
             field = match.group(1) if match else None
             if field:
                 found[field] = set()
         elif field and (match := re.match(r"- `([a-z_]+)`:", line)):
             found[field].add(match.group(1))
-    return {field: labels - {"null"} for field, labels in found.items()}
+    return found
 
 
 def allowed(model: type, field: str) -> set[str]:
-    """Every string a field's `Literal` types accept, through lists and optionals."""
+    """Every answer string a field accepts, through `Answered`, lists, and optionals."""
     values: set[str] = set()
 
     def walk(annotation) -> None:
         if typing.get_origin(annotation) is typing.Literal:
             values.update(arg for arg in typing.get_args(annotation) if isinstance(arg, str))
+        elif isinstance(annotation, type) and issubclass(annotation, Answered):
+            walk(annotation.model_fields["answer"].annotation)
         else:
             for arg in typing.get_args(annotation):
                 walk(arg)
@@ -86,8 +92,20 @@ def test_both_rubrics_ask_exactly_the_fields_their_parsers_read():
 
 
 def test_the_judge_rubric_defines_exactly_the_start_list():
-    defined = re.findall(r"^### `([a-z_]+)`: (.+)$", JUDGE_RUBRIC.read_text(), re.MULTILINE)
+    defined = re.findall(r"^#### `([a-z_]+)`: (.+)$", JUDGE_RUBRIC.read_text(), re.MULTILINE)
     assert dict(defined) == FAILURE_MODES
+
+
+def test_the_classification_rubric_groups_oracle_sources_by_kind():
+    section = CLASSIFICATION_RUBRIC.read_text().split("`oracle_source`", 1)[1]
+    section = section.split("\n## ", 1)[0]
+    groups: dict[str, list[str]] = {}
+    for line in section.splitlines():
+        if match := re.fullmatch(r"For `([a-z_]+)`:", line):
+            kind = groups.setdefault(match.group(1), [])
+        elif match := re.match(r"- `([a-z_]+)`:", line):
+            kind.append(match.group(1))
+    assert {kind: tuple(sources) for kind, sources in groups.items()} == ORACLE_SOURCES
 
 
 def output_examples(path: Path) -> list[str]:

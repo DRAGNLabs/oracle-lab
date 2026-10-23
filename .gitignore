@@ -10,8 +10,6 @@ dist/
 .env
 .env.*
 !.env.example
-classifications/
 notes/
-runs/
-batches/
-agreement/
+output/
+archive/

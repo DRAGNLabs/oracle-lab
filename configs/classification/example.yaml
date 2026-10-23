@@ -17,4 +17,4 @@ limits:
   memory: 4g
   cpus: 2
 
-output: ../../classifications
+output: ../../output

@@ -1,12 +1,14 @@
 import json
 from pathlib import Path
 
+import pyarrow as pa
+import pyarrow.parquet as pq
 import pytest
 import yaml
 from fixtures import swerebench_v2_record
 
 from oracle_lab.config import load_config
-from oracle_lab.instance import resolve_source, swerebench_v2
+from oracle_lab.instance import resolve_source, swebench, swerebench_v2
 from oracle_lab.instance.swerebench_v2 import runtime_for
 
 RECORD = swerebench_v2_record()
@@ -21,6 +23,7 @@ def load(tmp_path, record=RECORD, instance=RECORD["instance_id"]):
                 "source": {"kind": "swerebench_v2", "instance": instance, "record": "record.json"},
                 "agent": {"model": "test-model"},
                 "task": {"prompt": str(Path(__file__).parents[1] / "prompts/agent/unit-tests.md")},
+                "output": "output",
             }
         )
     )
@@ -90,9 +93,6 @@ def test_v2_record_not_labeled_as_only_a_bug_fix_is_refused(tmp_path, categories
 
 
 def test_v2_record_is_read_from_the_pinned_dataset_file(tmp_path, monkeypatch):
-    pa = pytest.importorskip("pyarrow")
-    pq = pytest.importorskip("pyarrow.parquet")
-    huggingface_hub = pytest.importorskip("huggingface_hub")
     other = swerebench_v2_record(instance_id="wtforms__wtforms-615")
     data = tmp_path / "train.parquet"
     pq.write_table(pa.Table.from_pylist([other, RECORD]), data)
@@ -102,7 +102,7 @@ def test_v2_record_is_read_from_the_pinned_dataset_file(tmp_path, monkeypatch):
         downloads.append((repo, filename, repo_type, revision))
         return str(data)
 
-    monkeypatch.setattr(huggingface_hub, "hf_hub_download", download)
+    monkeypatch.setattr(swebench, "hf_hub_download", download)
     source = load(tmp_path)
     source.record = None
 

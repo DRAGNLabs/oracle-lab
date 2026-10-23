@@ -10,6 +10,8 @@ requires-python = ">=3.11"
 dependencies = [
     "PyYAML>=6,<7",
     "docker>=7.1,<8",
+    "huggingface_hub>=0.24,<2",
+    "pyarrow>=15,<26",
     "pydantic>=2.10,<3",
     "python-dotenv>=1,<2",
     "tree-sitter>=0.23,<1",
@@ -17,7 +19,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dataset = ["datasets>=3,<4"]
 dev = ["pytest>=8,<9", "ruff>=0.11,<1"]
 analysis = ["matplotlib>=3.8,<4", "ipykernel>=6,<7"]
 
@@ -35,6 +36,7 @@ oracle_lab = [
     "container/docker/*.md",
     "judge/templates/*.md",
     "judge/templates/*.json",
+    "export/templates/*.md",
     "web/static/*",
     "web/templates/*.md",
     "web/static/vendor/*",

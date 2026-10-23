@@ -13,9 +13,8 @@ from fixtures import (
 )
 from fixtures import completed_judgment as fixture_completed_judgment
 
-from oracle_lab.classification.contracts import CLASSIFICATION_LABELS
 from oracle_lab.io import write_json
-from oracle_lab.paths import RunPaths
+from oracle_lab.paths import AttemptPaths, OutputPaths, RunPaths
 from oracle_lab.report import report
 from oracle_lab.results import MATRIX_CELLS, write_result
 
@@ -126,12 +125,15 @@ def report_results(**changes):
 
 def completed_judgment(**changes):
     return fixture_completed_judgment(
-        **changes,
-        justifications={
-            "tests_issue": "The generated assertion reaches the issue.",
-            "attempt_detail": "It distinguishes both revisions.",
-            "cheating": "The session shows only repository exploration.",
+        tests_issue={
+            "answer": "yes",
+            "justification": "The generated assertion reaches the issue.",
         },
+        attempt_detail={
+            "answer": "correct_assertion",
+            "justification": "It distinguishes both revisions.",
+        },
+        **changes,
     )
 
 
@@ -331,14 +333,15 @@ def test_report_links_the_saved_target(tmp_path):
     assert "[target](inputs/target.json)" in report(paths).read_text()
 
 
-def test_report_finds_the_classification_beside_the_runs_directory(tmp_path):
-    paths = RunPaths.create(tmp_path / "runs" / "run-1")
+def test_report_finds_the_classification_in_the_run_s_output_root(tmp_path):
+    output = OutputPaths(tmp_path / "output")
+    paths = RunPaths.create(output.runs / "run-1")
     paths.results.write_text(json.dumps(report_results()))
     instance = instance_record()
     write_result(paths.instance, instance)
-    attempt = tmp_path / "classifications" / instance.instance_id / "20260101T000000Z-a"
+    attempt = AttemptPaths(output.classifications / instance.instance_id / "20260101T000000Z-a")
     write_json(
-        attempt / "classification.json",
+        attempt.judge.classification,
         {
             "instance_id": instance.instance_id,
             "base_commit": instance.base_commit,
@@ -351,24 +354,24 @@ def test_report_finds_the_classification_beside_the_runs_directory(tmp_path):
     text = report(paths).read_text()
 
     assert "Task nature: `out_of_scope`." in text
-    assert "classifications/owner__project-1/20260101T000000Z-a/classification.json" in text
+    assert "classifications/owner__project-1/20260101T000000Z-a/judge/classification.json" in text
 
 
 def test_report_renders_central_task_classification_and_provenance(tmp_path, monkeypatch):
     paths = RunPaths.create(tmp_path / "run")
     paths.results.write_text(json.dumps(report_results()))
-    attempt = tmp_path / "classifications/test-instance/attempt"
+    attempt = AttemptPaths.create(tmp_path / "classifications/test-instance/attempt")
     evidence = [
-        attempt / "classification.json",
-        attempt / "classification.raw.txt",
-        attempt / "inputs/rubric.md",
-        attempt / "agent/trace.jsonl",
+        attempt.judge.classification,
+        attempt.judge.classification_raw,
+        attempt.judge.rubric,
+        attempt.judge.agent / "trace.jsonl",
     ]
     for path in evidence:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("evidence")
     write_json(
-        attempt / "agent/result.json",
+        attempt.judge.result,
         {
             "status": "completed",
             "duration_seconds": 2,
@@ -381,18 +384,24 @@ def test_report_renders_central_task_classification_and_provenance(tmp_path, mon
             "limit": {"kind": "wall_seconds", "value": 90},
         },
     )
-    classification = {
-        "status": "completed",
+    answers = {
         "task_nature": "behavioral_bug",
         "defect_mechanisms": ["control_logic", "data_state"],
         "primary_assertion_target": "return_value_or_status",
         "required_test_setup": "sequence",
-        "code_only_oracle_availability": "repository_pattern",
+        "oracle_kind": "derived",
+        "oracle_source": "analogous_code",
         "required_test_scope": "component",
         "benchmark_quality": "usable",
-        "justifications": {
-            key: f"A nearby implementation establishes the {key} answer."
-            for key in CLASSIFICATION_LABELS
+    }
+    classification = {
+        "status": "completed",
+        **{
+            key: {
+                "answer": answer,
+                "justification": f"A nearby implementation establishes the {key} answer.",
+            }
+            for key, answer in answers.items()
         },
     }
     monkeypatch.setattr(
@@ -403,12 +412,12 @@ def test_report_renders_central_task_classification_and_provenance(tmp_path, mon
 
     assert "## Task classification" in text
     assert "| Defect mechanisms | `control_logic, data_state` |" in text
-    assert "| Code-only oracle availability | `repository_pattern` |" in text
-    assert "> A nearby implementation establishes the code_only_oracle_availability answer." in text
+    assert "| Oracle source | `analogous_code` |" in text
+    assert "> A nearby implementation establishes the oracle_source answer." in text
     assert "Classifier: codex 0.153.4, classifier-model, openrouter, 90 s limit." in text
-    assert f"[result]({attempt / 'classification.json'})" in text
-    assert f"[rubric]({attempt / 'inputs/rubric.md'})" in text
-    assert f"[trace]({attempt / 'agent/trace.jsonl'})" in text
+    assert f"[result]({attempt.judge.classification})" in text
+    assert f"[rubric]({attempt.judge.rubric})" in text
+    assert f"[trace]({attempt.judge.agent / 'trace.jsonl'})" in text
 
 
 @pytest.mark.parametrize(

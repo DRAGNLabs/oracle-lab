@@ -2,8 +2,7 @@
 
 This doc holds the research questions behind Oracle Lab and the ideas that shape
 its judge rubrics. It is context for design work. It does not describe how the
-code behaves today; [judging](judging.md) does that. The pivot it supports is
-planned in [the judgment pivot plan](features/judgment-pivot/implementation.md).
+code behaves today; [judging](judging.md) does that.
 
 ## Questions
 
@@ -20,7 +19,7 @@ Each stage has an LLM judge, and human raters rate how far they agree with each
 answer it gave.
 
 1. **Classification** (per task): the task's nature, defect mechanism, required
-   setup, and where the correct behavior can be learned.
+   setup, and the kind and source of its test oracle.
 2. **Generation** (per run): did the generated tests target the oracle problem,
    and what failure modes did the agent show? The judge reads the final tests and
    the agent's trace together and answers both.
@@ -39,23 +38,31 @@ An agent writing a detecting test without the issue has to do three things:
 2. **Retrieve** the correct behavior, if the repository states it.
 3. **Derive** the correct behavior, if the repository only implies it.
 
+A bug that crashes needs neither retrieval nor derivation: triggering it is
+enough.
+
 The candidate headline: if agents handle stated oracles but fail on implied ones,
 the bottleneck is derivation, not context management.
 
-### Oracle state (per problem)
+### Oracle kind (per problem)
 
-- **Explicit:** the repository states the correct behavior (docs, docstrings,
-  surrounding code). Succeeding needs retrieval.
-- **Implicit:** the repository states it nowhere, but it can be derived from
-  sibling behavior, invariants, contracts, or logic. Succeeding needs reasoning.
-- **Absent:** the repository does not reveal it; it lives only in the issue or
-  the maintainer's intent. Failing here is not a model failure.
+A test oracle is what tells a test the correct outcome. The kinds follow Barr et
+al., "The Oracle Problem in Software Testing: A Survey" (IEEE TSE, 2015), judged
+from the buggy repository alone:
 
-The classification rubric's `code_only_oracle_availability` question is close to
-this. `repository_documentation` maps to explicit. `local_contract` and
-`repository_pattern` are mostly implicit. `unavailable_or_ambiguous` and
-`domain_knowledge` are mostly absent. Reworking the question into these three
-states is a possible later change.
+- **Implicit:** the bug crashes, raises an uncaught exception, or hangs.
+  Triggering it is enough; no expected value is needed.
+- **Specified:** the repository, or a specification it follows, states the
+  correct behavior (docs, docstrings, types). Succeeding needs retrieval.
+- **Derived:** nothing states it, but it can be reasoned out from the code:
+  surrounding logic, sibling code, invariants, or relations between executions.
+  Succeeding needs reasoning.
+- **Human:** the repository does not settle it; it lives in the issue, the
+  maintainer's intent, or outside knowledge. Failing here is not a model failure.
+
+The classification rubric asks this as `oracle_kind`, and names the exact source
+in `oracle_source`. When several kinds fit, the judge takes the first in the
+order above: the one a test author can use with the least reasoning.
 
 ### Recognition signal (per problem)
 
@@ -64,9 +71,10 @@ inconsistency, a docstring that disagrees with the code, or a crash?
 
 | | Signal present | No signal |
 |---|---|---|
-| Explicit oracle | Retrieval should be enough | Agent has to stumble onto the bug |
-| Implicit oracle | **Target cell** | Nearly hopeless without localization |
-| Absent oracle | Not a fair test | Not a fair test |
+| Implicit oracle | Triggering the bug is enough | Not applicable: the crash is the signal |
+| Specified oracle | Retrieval should be enough | Agent has to stumble onto the bug |
+| Derived oracle | **Target cell** | Nearly hopeless without localization |
+| Human oracle | Not a fair test | Not a fair test |
 
 The target cell is where the key evidence lives: the problem is recognizable and
 the oracle derivable, yet agents fail, and fail across repeated runs.
@@ -84,7 +92,7 @@ comparison of prompts.
    agent the issue, which removed recognition; this explains why it found the
    task easier.
 
-A **reproducible derivation failure** is an implicit-oracle problem that agents
+A **reproducible derivation failure** is a derived-oracle problem that agents
 fail consistently even in condition 3.
 
 ### Calling an oracle derivable
@@ -93,7 +101,7 @@ This label is the one reviewers will challenge, because a problem looks
 derivable once you have seen the fix. Operational test: a person given only the
 repository and the bug's location (no issue, no patch) can state the correct
 behavior and point to the evidence for it. Humans should run this check on every
-problem labeled implicit.
+problem labeled derived.
 
 ## Failure modes
 

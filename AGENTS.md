@@ -19,8 +19,8 @@ Read these references before changing related behavior:
 - `docs/containers.md` for Docker transport and image builds.
 - `docs/research-framing.md` for the research questions, oracle states, and
   failure-mode start list behind the judge rubrics.
-- `docs/features/judgment-pivot/implementation.md` for the planned merge of the
-  trace viewer into the generation judgment and review page.
+- `docs/features/data-export/implementation.md` for the planned output layout
+  and Hugging Face dataset export.
 
 ## Architecture and trust boundaries
 
@@ -79,7 +79,7 @@ The pipeline stages run in this order, and each is one module or package that
 Supporting these:
 
 - `src/oracle_lab/cli.py`: the command interface: `run`, `preflight`, `batch`,
-  `evaluate`, `judge`, `classify`, `review`, `agreement`, `trace`, and `report`.
+  `evaluate`, `judge`, `classify`, `review`, `agreement`, `export`, and `report`.
 - `src/oracle_lab/run.py`: the stage sequence and run status.
 - `src/oracle_lab/preflight.py`: `preflight`, which runs the stages before
   generation plus an environment check, without calling a model.
@@ -108,10 +108,16 @@ Supporting these:
   with tree-sitter-bash; `facts.py` adds patch overlap and test file versions;
   `build.py` reads the run with the strict contracts. It annotates facts only,
   never failure modes.
+- `src/oracle_lab/export/`: an output root as a dataset. `contracts.py` holds
+  one row model per table and the export manifest; `tables.py` reads runs,
+  attempts, and reviews through the persisted contracts; `writer.py` writes
+  Parquet, raw copies, and the dataset card; `hub.py` uploads to Hugging Face.
 - `src/oracle_lab/spend.py`: the OpenRouter key spend measured around a run's
   model stages, saved as `cost.json`.
 - `src/oracle_lab/config.py`, `paths.py`, `results.py`: the input contract, the
-  artifact layout, and the result contracts.
+  artifact layout, and the result contracts. `paths.py` names every directory
+  under the output root: `OutputPaths`, `RunPaths`, `AttemptPaths`, and the
+  `judge/` directory each LLM judge writes (`JudgePaths`).
 - `src/oracle_lab/repository.py`: the repository checkout inside a sandbox,
   shared by generation and evaluation.
 - `src/oracle_lab/container/`, `harnesses/`: Docker transport and the agent CLI
@@ -138,12 +144,13 @@ compatibility shims for artifacts produced by an earlier revision.
 Use uv for the host Python environment:
 
 ```sh
-uv sync --extra dataset --extra dev
+uv sync --extra dev
 uv run oracle-lab --help
 ```
 
 Use `rg` for searches. Make focused edits and preserve unrelated work in the
-working tree. Do not commit generated `runs/`, `.env`, caches, or credentials.
+working tree. Do not commit generated `output/` or `archive/`, `.env`, caches, or
+credentials.
 
 When adding or changing configuration fields:
 
@@ -188,7 +195,7 @@ Docker integration checks require a prior run with its runtime image still
 available, but do not call a model:
 
 ```sh
-ORACLE_LAB_SMOKE_RUN=runs/<run-id> uv run pytest -q -m docker
+ORACLE_LAB_SMOKE_RUN=output/runs/<run-id> uv run pytest -q -m docker
 ```
 
 Run a paid or quota-limited model smoke test only when the user authorizes it.

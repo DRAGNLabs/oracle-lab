@@ -252,6 +252,8 @@ class ResolvedConfig(ConfigModel):
 
     source: SourceConfig
     limits: LimitsConfig = Field(default_factory=LimitsConfig)
+    # The output root, relative to the config file. Each command writes into its own
+    # directory there; see `OutputPaths`.
     output: str
     runtime: RuntimeConfig | None = None
     toolchain: ToolchainConfig = Field(default_factory=ToolchainConfig)
@@ -267,7 +269,6 @@ class RunConfig(ResolvedConfig):
     agent: HarnessConfig
     judge: JudgeConfig | None = None
     task: TaskConfig
-    output: str = "runs"
 
     def require_judge(self) -> JudgeConfig:
         if self.judge is None:
@@ -280,7 +281,6 @@ class ClassificationConfig(ResolvedConfig):
 
     classifier: ClassifierConfig
     rubric: NonBlank
-    output: str = "classifications"
 
 
 def validate_resolved_config(config: RunConfig) -> None:

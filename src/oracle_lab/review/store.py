@@ -21,11 +21,11 @@ def save_review(target: ReviewTarget, rater: str, raw: str) -> Review:
 
     A rater's earlier review of the same target moves to `reviews-history/` first.
     """
-    directory = target.reviews / require_rater(rater)
+    directory = target.judge.reviews / require_rater(rater)
     review = parse_review(raw, target.rating_keys())
     provenance = _provenance(target, rater)
     if directory.exists():
-        history = target.review_history / rater / utc_stamp()
+        history = target.judge.review_history / rater / utc_stamp()
         history.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(directory, history)
     write_json(directory / "review.json", review.model_dump())
@@ -35,18 +35,24 @@ def save_review(target: ReviewTarget, rater: str, raw: str) -> Review:
 
 def read_review(target: ReviewTarget, rater: str) -> Review | None:
     """This rater's saved review of the target, if any. Other raters' are never read."""
-    return _read(target.reviews / require_rater(rater))
+    return _read(target.judge.reviews / require_rater(rater))
 
 
 def read_all_reviews(target: ReviewTarget) -> dict[str, Review]:
     """Every rater's saved review of the target. Only agreement reads these."""
     reviews = {}
-    if target.reviews.is_dir():
-        for directory in sorted(target.reviews.iterdir()):
+    if target.judge.reviews.is_dir():
+        for directory in sorted(target.judge.reviews.iterdir()):
             review = _read(directory) if RATER_ID.fullmatch(directory.name) else None
             if review is not None:
                 reviews[directory.name] = review
     return reviews
+
+
+def read_provenance(target: ReviewTarget, rater: str) -> ReviewProvenance:
+    """What a rater's saved review of the target was based on."""
+    path = target.judge.reviews / require_rater(rater) / "provenance.json"
+    return ReviewProvenance.model_validate(read_json(path))
 
 
 def _read(directory: Path) -> Review | None:
@@ -55,7 +61,7 @@ def _read(directory: Path) -> Review | None:
 
 
 def _provenance(target: ReviewTarget, rater: str) -> ReviewProvenance:
-    turn = read_json(target.agent_result)
+    turn = read_json(target.judge.result)
     return ReviewProvenance(
         stage=target.stage,
         rater=rater,
@@ -63,6 +69,6 @@ def _provenance(target: ReviewTarget, rater: str) -> ReviewProvenance:
         reviewed_output_sha256=digest(target.reviewed_output.read_bytes()),
         judge_harness=turn["harness"],
         judge_model=turn["model"],
-        stage_rubric_sha256=digest(target.stage_rubric.read_bytes()),
-        workspace_spec_sha256=digest(target.workspace_spec.read_bytes()),
+        stage_rubric_sha256=digest(target.judge.rubric.read_bytes()),
+        workspace_spec_sha256=digest(target.judge.workspace_spec.read_bytes()),
     )

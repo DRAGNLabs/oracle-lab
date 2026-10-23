@@ -10,5 +10,3 @@ jobs:
 
 execution:
   continue_on_error: true
-
-output: ../../batches

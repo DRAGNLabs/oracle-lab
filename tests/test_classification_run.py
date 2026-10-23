@@ -136,7 +136,7 @@ def test_stage_saves_raw_response_normalized_result_and_provenance(tmp_path, mon
     assert saved["instance_id"] == instance.instance_id
     assert saved["base_commit"] == instance.base_commit
     assert saved["source_record_sha256"] == instance.source.record_sha256
-    assert saved["result"]["defect_mechanisms"] == ["validation_checking"]
+    assert saved["result"]["defect_mechanisms"]["answer"] == ["validation_checking"]
     assert read_json(attempt.judge.result)["model"] == "classifier-model"
 
 

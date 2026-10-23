@@ -12,7 +12,7 @@ import re
 from datetime import datetime, timezone
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Generic, Literal, TypeVar
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
@@ -304,13 +304,14 @@ Justification = Annotated[
 ]
 
 
-def require_justifications(justifications: dict[str, str], answered: set[str]) -> None:
-    """Each answered question has one justification, and nothing else does."""
-    if set(justifications) != answered:
-        raise ValueError(
-            f"justifications must cover exactly the answered questions {sorted(answered)}, "
-            f"not {sorted(justifications)}"
-        )
+A = TypeVar("A")
+
+
+class Answered(StrictModel, Generic[A]):
+    """One rubric question's answer, and the evidence for it."""
+
+    answer: A
+    justification: Justification
 
 
 class UnsuccessfulTurn(StrictModel):

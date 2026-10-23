@@ -128,14 +128,16 @@ class ClassificationRow(ArtifactModel):
     defect_mechanisms: list[str] | None
     primary_assertion_target: str | None
     required_test_setup: str | None
-    code_only_oracle_availability: str | None
+    oracle_kind: str | None
+    oracle_source: str | None
     required_test_scope: str | None
     benchmark_quality: str | None
     task_nature_justification: str | None
     defect_mechanisms_justification: str | None
     primary_assertion_target_justification: str | None
     required_test_setup_justification: str | None
-    code_only_oracle_availability_justification: str | None
+    oracle_kind_justification: str | None
+    oracle_source_justification: str | None
     required_test_scope_justification: str | None
     benchmark_quality_justification: str | None
     error: str | None

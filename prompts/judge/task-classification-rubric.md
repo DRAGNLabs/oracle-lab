@@ -50,17 +50,16 @@ SWE-rebench V2 (`source.kind` is `swerebench_v2`) adds:
 - `install_config`, `image_name`, `language`, and `license`: environment and
   repository metadata.
 
-Inspect any of these fields to understand the task and assess benchmark quality.
-Treat `meta.llm_metadata` as another rater's opinion: reach your own labels
-from the evidence, and do not copy its labels. Question 5 has a stricter
-evidence rule stated in that question.
+## How to answer
 
-## Procedure
+1. Read the task record and the buggy checkout.
+2. Answer each question in order. For each one, choose the label, then write its
+   justification.
+3. Return the JSON object in the required format, using the exact label strings.
 
-1. Read all task data available to you, including the issue, gold repair,
-   reference-test changes, buggy/golden repository checkouts, etc.
-2. Answer the questions below.
-3. Return the JSON object in the required format. Use the exact label strings.
+A justification is at least three sentences. It cites the concrete evidence for
+the answer, such as a field of the task record, a code path, or an execution
+result.
 
 ## Question 1: `task_nature`
 
@@ -75,15 +74,16 @@ Choose one label.
   documentation-only change, or compatibility request without a faulty existing
   behavior.
 
-If the label is `out_of_scope`, stop here and return only `task_nature` and its
-justification.
+Justify your answer.
+
+If the label is `out_of_scope`, stop here and return only `task_nature`.
 
 ## Question 2: `defect_mechanisms`
 
 What is wrong in the buggy code?
 
-Choose every label that directly describes the defect. You may use the provided
-issue to answer. Do not add labels merely because they are downstream effects.
+Choose every label that directly describes the defect, not its downstream
+effects.
 
 - `control_logic`: wrong branch, condition, ordering, or loop.
 - `computation_algorithm`: wrong calculation, transformation, or algorithm.
@@ -107,13 +107,15 @@ issue to answer. Do not add labels merely because they are downstream effects.
   wrong.
 - `other`: none of the above fits.
 
+Justify your answer.
+
 ## Question 3: `primary_assertion_target`
 
 What does a minimal valid fail-to-pass test directly inspect to prove that
 buggy and repaired behavior differ?
 
-Choose one label. Classify the direct subject of the assertion, not a
-downstream consequence.
+Choose one label for the direct subject of the assertion, not a downstream
+consequence.
 
 - `return_value_or_status`: a returned value, response, result object, or
   status is wrong.
@@ -130,15 +132,13 @@ downstream consequence.
 - `import_build_or_collection`: importing, building, or collecting the code
   fails.
 
-For example, an incorrect HTTP request might eventually return the wrong value.
-Use `external_interaction` if the test asserts the request, and
-`return_value_or_status` if it asserts only the returned value.
+Justify your answer.
 
 ## Question 4: `required_test_setup`
 
 What special setup is needed before the test can exercise the bug?
 
-Choose one label.
+Choose one label: the condition without which the test cannot reach the bug.
 
 - `none`: a direct call or normal use of the feature is enough.
 - `special_input`: a particular value, boundary case, invalid value, or unusual
@@ -150,44 +150,68 @@ Choose one label.
 - `concurrency_or_timing`: coordinated execution, timing, or repetition is
   needed.
 
-If several labels fit, choose the most distinctive prerequisite: the condition
-without which the test cannot reach the bug. For a duplicate-email test that
-needs both an existing user and a duplicate value, choose `existing_state`.
+Justify your answer.
 
-## Question 5: `code_only_oracle_availability`
+## Question 5: `oracle_kind`
 
-From the buggy checkout and generation prompt alone, where can the test author
-learn what to assert?
+From the buggy checkout and generation prompt alone, what kind of test oracle
+can a test use to detect the bug? A test oracle is what tells the test the
+correct outcome.
 
-Choose one label. Do not use anything from the task record, such as the issue,
-repair, reference test, pull request text, or `interface`, as evidence. Do not
-use existing tests either. Only consider the buggy repository state without
-tests.
+Choose one label. If more than one fits, choose the first in this order.
 
-- `local_contract`: a signature, type, docstring, error message, or nearby
-  production code states the expected behavior.
-- `repository_pattern`: analogous production code, callers, or another
-  implementation in the repository shows the expected behavior.
-- `repository_documentation`: repository documentation states the expected
+- `implicit`: the bug crashes, raises an uncaught exception, or hangs, so
+  triggering it is enough to detect it.
+- `specified`: the repository or a specification it follows states the correct
   behavior.
-- `api_convention`: a well-known library or language convention makes the
-  expected behavior clear.
-- `general_property`: idempotence, preservation, or a relationship between two
-  executions gives the test its assertion.
-- `domain_knowledge`: knowledge outside the repository is needed to know what
-  should happen.
-- `unavailable_or_ambiguous`: the agent-visible evidence does not support one
-  reasonable assertion.
+- `derived`: nothing states the correct behavior, but it can be reasoned out from
+  the code.
+- `human`: the repository does not settle the correct behavior; it takes the
+  maintainer's intent or outside knowledge.
 
-Choose the strongest source available. A task can be easy to trigger but still
-be `unavailable_or_ambiguous` if the buggy checkout does not reveal what the
-test should assert.
+Justify your answer.
 
-## Question 6: `required_test_scope`
+## Question 6: `oracle_source`
+
+Where exactly does that oracle come from?
+
+Choose one label listed under your `oracle_kind`.
+
+For `implicit`:
+
+- `crash_or_exception`: the bug raises an uncaught exception or crashes.
+- `hang_or_resource`: the bug hangs, times out, or exhausts a resource.
+
+For `specified`:
+
+- `docstring_or_comment`: a docstring or comment states the behavior.
+- `signature_or_type`: a signature, type hint, or declared interface states it.
+- `repository_documentation`: the repository's documentation states it.
+- `external_specification`: a standard, protocol, or library documentation the
+  code follows states it.
+
+For `derived`:
+
+- `code_logic`: the surrounding logic implies it, such as other branches,
+  invariants the function keeps, or how its result is used.
+- `analogous_code`: a sibling implementation, caller, or similar code in the
+  repository shows it.
+- `property_relation`: a relation between executions implies it, such as a
+  round trip, idempotence, or equivalence.
+- `api_convention`: a well-known language or library convention implies it.
+
+For `human`:
+
+- `domain_knowledge`: knowledge outside the repository is needed.
+- `intent_only`: only the issue or the maintainer's intent settles it.
+
+Justify your answer.
+
+## Question 7: `required_test_scope`
 
 What is the broadest scope a valid test must exercise?
 
-Choose one label. You may refer to the provided reference test.
+Choose one label.
 
 - `unit`: one function or object can be tested in isolation.
 - `component`: related behavior within one component is required.
@@ -199,12 +223,13 @@ Choose one label. You may refer to the provided reference test.
 - `performance_or_concurrency`: the test must measure resource use or exercise
   concurrent behavior.
 
-## Question 7: `benchmark_quality`
+Justify your answer.
+
+## Question 8: `benchmark_quality`
 
 Is this task sound enough to use?
 
-Choose one label. Use any available information, including your previous
-answers.
+Choose one label.
 
 - `usable`: the issue, repair, and reference tests describe one coherent task,
   and its execution is reliable.
@@ -221,37 +246,35 @@ answers.
   its discussion. Nothing in the buggy code suggests it, so a test writer
   without the issue cannot know what to assert.
 
+Justify your answer.
+
 ## Required output
 
-Return exactly one JSON object with these exact fields and label strings. Do
-not wrap it in a Markdown fence and do not include any other text.
-
-`justifications` holds one justification for each question, keyed by the
-question's field name. Each justification is at least three sentences and cites
-the concrete evidence for that answer: a field of the task record, a code path,
-or an execution result. For a `benchmark_quality` label other than `usable`,
-name the specific evidence that supports it.
+Return exactly one JSON object with these exact fields and label strings. Each
+question is an object holding its `answer` and its `justification`. Do not wrap
+it in a Markdown fence and do not include any other text.
 
 For an in-scope task, return:
 
 ```json
 {
-  "task_nature": "behavioral_bug",
-  "defect_mechanisms": ["validation_checking"],
-  "primary_assertion_target": "exception_behavior",
-  "required_test_setup": "special_input",
-  "code_only_oracle_availability": "local_contract",
-  "required_test_scope": "unit",
-  "benchmark_quality": "usable",
-  "justifications": {
-    "task_nature": "...",
-    "defect_mechanisms": "...",
-    "primary_assertion_target": "...",
-    "required_test_setup": "...",
-    "code_only_oracle_availability": "...",
-    "required_test_scope": "...",
-    "benchmark_quality": "..."
-  }
+  "task_nature": { "answer": "behavioral_bug", "justification": "..." },
+  "defect_mechanisms": {
+    "answer": ["validation_checking"],
+    "justification": "..."
+  },
+  "primary_assertion_target": {
+    "answer": "exception_behavior",
+    "justification": "..."
+  },
+  "required_test_setup": { "answer": "special_input", "justification": "..." },
+  "oracle_kind": { "answer": "specified", "justification": "..." },
+  "oracle_source": {
+    "answer": "docstring_or_comment",
+    "justification": "..."
+  },
+  "required_test_scope": { "answer": "unit", "justification": "..." },
+  "benchmark_quality": { "answer": "usable", "justification": "..." }
 }
 ```
 
@@ -259,10 +282,7 @@ For an out-of-scope task, return:
 
 ```json
 {
-  "task_nature": "out_of_scope",
-  "justifications": {
-    "task_nature": "..."
-  }
+  "task_nature": { "answer": "out_of_scope", "justification": "..." }
 }
 ```
 

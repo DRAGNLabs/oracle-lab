@@ -291,10 +291,13 @@ def _failure_mode_rows(
 
 def _answers(result: object, labels: dict[str, str]) -> dict:
     """Each question's answer and justification, null where the result has none."""
-    justifications = getattr(result, "justifications", {})
+    answered = {key: getattr(result, key, None) for key in labels}
     return {
-        **{key: getattr(result, key, None) for key in labels},
-        **{f"{key}_justification": justifications.get(key) for key in labels},
+        **{key: value.answer if value else None for key, value in answered.items()},
+        **{
+            f"{key}_justification": value.justification if value else None
+            for key, value in answered.items()
+        },
     }
 
 

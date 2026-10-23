@@ -13,6 +13,7 @@ from fixtures import (
     upstream_repository,
 )
 
+from oracle_lab.classification.contracts import CLASSIFICATION_LABELS
 from oracle_lab.io import write_json
 from oracle_lab.web.session import ReviewSession
 
@@ -85,7 +86,7 @@ def test_a_judgment_overview_has_the_questions_answers_and_core_evidence(session
         "label": "Do the generated tests attempt to test the issue?",
         "section": "submission",
         "answer": "yes",
-        "justification": "The submission supports this tests_issue answer.",
+        "justification": "The evidence supports this tests_issue answer.",
     }
     assert overview["questions"][3] == {
         "key": "failure_modes.never_saw_bug",
@@ -109,7 +110,7 @@ def test_a_classification_overview_has_its_questions_and_evidence(session):
     overview = session.overview(ATTEMPT)
 
     assert overview["views"] == ["buggy"]
-    assert len(overview["questions"]) == 7
+    assert len(overview["questions"]) == len(CLASSIFICATION_LABELS)
     assert overview["questions"][0]["label"] == "Task nature"
     assert overview["evidence"] == ["instance.json", "rubric.md"]
     assert "outcomes" not in overview

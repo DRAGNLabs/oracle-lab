@@ -13,7 +13,6 @@ from fixtures import (
 )
 from fixtures import completed_judgment as fixture_completed_judgment
 
-from oracle_lab.classification.contracts import CLASSIFICATION_LABELS
 from oracle_lab.io import write_json
 from oracle_lab.paths import AttemptPaths, OutputPaths, RunPaths
 from oracle_lab.report import report
@@ -126,12 +125,15 @@ def report_results(**changes):
 
 def completed_judgment(**changes):
     return fixture_completed_judgment(
-        **changes,
-        justifications={
-            "tests_issue": "The generated assertion reaches the issue.",
-            "attempt_detail": "It distinguishes both revisions.",
-            "cheating": "The session shows only repository exploration.",
+        tests_issue={
+            "answer": "yes",
+            "justification": "The generated assertion reaches the issue.",
         },
+        attempt_detail={
+            "answer": "correct_assertion",
+            "justification": "It distinguishes both revisions.",
+        },
+        **changes,
     )
 
 
@@ -382,18 +384,24 @@ def test_report_renders_central_task_classification_and_provenance(tmp_path, mon
             "limit": {"kind": "wall_seconds", "value": 90},
         },
     )
-    classification = {
-        "status": "completed",
+    answers = {
         "task_nature": "behavioral_bug",
         "defect_mechanisms": ["control_logic", "data_state"],
         "primary_assertion_target": "return_value_or_status",
         "required_test_setup": "sequence",
-        "code_only_oracle_availability": "repository_pattern",
+        "oracle_kind": "derived",
+        "oracle_source": "analogous_code",
         "required_test_scope": "component",
         "benchmark_quality": "usable",
-        "justifications": {
-            key: f"A nearby implementation establishes the {key} answer."
-            for key in CLASSIFICATION_LABELS
+    }
+    classification = {
+        "status": "completed",
+        **{
+            key: {
+                "answer": answer,
+                "justification": f"A nearby implementation establishes the {key} answer.",
+            }
+            for key, answer in answers.items()
         },
     }
     monkeypatch.setattr(
@@ -404,8 +412,8 @@ def test_report_renders_central_task_classification_and_provenance(tmp_path, mon
 
     assert "## Task classification" in text
     assert "| Defect mechanisms | `control_logic, data_state` |" in text
-    assert "| Code-only oracle availability | `repository_pattern` |" in text
-    assert "> A nearby implementation establishes the code_only_oracle_availability answer." in text
+    assert "| Oracle source | `analogous_code` |" in text
+    assert "> A nearby implementation establishes the oracle_source answer." in text
     assert "Classifier: codex 0.153.4, classifier-model, openrouter, 90 s limit." in text
     assert f"[result]({attempt.judge.classification})" in text
     assert f"[rubric]({attempt.judge.rubric})" in text

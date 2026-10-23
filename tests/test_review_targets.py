@@ -10,6 +10,7 @@ from fixtures import (
     out_of_scope_classification,
 )
 
+from oracle_lab.classification.contracts import CLASSIFICATION_LABELS
 from oracle_lab.judge.contracts import FAILURE_MODES
 from oracle_lab.paths import RunPaths
 from oracle_lab.review.targets import (
@@ -46,11 +47,11 @@ def test_a_null_judge_answer_is_not_reviewed(tmp_path):
     assert target.rating_keys()[2].startswith("failure_modes.")
 
 
-def test_an_in_scope_classification_is_reviewed_on_all_seven_questions(tmp_path):
+def test_an_in_scope_classification_is_reviewed_on_every_question(tmp_path):
     target = ClassificationTarget.load(classified_attempt(tmp_path).root)
 
     assert target.judge.reviews == tmp_path / "judge/reviews"
-    assert len(target.rating_keys()) == 7
+    assert target.rating_keys() == list(CLASSIFICATION_LABELS)
 
 
 def test_an_out_of_scope_classification_is_reviewed_on_one_question(tmp_path):

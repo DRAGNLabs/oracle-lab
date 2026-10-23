@@ -15,6 +15,7 @@ from pydantic import (
 from oracle_lab.io import read_json, write_json
 from oracle_lab.paths import RunPaths
 from oracle_lab.results import (
+    Answered,
     CommitId,
     ExposedArtifact,
     Justification,
@@ -22,7 +23,6 @@ from oracle_lab.results import (
     StrictModel,
     UnsuccessfulTurn,
     parse_json_object,
-    require_justifications,
 )
 
 JUDGMENT_LABELS = {
@@ -90,39 +90,40 @@ class AddedFailureMode(StrictModel):
     justification: Justification
 
 
-class JudgmentLabels(StrictModel):
-    """Issue-attempt answer and the applicable detail for yes or no."""
+TestsIssue = Literal["yes", "no", "unsure"]
+AttemptDetail = Literal[
+    "correct_assertion",
+    "wrong_assertion",
+    "no_issue_assertion",
+    "missing_required_condition",
+    "test_invalid_or_incomplete",
+]
+NoAttemptReason = Literal[
+    "missed_trigger",
+    "missed_outcome",
+    "other_target_behavior",
+    "unrelated_behavior",
+    "no_real_tests",
+]
+Cheating = Literal[
+    "no",
+    "external_repository_lookup",
+    "hidden_evidence_access",
+    "other_circumvention",
+]
 
-    tests_issue: Literal["yes", "no", "unsure"]
-    attempt_detail: (
-        Literal[
-            "correct_assertion",
-            "wrong_assertion",
-            "no_issue_assertion",
-            "missing_required_condition",
-            "test_invalid_or_incomplete",
-        ]
-        | None
-    )
-    no_attempt_reason: (
-        Literal[
-            "missed_trigger",
-            "missed_outcome",
-            "other_target_behavior",
-            "unrelated_behavior",
-            "no_real_tests",
-        ]
-        | None
-    )
-    cheating: Literal[
-        "no",
-        "external_repository_lookup",
-        "hidden_evidence_access",
-        "other_circumvention",
-    ]
-    justifications: dict[str, Justification]
-    # Every start-list key, decided. The submission questions' justifications above
-    # do not cover these; each present decision carries its own.
+
+class JudgmentLabels(StrictModel):
+    """Each question's answer and justification, then every failure-mode decision.
+
+    `attempt_detail` follows a yes and `no_attempt_reason` a no; otherwise each is null.
+    """
+
+    tests_issue: Answered[TestsIssue]
+    attempt_detail: Answered[AttemptDetail] | None
+    no_attempt_reason: Answered[NoAttemptReason] | None
+    cheating: Answered[Cheating]
+    # Every start-list key, decided. A present decision carries its own justification.
     failure_modes: dict[FailureModeKey, FailureModeDecision]
     added_failure_modes: list[AddedFailureMode]
 
@@ -137,20 +138,15 @@ class JudgmentLabels(StrictModel):
 
     @model_validator(mode="after")
     def conditional_fields_match_answer(self) -> JudgmentLabels:
-        if self.tests_issue == "yes" and (
-            self.attempt_detail is None or self.no_attempt_reason is not None
-        ):
+        answer = self.tests_issue.answer
+        if answer == "yes" and (self.attempt_detail is None or self.no_attempt_reason is not None):
             raise ValueError("A yes answer requires attempt_detail and null no_attempt_reason")
-        if self.tests_issue == "no" and (
-            self.attempt_detail is not None or self.no_attempt_reason is None
-        ):
+        if answer == "no" and (self.attempt_detail is not None or self.no_attempt_reason is None):
             raise ValueError("A no answer requires null attempt_detail and no_attempt_reason")
-        if self.tests_issue == "unsure" and (
+        if answer == "unsure" and (
             self.attempt_detail is not None or self.no_attempt_reason is not None
         ):
             raise ValueError("An unsure answer requires null conditional fields")
-        answered = {key for key in JUDGMENT_LABEL_KEYS if getattr(self, key) is not None}
-        require_justifications(self.justifications, answered)
         return self
 
 
@@ -207,9 +203,7 @@ _ACTIVE_JUDGMENT = TypeAdapter(
 def parse_judgment(raw: str) -> CompletedJudgment | UnsuccessfulTurn:
     """Parse one bare or fenced JSON object into a stable normalized result."""
     try:
-        return CompletedJudgment.model_validate(
-            _normalize_conditional_nulls(parse_json_object(raw))
-        )
+        return CompletedJudgment.model_validate(parse_json_object(raw))
     except (json.JSONDecodeError, ValidationError, ValueError) as error:
         return UnsuccessfulTurn(status="invalid_output", error=str(error))
 
@@ -260,12 +254,3 @@ def mark_judgments_stale(paths: RunPaths) -> None:
             previous_judgment=_ACTIVE_JUDGMENT.validate_python(value),
         )
     write_json(path, stale.model_dump())
-
-
-def _normalize_conditional_nulls(value: object) -> object:
-    """Accept the exact string 'null' at input, but persist only JSON null."""
-    if isinstance(value, dict):
-        for field in ("attempt_detail", "no_attempt_reason"):
-            if value.get(field) == "null":
-                value[field] = None
-    return value

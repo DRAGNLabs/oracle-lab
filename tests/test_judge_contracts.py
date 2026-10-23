@@ -16,9 +16,13 @@ from oracle_lab.results import MAX_JUSTIFICATION_LENGTH, failed_turn
 
 
 def justified(**texts):
-    """Labels for the default yes answer, with the given justifications replaced."""
-    default = labels()["justifications"]
-    return labels(justifications={**default, **texts})
+    """Labels for the default yes answer, with the given questions' justifications."""
+    default = labels()
+    return labels(**{key: {**default[key], "justification": text} for key, text in texts.items()})
+
+
+def answer(field):
+    return field.answer if field else None
 
 
 @pytest.mark.parametrize(
@@ -35,7 +39,7 @@ def test_parser_accepts_every_attempt_detail(detail):
     result = parse_judgment(json.dumps(labels(attempt_detail=detail)))
 
     assert isinstance(result, CompletedJudgment)
-    assert result.attempt_detail == detail
+    assert answer(result.attempt_detail) == detail
 
 
 @pytest.mark.parametrize(
@@ -51,11 +55,11 @@ def test_parser_accepts_every_cheating_label(cheating):
     result = parse_judgment(json.dumps(labels(cheating=cheating)))
 
     assert isinstance(result, CompletedJudgment)
-    assert result.cheating == cheating
+    assert answer(result.cheating) == cheating
 
 
 @pytest.mark.parametrize(
-    "answer,detail,reason",
+    "issue,detail,reason",
     [
         ("yes", "correct_assertion", None),
         ("no", None, "missed_trigger"),
@@ -66,40 +70,18 @@ def test_parser_accepts_every_cheating_label(cheating):
         ("unsure", None, None),
     ],
 )
-def test_parser_accepts_each_answer_and_conditional_fields(answer, detail, reason):
+def test_parser_accepts_each_answer_and_conditional_fields(issue, detail, reason):
     result = parse_judgment(
-        json.dumps(labels(tests_issue=answer, attempt_detail=detail, no_attempt_reason=reason))
+        json.dumps(labels(tests_issue=issue, attempt_detail=detail, no_attempt_reason=reason))
     )
 
-    assert result.tests_issue == answer
-    assert result.attempt_detail == detail
-    assert result.no_attempt_reason == reason
+    assert answer(result.tests_issue) == issue
+    assert answer(result.attempt_detail) == detail
+    assert answer(result.no_attempt_reason) == reason
 
 
 @pytest.mark.parametrize(
-    "value,detail,reason",
-    [
-        (labels(no_attempt_reason="null"), "correct_assertion", None),
-        (
-            labels(
-                tests_issue="no", attempt_detail="null", no_attempt_reason="other_target_behavior"
-            ),
-            None,
-            "other_target_behavior",
-        ),
-        (labels(tests_issue="unsure", attempt_detail="null", no_attempt_reason="null"), None, None),
-    ],
-)
-def test_parser_normalizes_quoted_null_only_in_conditional_fields(value, detail, reason):
-    result = parse_judgment(json.dumps(value))
-
-    assert isinstance(result, CompletedJudgment)
-    assert result.attempt_detail == detail
-    assert result.no_attempt_reason == reason
-
-
-@pytest.mark.parametrize(
-    "answer,detail,reason",
+    "issue,detail,reason",
     [
         ("yes", None, None),
         ("yes", "correct_assertion", "other_target_behavior"),
@@ -109,9 +91,9 @@ def test_parser_normalizes_quoted_null_only_in_conditional_fields(value, detail,
         ("unsure", None, "unrelated_behavior"),
     ],
 )
-def test_parser_rejects_conditional_fields_that_conflict_with_answer(answer, detail, reason):
+def test_parser_rejects_conditional_fields_that_conflict_with_answer(issue, detail, reason):
     result = parse_judgment(
-        json.dumps(labels(tests_issue=answer, attempt_detail=detail, no_attempt_reason=reason))
+        json.dumps(labels(tests_issue=issue, attempt_detail=detail, no_attempt_reason=reason))
     )
 
     assert result.status == "invalid_output"
@@ -129,9 +111,10 @@ def test_parser_accepts_one_json_markdown_fence():
         "```json\n" + json.dumps(labels()) + "\n```after",
         "{not json}",
         json.dumps([]),
-        json.dumps({key: value for key, value in labels().items() if key != "justifications"}),
-        json.dumps(labels(justifications={"tests_issue": "Only one answer is justified."})),
-        json.dumps(justified(no_attempt_reason="A null answer has no justification.")),
+        json.dumps({**labels(), "tests_issue": "yes"}),
+        json.dumps(labels(tests_issue={"answer": "yes"})),
+        json.dumps(labels(justifications={"tests_issue": "A separate justification."})),
+        json.dumps(labels(no_attempt_reason="null")),
         json.dumps(labels(unexpected="field")),
         json.dumps(labels(oracle_alignment="behaviorally_aligned")),
         json.dumps(labels(tests_issue="maybe")),
@@ -154,7 +137,7 @@ def test_parser_returns_explicit_invalid_output(raw):
 def test_parser_preserves_independent_answer_even_without_fail_to_pass():
     result = parse_judgment(json.dumps(labels()))
 
-    assert result.tests_issue == "yes"
+    assert answer(result.tests_issue) == "yes"
 
 
 def test_failure_results_distinguish_failure_from_timeout():

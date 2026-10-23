@@ -42,7 +42,7 @@ themselves. Each answer gets one rating:
 
 A question the judge answered `null` is not rated. A judgment is rated on up to
 4 submission answers, every start-list failure-mode decision (present or
-absent), and each failure mode the judge added; an in-scope classification on 7
+absent), and each failure mode the judge added; an in-scope classification on 8
 answers, and an out-of-scope one on 1. A rater may also add failure modes the
 judge missed that are outside the start list, each with a name, a description,
 and the trace steps. Only a

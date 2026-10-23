@@ -182,9 +182,10 @@ to an older attempt.
 `classification.json` holds the instance and rubric hashes and the normalized
 result:
 
-- A completed in-scope result has every rubric question's label, and a
-  `justifications` object with one justification per question.
-- An out-of-scope result has only the task nature and its justification.
+- A completed in-scope result has every rubric question, each as
+  `{"answer": ..., "justification": "..."}`. `defect_mechanisms`'s answer is a
+  list of labels.
+- An out-of-scope result has only `task_nature`.
 - `invalid_output`, `failed`, and `timed_out` are explicit states.
 
 Beside it, for audit, are the raw final response, the frozen rubric, the harness
@@ -357,11 +358,10 @@ run is not. A cost failure never changes the run's state.
 ### `judge/judgment.json`
 
 The normalized judgment. A completed one has `status`, `tests_issue`,
-`attempt_detail`, `no_attempt_reason`, `cheating`, `justifications`,
-`failure_modes`, and `added_failure_modes`. A conditional field that does not
-apply is saved as JSON `null`, even when the response used the string `"null"`.
-`justifications` maps each answered submission question to its justification; a
-question answered `null` has none.
+`attempt_detail`, `no_attempt_reason`, `cheating`, `failure_modes`, and
+`added_failure_modes`. Each of the four questions is
+`{"answer": "<label>", "justification": "..."}`. `attempt_detail` follows a `yes`
+and `no_attempt_reason` a `no`; otherwise each is JSON `null`.
 
 `failure_modes` decides every start-list label (the keys in
 `judge/contracts.FAILURE_MODES`): `{"decision": "absent"}`, or

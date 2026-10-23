@@ -253,11 +253,7 @@ def _rating_items(target: ReviewTarget, answers: dict) -> list[dict]:
             item |= {"section": section, "answer": "present", "definition": added["definition"]}
             item |= {field: added[field] for field in ("steps", "justification")}
         else:
-            item |= {
-                "section": "submission",
-                "answer": answers[key],
-                "justification": answers["justifications"][key],
-            }
+            item |= {"section": "submission", **answers[key]}
         items.append(item)
     return items
 

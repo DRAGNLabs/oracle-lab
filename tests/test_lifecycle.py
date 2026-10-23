@@ -436,7 +436,7 @@ def test_reevaluation_marks_existing_judgment_stale_without_calling_a_model(tmp_
 
     judgment = read_json(paths.judge.judgment)
     assert judgment["status"] == "stale"
-    assert judgment["previous_judgment"]["tests_issue"] == "yes"
+    assert judgment["previous_judgment"]["tests_issue"]["answer"] == "yes"
     assert read_json(run_dir / "status.json")["judge_status"] == "stale"
     judge_call.assert_not_called()
 

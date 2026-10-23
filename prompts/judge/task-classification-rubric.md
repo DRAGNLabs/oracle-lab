@@ -279,3 +279,8 @@ For an out-of-scope task, return:
   }
 }
 ```
+
+## Before you answer
+
+Your final message is the JSON object alone: no text before or after it, and no
+Markdown fence.

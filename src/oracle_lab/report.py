@@ -255,7 +255,7 @@ def _failure_mode_lines(judgment: dict) -> list[str]:
             "",
         ]
     if absent:
-        lines += [f"Absent: {', '.join(absent)}.", ""]
+        lines += [f"Absent: {'; '.join(absent)}.", ""]
     return lines
 
 

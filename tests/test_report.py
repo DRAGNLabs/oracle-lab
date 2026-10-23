@@ -177,7 +177,7 @@ def test_report_renders_completed_judge_with_provenance_and_supporting_files(tmp
     assert "`attempt_detail`:\n\n> It distinguishes both revisions." in text
     assert "**Changed test to pass**, steps 23, 24:" in text
     assert "**Tested only defaults (judge's own:" in text
-    assert "Absent: Never saw the bug," in text
+    assert "Absent: Never saw the bug;" in text
     assert "| Generate | 4 s | 12 | 0 | 20 |" in text
     assert "| Judge | 3 s | 20 | 0 | 20 |" in text
     assert "[workspace](judge/workspace-spec.json)" in text

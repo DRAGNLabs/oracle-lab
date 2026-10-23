@@ -293,3 +293,8 @@ justification for a question whose answer is `null`.
 
 Always include both conditional fields, even when their value is `null`, and
 decide every label in `failure_modes`.
+
+## Before you answer
+
+Your final message is the JSON object alone: no text before or after it, and no
+Markdown fence.

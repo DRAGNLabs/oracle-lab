@@ -20,7 +20,7 @@ Copy the local secrets file and add your API keys:
 Run from the repository root:
 
 ```sh
-uv sync --extra dataset --extra dev
+uv sync --extra dev
 
 uv run oracle-lab run configs/smoke.yaml
 ```
@@ -95,6 +95,10 @@ uv run oracle-lab review ../oracle-lab-data --rater <your-id>
 # Agreement between raters, and how often they found the LLM judges right.
 uv run oracle-lab agreement ../oracle-lab-data
 
+# Export runs, classifications, and reviews as a dataset; --repo uploads it to a
+# private Hugging Face dataset (needs HF_TOKEN).
+uv run oracle-lab export ../oracle-lab-data --out dataset/ [--repo <owner>/<name>]
+
 # Rebuild report.md from saved data. The session log is never regenerated.
 uv run oracle-lab report output/runs/<run-id>
 
@@ -152,7 +156,7 @@ See the [complete results and artifacts reference](docs/results.md) for the full
 directory layout, JSON fields, logs, evaluation artifacts, and reevaluation
 behavior. [Judging](docs/judging.md) covers the LLM judge.
 
-For initial batch plots, run `uv sync --extra dataset --extra dev --extra analysis`
+For initial batch plots, run `uv sync --extra dev --extra analysis`
 and open [notebooks/initial-results.ipynb](notebooks/initial-results.ipynb) with
 the project's `.venv` kernel. Set `BATCH_DIR` in its first code cell to choose
 which saved batch to inspect.

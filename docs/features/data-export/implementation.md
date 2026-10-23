@@ -93,7 +93,7 @@ reviews are at `<target>/judge/reviews/` for both stages.
 - Run detection now looks for `generation/`, since an attempt also has a
   resolved config and a `judge/` directory.
 
-## Part 3: export to tables
+## Part 3: export to tables (done)
 
 **What gets built:** `oracle-lab export <root> --out <dir>` reads an output
 directory (or the merged review data repository) and writes a dataset directory.
@@ -106,11 +106,12 @@ New package `src/oracle_lab/export/`:
 - `writer.py`: writes the tables as Parquet, copies the raw files, and writes the
   manifest and the dataset card.
 
-Discovery reuses `review/targets.find_targets` for runs and classification
-attempts, and `read_all_reviews` for reviews. A target that fails validation is
-listed in the manifest as skipped, with the error, the same way the review page
-lists targets it cannot review. Batches and preflight directories are not
-exported.
+Discovery walks the root's `runs/` and `classifications/` directly, because
+`find_targets` returns only reviewable targets and the export needs every run.
+Reviews are read through `ReviewTarget` and the review store. A run or attempt
+that fails validation is listed in the manifest as skipped, with the error. An
+attempt without a classification is skipped too. Batches and preflight
+directories are not exported.
 
 ### Output directory
 
@@ -171,19 +172,19 @@ the export time and oracle-lab commit, and how to read a table:
 
 ### Manifest
 
-`export-manifest.json`: the export time, the oracle-lab Git commit, the source
-root, every exported run and attempt with the SHA-256 of its main result file,
-every skipped target with its error, and the row count of each table. It gets a
-strict contract in a new `export/contracts.py`.
+`export-manifest.json`: the export time, the oracle-lab version (`git describe
+--always --dirty`), the source root, every exported run and attempt ID, every
+skipped target with its error, and the row count of each table. Its contract and
+one row model per table are in `export/contracts.py`; the Parquet schemas are
+derived from the row models.
 
 ### Dependencies
 
-The existing `dataset` extra installs `datasets`, which already depends on
-`pyarrow` and `huggingface_hub`. Export uses that extra rather than adding one.
-The export module imports them inside the command, so the core install does not
-need them.
+`pyarrow` and `huggingface_hub` are core dependencies, imported at module top
+level. The `dataset` extra is gone; `experiments/localization` installs `datasets`
+itself with `uv run --with datasets`.
 
-## Part 4: upload
+## Part 4: upload (done)
 
 **What gets built:** `oracle-lab export <root> --repo <owner/name>` builds the
 dataset directory (in a temporary directory unless `--out` is given) and uploads
@@ -226,9 +227,6 @@ Recommendations are listed first.
 
 1. Part 1: done.
 2. Part 2: done.
-3. Part 3: `export --out` with tables, manifest, card, and local tests on fixture
-   runs (no network).
-4. Part 4: `export --repo`, tested with a mocked `HfApi`. A real upload is a
-   manual step the user runs.
-5. Docs: an export section in `docs/results.md`, the README command list, and
-   AGENTS.md. The layout docs were updated with parts 1 and 2.
+3. Part 3: done.
+4. Part 4: done. A real upload is a manual step the user runs.
+5. Docs: done.

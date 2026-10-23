@@ -11,6 +11,9 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+import pyarrow.parquet as pq
+from huggingface_hub import hf_hub_download
+
 from oracle_lab.config import RuntimeConfig, SourceConfig
 from oracle_lab.io import digest
 from oracle_lab.results import InstanceRecord, SourceProvenance
@@ -105,11 +108,6 @@ def load_record(config: SourceConfig) -> dict:
     """
     if config.record:
         return json.loads(Path(config.record).read_text())
-    try:
-        import pyarrow.parquet as pq
-        from huggingface_hub import hf_hub_download
-    except ImportError as exc:
-        raise RuntimeError("Install oracle-lab[dataset] or set source.record") from exc
     path = hf_hub_download(
         config.dataset_name,
         f"data/{config.split}-00000-of-00001.parquet",

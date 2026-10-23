@@ -79,7 +79,7 @@ The pipeline stages run in this order, and each is one module or package that
 Supporting these:
 
 - `src/oracle_lab/cli.py`: the command interface: `run`, `preflight`, `batch`,
-  `evaluate`, `judge`, `classify`, `review`, `agreement`, `trace`, and `report`.
+  `evaluate`, `judge`, `classify`, `review`, `agreement`, `export`, and `report`.
 - `src/oracle_lab/run.py`: the stage sequence and run status.
 - `src/oracle_lab/preflight.py`: `preflight`, which runs the stages before
   generation plus an environment check, without calling a model.
@@ -108,6 +108,10 @@ Supporting these:
   with tree-sitter-bash; `facts.py` adds patch overlap and test file versions;
   `build.py` reads the run with the strict contracts. It annotates facts only,
   never failure modes.
+- `src/oracle_lab/export/`: an output root as a dataset. `contracts.py` holds
+  one row model per table and the export manifest; `tables.py` reads runs,
+  attempts, and reviews through the persisted contracts; `writer.py` writes
+  Parquet, raw copies, and the dataset card; `hub.py` uploads to Hugging Face.
 - `src/oracle_lab/spend.py`: the OpenRouter key spend measured around a run's
   model stages, saved as `cost.json`.
 - `src/oracle_lab/config.py`, `paths.py`, `results.py`: the input contract, the
@@ -140,7 +144,7 @@ compatibility shims for artifacts produced by an earlier revision.
 Use uv for the host Python environment:
 
 ```sh
-uv sync --extra dataset --extra dev
+uv sync --extra dev
 uv run oracle-lab --help
 ```
 

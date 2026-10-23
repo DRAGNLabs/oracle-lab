@@ -747,6 +747,55 @@ the nearest stage log.
 
 See [agreement](judging.md#agreement) for what each figure means.
 
+## Dataset exports
+
+`oracle-lab export <root> --out <dir>` writes every run and classification
+attempt under an output root as a dataset; `--repo <owner>/<name>` uploads it to
+a private Hugging Face dataset repository. Point it at the merged `agreement`
+branch of the review data repository to include every rater's reviews. An upload
+needs `HF_TOKEN`, read from the environment or `.env`.
+
+```text
+<dir>/
+├── README.md               # dataset card; its YAML header maps tables to files
+├── export-manifest.json
+├── data/<table>.parquet
+└── raw/
+    ├── runs/<run-id>/
+    └── classifications/<instance-id>/<attempt-id>/
+```
+
+Each table's columns are the fields of its row model in
+`src/oracle_lab/export/contracts.py`:
+
+- `runs`: one row per run, with its configuration, status, cost, generation
+  usage, submission, paired matrix counts, and judge status.
+- `tests`: each generated test's buggy and golden outcome and matrix cell.
+- `judgments`: the generated-test judge's answers and justifications, or why it
+  has none.
+- `failure_modes`: every start-list label and every label the judge added, per
+  run. `item` matches the review item key.
+- `trace_steps`: the agent trace's events from `judge/trace.json`, numbered as
+  the judge and raters cite them.
+- `classifications`: each attempt's labels and justifications, or its error.
+- `reviews`: one row per rater and rated item, with the hashes from its
+  provenance.
+- `rater_failure_modes`: the labels raters added.
+
+A file that exists must validate. A run that stopped early still has a row, with
+the columns of files it never wrote left null. A run or attempt that cannot be
+read, or an attempt without a classification, is left out and listed under
+`skipped` in `export-manifest.json` with the error. Only current reviews enter
+the tables; `raw/` keeps `reviews-history/`.
+
+`export-manifest.json` records the export time, the source root, the Oracle Lab
+version (`git describe --always --dirty`), the exported run IDs and attempts,
+the skipped targets, and each table's row count.
+
+An upload creates the repository as private if it does not exist, uploads the
+directory, and deletes files that an earlier export left and this one does not
+hold. The repository's Git history keeps every earlier export.
+
 ## Batch artifacts
 
 `oracle-lab batch` writes `<output>/batches/<batch-id>/` with the original

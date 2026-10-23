@@ -2,9 +2,11 @@
 
 import io
 import json
+import signal
 import subprocess
 import sys
 import tarfile
+import time
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -384,9 +386,6 @@ def test_sdk_errors_do_not_expose_environment(config, tmp_path):
 
 
 def test_setup_deadline_interrupts_silent_work_and_restores_handler():
-    import signal
-    import time
-
     previous = signal.getsignal(signal.SIGALRM)
     with pytest.raises(TimeoutError, match="setup exceeded"):
         with setup_deadline(0.01):

@@ -1,11 +1,14 @@
 import json
 from pathlib import Path
 
+import pyarrow as pa
+import pyarrow.parquet as pq
 import pytest
 import yaml
 
 from oracle_lab.config import load_config
-from oracle_lab.instance.swebench import image_for, resolve, runtime_for
+from oracle_lab.instance import swebench
+from oracle_lab.instance.swebench import image_for, load_record, resolve, runtime_for
 
 
 def test_image_is_derived_from_instance_id():
@@ -133,11 +136,6 @@ def test_fail_to_pass_that_is_not_a_list_of_ids_is_rejected(tmp_path, value):
 
 
 def test_swebench_record_is_read_from_the_pinned_split_file(tmp_path, monkeypatch):
-    pa = pytest.importorskip("pyarrow")
-    pq = pytest.importorskip("pyarrow.parquet")
-    huggingface_hub = pytest.importorskip("huggingface_hub")
-    from oracle_lab.instance.swebench import load_record
-
     rows = [
         {"instance_id": "psf__requests-2148", "repo": "psf/requests"},
         {"instance_id": "psf__requests-1142", "repo": "psf/requests"},
@@ -150,7 +148,7 @@ def test_swebench_record_is_read_from_the_pinned_split_file(tmp_path, monkeypatc
         downloads.append((repo, filename, repo_type, revision))
         return str(data)
 
-    monkeypatch.setattr(huggingface_hub, "hf_hub_download", download)
+    monkeypatch.setattr(swebench, "hf_hub_download", download)
     config_path = tmp_path / "config.yaml"
     config_path.write_text(
         yaml.safe_dump(

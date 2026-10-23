@@ -49,6 +49,12 @@ def read_all_reviews(target: ReviewTarget) -> dict[str, Review]:
     return reviews
 
 
+def read_provenance(target: ReviewTarget, rater: str) -> ReviewProvenance:
+    """What a rater's saved review of the target was based on."""
+    path = target.judge.reviews / require_rater(rater) / "provenance.json"
+    return ReviewProvenance.model_validate(read_json(path))
+
+
 def _read(directory: Path) -> Review | None:
     path = directory / "review.json"
     return Review.model_validate(read_json(path)) if path.is_file() else None

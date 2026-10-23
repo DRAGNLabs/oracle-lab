@@ -109,6 +109,14 @@ uv run oracle-lab agreement ../oracle-lab-data
 It lists any target a rater has not reviewed yet. See
 [agreement](judging.md#agreement) for what it reports.
 
+To publish the reviewed set with every rater's reviews, export it from this
+branch to a private Hugging Face dataset; see
+[dataset exports](results.md#dataset-exports):
+
+```sh
+uv run oracle-lab export ../oracle-lab-data --repo <owner>/<name>
+```
+
 Do not push the `agreement` branch, and never merge it or a rater branch into
 `main`. To refresh it later, delete it and repeat these steps.
 

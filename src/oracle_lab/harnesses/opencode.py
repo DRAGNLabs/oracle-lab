@@ -7,7 +7,9 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 
+from oracle_lab.container.paths import ORACLE_HOME
 from oracle_lab.container.sandbox import Sandbox
+from oracle_lab.contracts.run import Usage
 from oracle_lab.harnesses.launch import (
     AgentTurnRequest,
     run_agent_turn,
@@ -24,7 +26,6 @@ from oracle_lab.harnesses.steps import (
     WriteFile,
     read_trace,
 )
-from oracle_lab.results import Usage
 
 # Whether `read_steps` reasoning is the model's own text or a CLI-written summary.
 REASONING = "raw"
@@ -177,8 +178,8 @@ def run_turn(sandbox: Sandbox, request: AgentTurnRequest) -> dict:
     ]
 
     environment = {
-        "XDG_CONFIG_HOME": "/home/oracle/.config",
-        "XDG_DATA_HOME": "/home/oracle/.local/share",
+        "XDG_CONFIG_HOME": ORACLE_HOME + "/.config",
+        "XDG_DATA_HOME": ORACLE_HOME + "/.local/share",
         "OPENCODE_DISABLE_AUTOUPDATE": "true",
     }
     if not harness.multi_agent:

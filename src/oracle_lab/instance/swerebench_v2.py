@@ -10,8 +10,8 @@ source and tests. Only the repos listed there work.
 from __future__ import annotations
 
 from oracle_lab.config import RuntimeConfig, SourceConfig
+from oracle_lab.contracts.run import InstanceRecord
 from oracle_lab.instance.swebench import RepositoryLayout, instance_from, load_record
-from oracle_lab.results import InstanceRecord
 
 REPOSITORY_LAYOUTS = {
     "wtforms/wtforms": RepositoryLayout("src/wtforms", "wtforms", ("tests",)),

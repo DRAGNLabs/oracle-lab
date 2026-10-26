@@ -13,9 +13,9 @@ from fixtures import (
     upstream_repository,
 )
 
-from oracle_lab.classification.contracts import CLASSIFICATION_LABELS
+from oracle_lab.contracts.classification import CLASSIFICATION_LABELS
 from oracle_lab.io import write_json
-from oracle_lab.web.session import ReviewSession
+from oracle_lab.review.web.session import ReviewSession
 
 ATTEMPT = "classifications/owner__project-1/attempt-1"
 RATINGS = judgment_ratings(attempt_detail="disagree")

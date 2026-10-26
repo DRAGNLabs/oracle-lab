@@ -8,17 +8,20 @@ saved as `inputs/target.json` and becomes the prompt's `${test_target}`.
 
 from __future__ import annotations
 
+import io
 import tempfile
+import tokenize
 from pathlib import Path, PurePosixPath
 
 from docker import DockerClient
 
 from oracle_lab.config import RunConfig
 from oracle_lab.container.sandbox import Profile, open_sandbox
+from oracle_lab.contracts.base import write_result
+from oracle_lab.contracts.run import InstanceRecord, LocalizedTarget
 from oracle_lab.localization.patches import FileDiff, apply_patch, parse_patch
 from oracle_lab.localization.target import choose_target, compare
 from oracle_lab.paths import RunPaths
-from oracle_lab.results import InstanceRecord, LocalizedTarget, write_result
 
 
 def is_test_path(path: PurePosixPath) -> bool:
@@ -40,6 +43,12 @@ def production_diffs(patch: str, source_roots: list[str]) -> list[tuple[str, Fil
         if path.suffix == ".py" and in_source and not is_test_path(path):
             found.append((diff.old_path, diff))
     return found
+
+
+def read_source(data: bytes) -> str:
+    """Decode a Python file the way Python does: by its coding line, else UTF-8."""
+    encoding, _ = tokenize.detect_encoding(io.BytesIO(data).readline)
+    return data.decode(encoding)
 
 
 def localize(
@@ -64,7 +73,7 @@ def localize(
         for number, (path, diff) in enumerate(diffs):
             local = Path(scratch) / f"{number}.py"
             sandbox.download(str(PurePosixPath(runtime.workdir) / path), local)
-            buggy = local.read_text(encoding="utf-8")
+            buggy = read_source(local.read_bytes())
             fixed = apply_patch(buggy, diff) if diff.new_path is not None else None
             changes.append(compare(path, buggy, fixed))
     target = choose_target(changes)

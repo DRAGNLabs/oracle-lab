@@ -6,7 +6,8 @@ from unittest.mock import Mock
 import pytest
 from fixtures import HELPERS, run_config, submission_manifest, write_submission
 
-from oracle_lab.generation import capture, changed_files, generate_submission, verify_bundle
+from oracle_lab.contracts.run import verify_bundle
+from oracle_lab.generation import capture, changed_files, generate_submission
 from oracle_lab.io import digest, read_json, write_json
 from oracle_lab.paths import RunPaths
 

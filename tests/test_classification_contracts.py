@@ -4,7 +4,7 @@ import typing
 import pytest
 from fixtures import in_scope_classification, out_of_scope_classification
 
-from oracle_lab.classification.contracts import (
+from oracle_lab.contracts.classification import (
     ORACLE_SOURCES,
     OracleKind,
     OracleSource,

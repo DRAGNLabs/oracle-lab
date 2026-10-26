@@ -8,26 +8,25 @@ rather than silently dropped.
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from pathlib import Path, PurePosixPath
 
 from docker import DockerClient
 
 from oracle_lab.config import RunConfig, repo_path
+from oracle_lab.container.repository import Repository
 from oracle_lab.container.sandbox import Profile, Sandbox, open_sandbox
+from oracle_lab.contracts.base import write_result
+from oracle_lab.contracts.run import (
+    InstanceRecord,
+    SubmissionFile,
+    SubmissionManifest,
+    files_digest,
+)
 from oracle_lab.harnesses import generate
 from oracle_lab.harnesses.retry import with_retries
 from oracle_lab.io import archive_files, digest, read_json
 from oracle_lab.paths import RunPaths
-from oracle_lab.repository import Repository
-from oracle_lab.results import (
-    InstanceRecord,
-    SubmissionFile,
-    SubmissionManifest,
-    read_submission_manifest,
-    write_result,
-)
 
 
 def generate_submission(
@@ -145,33 +144,7 @@ def capture(
         forbidden_changes=forbidden,
         compliant=not forbidden,
         empty=not files,
-        sha256=_files_digest(files),
+        sha256=files_digest(files),
     )
     write_result(submission / "manifest.json", manifest)
-    return manifest
-
-
-def _files_digest(files: dict[str, SubmissionFile]) -> str:
-    plain = {name: entry.model_dump() for name, entry in files.items()}
-    return digest(json.dumps(plain, sort_keys=True).encode())
-
-
-def verify_bundle(paths: RunPaths) -> SubmissionManifest:
-    """Validate the external bundle before transferring it to either code version."""
-    submission = paths.submission
-    manifest = read_submission_manifest(submission / "manifest.json")
-    if _files_digest(manifest.files) != manifest.sha256:
-        raise ValueError("Generated manifest checksum mismatch")
-    root = submission / "files"
-    entries = {
-        path.relative_to(root).as_posix()
-        for path in root.rglob("*")
-        if path.is_symlink() or not path.is_dir()
-    }
-    if entries != set(manifest.files):
-        raise ValueError("Generated bundle contains missing or unmanifested files")
-    for name, info in manifest.files.items():
-        path = root / repo_path(name)
-        if path.is_symlink() or not path.is_file() or digest(path.read_bytes()) != info.sha256:
-            raise ValueError(f"Generated artifact checksum mismatch: {name}")
     return manifest

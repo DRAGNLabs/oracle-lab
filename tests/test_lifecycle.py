@@ -15,20 +15,16 @@ from fixtures import (
     submission_manifest,
 )
 
-import oracle_lab.judge.run as judge_module
+import oracle_lab.judge.generation.run as judge_module
 import oracle_lab.preflight as preflight_module
 import oracle_lab.run as run_module
 from oracle_lab.config import JudgeConfig, RuntimeConfig, load_config
+from oracle_lab.contracts.base import write_result
+from oracle_lab.contracts.run import EvaluationResult, LocalizedTarget, SubmissionManifest
 from oracle_lab.evaluation import archive_previous_evaluation
 from oracle_lab.harnesses import require_credentials
 from oracle_lab.io import read_json, write_json
 from oracle_lab.paths import OutputPaths, RunPaths
-from oracle_lab.results import (
-    EvaluationResult,
-    LocalizedTarget,
-    SubmissionManifest,
-    write_result,
-)
 from oracle_lab.run import completion_state
 
 SAMPLE = RUN_CONFIG

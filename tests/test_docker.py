@@ -13,22 +13,22 @@ from fixtures import DOCKERFILES, HELPERS, judgment_labels, write_submission
 
 from oracle_lab.config import JudgeConfig, load_config
 from oracle_lab.container.images import build_image
+from oracle_lab.container.paths import JUDGE_ROOT
 from oracle_lab.container.sandbox import Profile, open_sandbox
-from oracle_lab.evaluation import run_submission
-from oracle_lab.evaluation.outcomes import pair_results
-from oracle_lab.generation import verify_bundle
-from oracle_lab.instance import write_private_instance_artifacts
-from oracle_lab.io import read_json, write_json
-from oracle_lab.judge.run import judge as run_judge
-from oracle_lab.judge.workspace import JUDGE_ROOT, build_judge_workspace
-from oracle_lab.localization import localize
-from oracle_lab.paths import RunPaths
-from oracle_lab.results import (
-    read_evaluation_result,
+from oracle_lab.contracts.base import write_result
+from oracle_lab.contracts.run import (
     read_instance_record,
     read_localized_target,
-    write_result,
+    verify_bundle,
 )
+from oracle_lab.evaluation import run_submission
+from oracle_lab.evaluation.outcomes import pair_results
+from oracle_lab.instance import write_private_instance_artifacts
+from oracle_lab.io import read_json, write_json
+from oracle_lab.judge.generation.run import judge as run_judge
+from oracle_lab.judge.generation.workspace import build_judge_workspace
+from oracle_lab.localization import localize
+from oracle_lab.paths import RunPaths
 from oracle_lab.run import reevaluate
 
 pytestmark = pytest.mark.docker
@@ -140,7 +140,6 @@ def test_reconstruct_privileged_judge_workspace(tmp_path, request):
             paths,
             image,
             instance,
-            read_evaluation_result(paths.results),
             verify_bundle(paths),
         )
         changed = next(

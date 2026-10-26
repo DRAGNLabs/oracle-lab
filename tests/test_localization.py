@@ -1,15 +1,20 @@
 import difflib
+import random
+import shutil
+import subprocess
 from contextlib import contextmanager
+from pathlib import Path
 
 import pytest
 from fixtures import RUN_CONFIG, instance_record, run_config
 
 import oracle_lab.localization as localization
-from oracle_lab.localization import production_diffs
+from oracle_lab.contracts.base import write_result
+from oracle_lab.contracts.run import LocalizedTarget, TargetFile, read_localized_target
+from oracle_lab.localization import production_diffs, read_source
 from oracle_lab.localization.patches import apply_patch, parse_patch
 from oracle_lab.localization.target import choose_target, compare
 from oracle_lab.paths import RunPaths
-from oracle_lab.results import LocalizedTarget, TargetFile, read_localized_target, write_result
 
 BASE = """\
 import os
@@ -46,9 +51,9 @@ def change(old: str, new: str, source: str = BASE) -> str:
     return source.replace(old, new)
 
 
-def diff(before: str, after: str, path: str = "m.py") -> str:
+def diff(before: str, after: str, path: str = "m.py", context: int = 3) -> str:
     lines = difflib.unified_diff(
-        before.splitlines(), after.splitlines(), f"a/{path}", f"b/{path}", lineterm=""
+        before.splitlines(), after.splitlines(), f"a/{path}", f"b/{path}", n=context, lineterm=""
     )
     return f"diff --git a/{path} b/{path}\n" + "\n".join(lines) + "\n"
 
@@ -143,6 +148,73 @@ def test_a_file_target_leaves_out_files_with_only_comment_changes():
     assert [entry.path for entry in result.files] == ["b.py"]
 
 
+def test_an_async_function_is_named_like_any_function():
+    before = "async def fetch():\n    return 1\n"
+    assert target(before.replace("1", "2"), before) == ("function", ["fetch"])
+
+
+CONDITIONAL = """\
+import sys
+
+if sys.version_info >= (3,):
+    def pick():
+        return 1
+else:
+    def pick():
+        return 2
+
+try:
+    from fast import load
+except ImportError:
+    def load():
+        return 3
+"""
+
+
+def test_functions_under_module_level_if_and_try_are_named():
+    after = change("return 2", "return 20", CONDITIONAL)
+    result = choose_target([compare("m.py", CONDITIONAL, after)])
+    # Only the second `pick`, the one the repair changed, is counted.
+    assert result.files == [TargetFile(path="m.py", names=["pick"], lines=2)]
+    assert target(change("return 3", "return 30", CONDITIONAL), CONDITIONAL) == (
+        "function",
+        ["load"],
+    )
+
+
+def test_a_class_inside_a_function_belongs_to_the_function():
+    before = "def make():\n    class Local:\n        x = 1\n    return Local\n"
+    assert target(change("x = 1", "x = 2", before), before) == ("function", ["make"])
+
+
+def test_a_class_decorator_change_names_the_class():
+    before = "from dataclasses import dataclass\n\n\n@dataclass\nclass Point:\n    x: int\n"
+    after = change("@dataclass\n", "@dataclass(frozen=True)\n", before)
+    assert target(after, before) == ("class", ["Point"])
+
+
+def test_docstring_changes_name_nothing():
+    before = '"""Module."""\n\n\nclass C:\n    """Class."""\n\n    def m(self):\n        """Method."""\n        return 1\n'
+    after = before.replace("Module.", "Mod.").replace("Class.", "Cls.").replace("Method.", "Meth.")
+    assert target(after, before) == ("file", [])
+
+
+def test_a_function_whose_docstring_and_code_change_is_named():
+    before = 'def f():\n    """Old."""\n    return 1\n'
+    assert target('def f():\n    """New."""\n    return 2\n', before) == ("function", ["f"])
+
+
+def test_a_function_left_with_only_its_docstring_is_named():
+    before = 'def f():\n    """Doc."""\n    return 1\n'
+    assert target('def f():\n    """Doc."""\n', before) == ("function", ["f"])
+
+
+def test_an_added_overload_does_not_name_the_unchanged_function():
+    before = "from typing import overload\n\n\ndef f(x):\n    return x\n"
+    after = change("def f(x):", "@overload\ndef f(x: int) -> int: ...\n\n\ndef f(x):", before)
+    assert target(after, before) == ("file", [])
+
+
 def test_a_buggy_file_that_does_not_parse_is_an_error():
     with pytest.raises(SyntaxError):
         compare("m.py", "def broken(:\n", "def broken():\n    pass\n")
@@ -169,6 +241,59 @@ def test_a_patch_that_does_not_match_the_file_is_rejected():
     (file,) = parse_patch(diff(BASE, change("level = 1", "level = 2")))
     with pytest.raises(ValueError, match="matches nowhere"):
         apply_patch(change("level = 1", "level = 3"), file)
+
+
+def test_a_patch_with_several_hunks_rebuilds_the_fixed_file():
+    after = change("import os", "import re")
+    after = change("level = 1", "level = 2", after)
+    after = change("def check(value):\n    return value", "def check(value):\n    return 0", after)
+    (file,) = parse_patch(diff(BASE, after, context=1))
+    assert len(file.hunks) == 3
+    assert apply_patch(BASE, file) == after
+
+
+def test_a_patch_without_context_rebuilds_the_fixed_file():
+    after = change("level = 1\n", "level = 1\n    width = 2\n")
+    after = change("import os\n", "", after)
+    (file,) = parse_patch(diff(BASE, after, context=0))
+    assert apply_patch(BASE, file) == after
+
+
+def test_a_patch_applies_to_a_file_with_windows_line_endings():
+    after = change("self.records = []", "self.records = None")
+    (file,) = parse_patch(diff(BASE, after))
+    assert apply_patch(BASE.replace("\n", "\r\n"), file) == after
+
+
+def test_a_renamed_file_is_compared_at_its_buggy_path():
+    after = change("level = 1", "level = 2")
+    patch = (
+        diff(BASE, after, "package/old.py")
+        .replace(
+            "diff --git a/package/old.py b/package/old.py\n",
+            "diff --git a/package/old.py b/package/new.py\n"
+            "similarity index 95%\nrename from package/old.py\nrename to package/new.py\n",
+        )
+        .replace("+++ b/package/old.py", "+++ b/package/new.py")
+    )
+    ((path, file),) = production_diffs(patch, ["package"])
+    assert (path, file.new_path) == ("package/old.py", "package/new.py")
+    assert apply_patch(BASE, file) == after
+
+
+def test_a_pure_rename_changes_no_code():
+    patch = (
+        "diff --git a/package/old.py b/package/new.py\n"
+        "similarity index 100%\nrename from package/old.py\nrename to package/new.py\n"
+    )
+    assert production_diffs(patch, ["package"]) == []
+
+
+def test_a_buggy_file_is_decoded_by_its_coding_line():
+    assert read_source("# -*- coding: latin-1 -*-\nNAME = 'é'\n".encode("latin-1")).endswith(
+        "NAME = 'é'\n"
+    )
+    assert read_source(b"\xef\xbb\xbfX = 1\n") == "X = 1\n"
 
 
 def test_a_patch_names_created_and_deleted_files():
@@ -288,3 +413,50 @@ def test_production_files_are_python_files_under_a_source_root_outside_tests():
         ]
     )
     assert [path for path, _ in production_diffs(patch, ["package"])] == ["package/core.py"]
+
+
+# The patch reader against Git: random edits, diffed by Git, rebuilt by `apply_patch`.
+
+GIT = shutil.which("git")
+
+
+def git_diff(before: str, after: str, directory: Path, context: int) -> str:
+    (directory / "a.py").write_text(before)
+    (directory / "b.py").write_text(after)
+    result = subprocess.run(
+        [GIT, "diff", "--no-index", f"-U{context}", "a.py", "b.py"],
+        cwd=directory,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1, result.stderr  # 1 means the files differ
+    return result.stdout
+
+
+def random_edit(source: str, rng: random.Random) -> str:
+    """One to four line insertions, deletions, or replacements at random places."""
+    lines = source.splitlines()
+    for _ in range(rng.randint(1, 4)):
+        at = rng.randrange(len(lines) + 1)
+        kind = rng.choice(["insert", "delete", "replace"]) if lines else "insert"
+        new = [f"edited_{rng.randrange(1000)} = {rng.randrange(1000)}"] * rng.randint(1, 3)
+        if kind == "insert":
+            lines[at:at] = new
+        elif at < len(lines):
+            lines[at : at + rng.randint(1, 3)] = new if kind == "replace" else []
+    return "\n".join(lines) + "\n"
+
+
+@pytest.mark.skipif(GIT is None, reason="Needs the git binary")
+@pytest.mark.parametrize("context", [0, 1, 3])
+def test_apply_patch_rebuilds_what_git_diffed(tmp_path, context):
+    # Repeated lines make a hunk match in more than one place.
+    sources = [BASE, CONDITIONAL, "x = 1\n" * 12 + "y = 2\n" + "x = 1\n" * 12]
+    rng = random.Random(context)
+    for case in range(60):
+        before = sources[case % len(sources)]
+        after = random_edit(before, rng)
+        if after == before:
+            continue
+        (file,) = parse_patch(git_diff(before, after, tmp_path, context))
+        assert apply_patch(before, file) == after, (case, before, after)

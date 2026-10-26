@@ -10,8 +10,8 @@ from fixtures import (
     out_of_scope_classification,
 )
 
-from oracle_lab.classification.contracts import CLASSIFICATION_LABELS
-from oracle_lab.judge.contracts import FAILURE_MODES
+from oracle_lab.contracts.classification import CLASSIFICATION_LABELS
+from oracle_lab.contracts.judgment import FAILURE_MODES
 from oracle_lab.paths import RunPaths
 from oracle_lab.review.targets import (
     ClassificationTarget,
@@ -66,7 +66,7 @@ def test_judge_evidence_is_what_the_judge_was_shown_without_the_views(tmp_path):
 
     assert evidence["evidence/agent-session.log"] == b"agent session\n"
     assert "instance/reference-tests.patch" in evidence
-    assert "instructions.md" in evidence
+    assert "rubric.md" in evidence
     assert not any(name.startswith(("buggy/", "golden/")) for name in evidence)
 
 

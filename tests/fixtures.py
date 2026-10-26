@@ -14,11 +14,12 @@ import yaml
 
 import oracle_lab.container
 from oracle_lab.config import RunConfig, RuntimeConfig, load_config
+from oracle_lab.contracts.base import write_result
+from oracle_lab.contracts.judgment import FAILURE_MODES, JUDGMENT_LABEL_KEYS
+from oracle_lab.contracts.run import MATRIX_CELLS, InstanceRecord, SubmissionManifest
 from oracle_lab.io import digest, write_json
-from oracle_lab.judge.contracts import FAILURE_MODES, JUDGMENT_LABEL_KEYS
-from oracle_lab.judge.workspace import save_trace
+from oracle_lab.judge.generation.workspace import save_trace
 from oracle_lab.paths import AttemptPaths, RunPaths
-from oracle_lab.results import MATRIX_CELLS, InstanceRecord, SubmissionManifest, write_result
 
 # The run config tests start from, independent of the sample configs.
 RUN_CONFIG = Path(__file__).parent / "run-config.yaml"

@@ -7,6 +7,12 @@ import re
 from dataclasses import asdict
 
 from oracle_lab.config import load_config
+from oracle_lab.contracts.run import (
+    LocalizedTarget,
+    read_evaluation_result,
+    read_instance_record,
+    read_localized_target,
+)
 from oracle_lab.harnesses import read_steps, reasoning_kind
 from oracle_lab.harnesses.steps import (
     Action,
@@ -19,12 +25,6 @@ from oracle_lab.harnesses.steps import (
     WriteFile,
 )
 from oracle_lab.paths import RunPaths
-from oracle_lab.results import (
-    LocalizedTarget,
-    read_evaluation_result,
-    read_instance_record,
-    read_localized_target,
-)
 from oracle_lab.trace.events import (
     ActionType,
     DefectOverlap,

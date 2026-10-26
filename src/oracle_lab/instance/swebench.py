@@ -15,8 +15,8 @@ import pyarrow.parquet as pq
 from huggingface_hub import hf_hub_download
 
 from oracle_lab.config import RuntimeConfig, SourceConfig
+from oracle_lab.contracts.run import InstanceRecord, SourceProvenance
 from oracle_lab.io import digest
-from oracle_lab.results import InstanceRecord, SourceProvenance
 
 # Image naming/environment conventions are checked against this upstream revision.
 UPSTREAM_REVISION = "3947b299c121bb1f45f5094180c0f39fa0c599a0"

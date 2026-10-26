@@ -115,7 +115,7 @@ uv run oracle-lab agreement ../oracle-lab-data
 It takes one or more runs, classification attempts, or output roots holding
 `runs/` and `classifications/`, and reads every rater's review. It writes
 `agreement.json` and `agreement.md` to `--output`, or by default to
-`output/agreement/<UTC timestamp>/` in the current directory. It needs no Docker,
+`output/agreement/<agreement-id>/` in the current directory. It needs no Docker,
 network, or credentials.
 
 The two stages are reported separately. Each submission question, each

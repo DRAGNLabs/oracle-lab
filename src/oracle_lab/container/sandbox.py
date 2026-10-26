@@ -18,9 +18,9 @@ from oracle_lab.config import ClassificationConfig, RunConfig, RuntimeConfig
 from oracle_lab.container import files
 from oracle_lab.container.files import RedactedOutput
 from oracle_lab.container.lifecycle import execution_watchdog, preserve_failure
+from oracle_lab.container.paths import HELPER_DIR
 from oracle_lab.io import read_json
 
-HELPER_DIR = "/opt/oracle-lab/container-helpers"
 ORACLE_USER = "10001:10001"
 
 

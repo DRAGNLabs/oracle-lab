@@ -14,16 +14,10 @@ from docker.errors import DockerException
 
 from oracle_lab.config import RunConfig
 from oracle_lab.container.lifecycle import preserve_failure
+from oracle_lab.container.repository import Repository
 from oracle_lab.container.sandbox import Profile, Sandbox, open_sandbox
-from oracle_lab.evaluation.outcomes import (
-    incomplete_result,
-    pair_results,
-)
-from oracle_lab.generation import verify_bundle
-from oracle_lab.io import archive_files, read_json, write_json
-from oracle_lab.paths import RunPaths
-from oracle_lab.repository import Repository
-from oracle_lab.results import (
+from oracle_lab.contracts.base import write_result
+from oracle_lab.contracts.run import (
     EvaluationResult,
     HarnessResult,
     InstanceRecord,
@@ -31,8 +25,14 @@ from oracle_lab.results import (
     VersionResult,
     read_localized_target,
     read_version_result,
-    write_result,
+    verify_bundle,
 )
+from oracle_lab.evaluation.outcomes import (
+    incomplete_result,
+    pair_results,
+)
+from oracle_lab.io import archive_files, read_json, write_json
+from oracle_lab.paths import RunPaths
 
 
 def run_tests(

@@ -2,7 +2,7 @@ from pathlib import Path
 
 from fixtures import instance_record, out_of_scope_classification, run_status
 
-from oracle_lab.classification.contracts import latest_classification
+from oracle_lab.contracts.classification import latest_classification
 from oracle_lab.io import write_json
 
 

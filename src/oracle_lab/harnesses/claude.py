@@ -6,7 +6,9 @@ import re
 from dataclasses import asdict, replace
 from pathlib import Path
 
+from oracle_lab.container.paths import ORACLE_HOME
 from oracle_lab.container.sandbox import Sandbox
+from oracle_lab.contracts.run import Usage
 from oracle_lab.harnesses.launch import (
     AgentTurnRequest,
     run_agent_turn,
@@ -24,7 +26,6 @@ from oracle_lab.harnesses.steps import (
     read_trace,
 )
 from oracle_lab.harnesses.transcript import as_text
-from oracle_lab.results import Usage
 
 # Whether `read_steps` reasoning is the model's own text or a CLI-written summary.
 REASONING = "summary"
@@ -196,7 +197,7 @@ def run_turn(sandbox: Sandbox, request: AgentTurnRequest) -> dict:
     if not harness.multi_agent:
         argv += ["--tools", "Bash,Read,Write,Edit,Glob,Grep"]
 
-    environment = {"CLAUDE_CONFIG_DIR": "/home/oracle/.claude", "DISABLE_AUTOUPDATER": "1"}
+    environment = {"CLAUDE_CONFIG_DIR": ORACLE_HOME + "/.claude", "DISABLE_AUTOUPDATER": "1"}
     credential_name = harness.credential_env
     if harness.provider == "openrouter":
         environment.update(

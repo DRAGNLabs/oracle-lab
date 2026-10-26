@@ -45,8 +45,11 @@ class OutputPaths:
     def new_preflight(self) -> RunPaths:
         return RunPaths.create(_new_directory(self.preflight))
 
-    def new_batch(self) -> Path:
-        return _new_directory(self.batches)
+    def new_batch(self) -> BatchPaths:
+        return BatchPaths(_new_directory(self.batches))
+
+    def new_agreement(self) -> AgreementPaths:
+        return AgreementPaths(_new_directory(self.agreement))
 
     def new_attempt(self, instance_id: str) -> AttemptPaths:
         return AttemptPaths.create(_new_directory(self.classifications / instance_id))
@@ -77,10 +80,86 @@ def _subdirectories(path: Path) -> list[Path]:
 
 
 @dataclass(frozen=True)
-class RunPaths:
-    """Resolve lifecycle-oriented paths for one benchmark run."""
+class BatchPaths:
+    """One batch: its input, its job manifest, and the summary over its runs."""
 
     root: Path
+
+    @property
+    def input(self) -> Path:
+        return self.root / "batch.input.yaml"
+
+    @property
+    def manifest(self) -> Path:
+        return self.root / "batch.resolved.json"
+
+    @property
+    def status(self) -> Path:
+        return self.root / "status.json"
+
+    @property
+    def summary(self) -> Path:
+        return self.root / "summary.json"
+
+    @property
+    def report(self) -> Path:
+        return self.root / "report.md"
+
+
+@dataclass(frozen=True)
+class AgreementPaths:
+    """One agreement report over saved human reviews."""
+
+    root: Path
+
+    @property
+    def result(self) -> Path:
+        return self.root / "agreement.json"
+
+    @property
+    def report(self) -> Path:
+        return self.root / "agreement.md"
+
+
+@dataclass(frozen=True)
+class InstancePaths:
+    """What a run and a classification attempt share: one resolved instance, its
+    built image, and the outcome of the work done on it."""
+
+    root: Path
+
+    @property
+    def inputs(self) -> Path:
+        return self.root / "inputs"
+
+    @property
+    def build(self) -> Path:
+        return self.root / "image-build"
+
+    @property
+    def config(self) -> Path:
+        return self.inputs / "config.resolved.yaml"
+
+    @property
+    def instance(self) -> Path:
+        return self.inputs / "instance.json"
+
+    @property
+    def runtime(self) -> Path:
+        return self.build / "runtime.json"
+
+    @property
+    def status(self) -> Path:
+        return self.root / "status.json"
+
+    @property
+    def cost(self) -> Path:
+        return self.root / "cost.json"
+
+
+@dataclass(frozen=True)
+class RunPaths(InstancePaths):
+    """Resolve lifecycle-oriented paths for one benchmark run."""
 
     @classmethod
     def create(cls, root: Path) -> "RunPaths":
@@ -97,14 +176,6 @@ class RunPaths:
         ):
             directory.mkdir(parents=True, exist_ok=True)
         return paths
-
-    @property
-    def inputs(self) -> Path:
-        return self.root / "inputs"
-
-    @property
-    def build(self) -> Path:
-        return self.root / "image-build"
 
     @property
     def reference(self) -> Path:
@@ -127,14 +198,6 @@ class RunPaths:
         return self.root / "evaluation"
 
     @property
-    def config(self) -> Path:
-        return self.inputs / "config.resolved.yaml"
-
-    @property
-    def instance(self) -> Path:
-        return self.inputs / "instance.json"
-
-    @property
     def prompt(self) -> Path:
         return self.inputs / "prompt.txt"
 
@@ -147,24 +210,12 @@ class RunPaths:
         return self.inputs / "target.log"
 
     @property
-    def runtime(self) -> Path:
-        return self.build / "runtime.json"
-
-    @property
     def results(self) -> Path:
         return self.evaluation / "results.json"
 
     @property
     def report(self) -> Path:
         return self.root / "report.md"
-
-    @property
-    def status(self) -> Path:
-        return self.root / "status.json"
-
-    @property
-    def cost(self) -> Path:
-        return self.root / "cost.json"
 
     @property
     def evaluation_history(self) -> Path:
@@ -189,10 +240,8 @@ class RunPaths:
 
 
 @dataclass(frozen=True)
-class AttemptPaths:
+class AttemptPaths(InstancePaths):
     """One task-classification attempt."""
-
-    root: Path
 
     @classmethod
     def create(cls, root: Path) -> AttemptPaths:
@@ -200,34 +249,6 @@ class AttemptPaths:
         for directory in (paths.inputs, paths.build, paths.judge.agent):
             directory.mkdir(parents=True, exist_ok=True)
         return paths
-
-    @property
-    def inputs(self) -> Path:
-        return self.root / "inputs"
-
-    @property
-    def build(self) -> Path:
-        return self.root / "image-build"
-
-    @property
-    def config(self) -> Path:
-        return self.inputs / "config.resolved.yaml"
-
-    @property
-    def instance(self) -> Path:
-        return self.inputs / "instance.json"
-
-    @property
-    def runtime(self) -> Path:
-        return self.build / "runtime.json"
-
-    @property
-    def status(self) -> Path:
-        return self.root / "status.json"
-
-    @property
-    def cost(self) -> Path:
-        return self.root / "cost.json"
 
     @property
     def judge(self) -> ClassifierPaths:

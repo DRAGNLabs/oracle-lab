@@ -20,28 +20,29 @@ from oracle_lab.config import (
 )
 from oracle_lab.container.images import prepare_image, require_saved_image
 from oracle_lab.container.sandbox import docker_client
-from oracle_lab.evaluation import check_reference, evaluate
-from oracle_lab.generation import generate_submission, verify_bundle
-from oracle_lab.harnesses import require_credentials
-from oracle_lab.instance import resolve_source, write_private_instance_artifacts
-from oracle_lab.io import read_json, write_json
-from oracle_lab.judge.contracts import (
+from oracle_lab.contracts.base import write_result
+from oracle_lab.contracts.judgment import (
     SkippedJudgment,
     mark_judgments_stale,
     read_judgment_state,
 )
-from oracle_lab.judge.run import judge_stage
-from oracle_lab.localization import localize
-from oracle_lab.paths import OutputPaths, RunPaths
-from oracle_lab.report import report
-from oracle_lab.results import (
+from oracle_lab.contracts.run import (
     EvaluationResult,
     InstanceRecord,
     read_instance_record,
-    write_result,
+    verify_bundle,
     write_status,
 )
-from oracle_lab.spend import measure_spend
+from oracle_lab.evaluation import check_reference, evaluate
+from oracle_lab.generation import generate_submission
+from oracle_lab.harnesses import require_credentials
+from oracle_lab.harnesses.spend import measure_spend
+from oracle_lab.instance import resolve_source, write_private_instance_artifacts
+from oracle_lab.io import read_json, write_json
+from oracle_lab.judge.generation.run import judge_stage
+from oracle_lab.localization import localize
+from oracle_lab.paths import OutputPaths, RunPaths
+from oracle_lab.report import report
 
 
 def completion_state(result: EvaluationResult) -> str:
@@ -91,7 +92,7 @@ def run(config: RunConfig) -> Path:
                     else:
                         stages.start("judge")
                         judgment = judge_stage(
-                            client, config, paths, image, instance, result, verify_bundle(paths)
+                            client, config, paths, image, instance, verify_bundle(paths)
                         )
                     judge_status = judgment.status
         report(paths)

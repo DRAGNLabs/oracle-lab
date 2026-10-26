@@ -24,8 +24,8 @@ from oracle_lab.container.images import (
     runtime_arguments,
 )
 from oracle_lab.container.lifecycle import setup_deadline
+from oracle_lab.container.repository import Repository
 from oracle_lab.container.sandbox import Profile, Sandbox, docker_client, open_sandbox
-from oracle_lab.repository import Repository
 
 
 @pytest.fixture

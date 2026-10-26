@@ -7,15 +7,15 @@ from fixtures import instance_record, localized_target, run_config, submission_m
 
 import oracle_lab.evaluation as evaluation
 from oracle_lab.container.sandbox import CommandResult
-from oracle_lab.evaluation import run_tests
-from oracle_lab.io import read_json, write_json
-from oracle_lab.paths import RunPaths
-from oracle_lab.results import (
+from oracle_lab.contracts.run import (
     SubmissionManifest,
     VersionResult,
     read_evaluation_result,
     read_localized_target,
 )
+from oracle_lab.evaluation import run_tests
+from oracle_lab.io import read_json, write_json
+from oracle_lab.paths import RunPaths
 
 
 @pytest.fixture

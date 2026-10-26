@@ -2,8 +2,8 @@
 
 from pathlib import Path
 
-from oracle_lab.io import read_json
-from oracle_lab.results import (
+from oracle_lab.contracts.base import write_result
+from oracle_lab.contracts.run import (
     FAILURE_KINDS,
     MATRIX_CELLS,
     VERSIONS,
@@ -12,8 +12,8 @@ from oracle_lab.results import (
     PairedOutcome,
     PairedResult,
     VersionResult,
-    write_result,
 )
+from oracle_lab.io import read_json
 
 CELL_BY_OUTCOMES = {cell.outcomes: cell for cell in MATRIX_CELLS}
 

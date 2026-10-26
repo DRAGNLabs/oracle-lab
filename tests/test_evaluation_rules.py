@@ -15,10 +15,10 @@ from fixtures import RUN_CONFIG, instance_record, write_submission
 import oracle_lab.evaluation as evaluation
 from oracle_lab.config import RuntimeConfig, load_config
 from oracle_lab.container.sandbox import CommandResult
+from oracle_lab.contracts.run import read_paired_result
 from oracle_lab.io import read_json, write_json
 from oracle_lab.paths import RunPaths
 from oracle_lab.preflight import check_environment
-from oracle_lab.results import read_paired_result
 
 RUNNER = "/pytest_runner.py"
 

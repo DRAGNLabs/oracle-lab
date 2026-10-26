@@ -5,8 +5,8 @@ function is a top-level function or a method, qualified by its classes
 (`Outer.Inner.method`). Code nested inside a function belongs to it, because a
 test cannot call it directly.
 
-Comparing trees ignores comments and formatting, and code the repair adds only
-counts through the existing code it changes. When no existing function changes,
+Comparing trees ignores comments, formatting, and docstrings, and code the
+repair adds only counts through the existing code it changes. When no existing function changes,
 the target falls back to the classes whose own body changed (a new method, a
 changed attribute or base), and then to the changed files.
 """
@@ -14,10 +14,12 @@ changed attribute or base), and then to the changed files.
 from __future__ import annotations
 
 import ast
+import warnings
+from collections import Counter
 from dataclasses import dataclass
 from typing import Literal
 
-from oracle_lab.results import LocalizedTarget, TargetFile
+from oracle_lab.contracts.run import LocalizedTarget, TargetFile
 
 FUNCTION = (ast.FunctionDef, ast.AsyncFunctionDef)
 
@@ -45,19 +47,42 @@ class FileChange:
     lines: int  # length of the buggy file
 
 
-def definitions(source: str) -> tuple[dict, dict]:
-    """Functions and classes keyed by (qualified name, occurrence).
+def parse(source: str) -> ast.Module:
+    """The syntax tree without docstrings, which, like comments, change no behavior.
 
-    The occurrence number tells same-named definitions apart, such as a property
-    getter and its setter. Raises `SyntaxError` when the source does not parse.
+    Raises `SyntaxError` when the source does not parse.
     """
-    functions: dict[tuple[str, int], Definition] = {}
-    classes: dict[tuple[str, int], Definition] = {}
+    with warnings.catch_warnings():
+        # Repository code often has invalid escapes, which Python only warns about.
+        warnings.simplefilter("ignore", SyntaxWarning)
+        tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, *FUNCTION)) and _has_docstring(node):
+            node.body = node.body[1:]
+    return tree
 
-    def add(table: dict, node: ast.AST, name: str, shape: str) -> None:
-        occurrence = 1 + sum(1 for key in table if key[0] == name)
+
+def _has_docstring(node: ast.Module | ast.ClassDef | ast.FunctionDef) -> bool:
+    first = node.body[0] if node.body else None
+    return (
+        isinstance(first, ast.Expr)
+        and isinstance(first.value, ast.Constant)
+        and isinstance(first.value.value, str)
+    )
+
+
+def definitions(source: str) -> tuple[list[Definition], list[Definition]]:
+    """Every function and class in the source, in file order.
+
+    Same-named definitions, such as a property getter and its setter, each get
+    their own entry. Raises `SyntaxError` when the source does not parse.
+    """
+    functions: list[Definition] = []
+    classes: list[Definition] = []
+
+    def add(table: list, node: ast.AST, name: str, shape: str) -> None:
         start = min([node.lineno, *(d.lineno for d in node.decorator_list)])
-        table[(name, occurrence)] = Definition(name, start, node.end_lineno or start, shape)
+        table.append(Definition(name, start, node.end_lineno or start, shape))
 
     def walk(node: ast.AST, prefix: str) -> None:
         for child in ast.iter_child_nodes(node):
@@ -69,7 +94,7 @@ def definitions(source: str) -> tuple[dict, dict]:
             else:
                 walk(child, prefix)
 
-    walk(ast.parse(source), "")
+    walk(parse(source), "")
     return functions, classes
 
 
@@ -86,17 +111,30 @@ def _class_shape(node: ast.ClassDef) -> str:
     return repr(own)
 
 
-def _changed(before: dict, after: dict) -> list[Definition]:
-    """Definitions in the buggy file that the repair removed or altered, in file order."""
-    found = [d for key, d in before.items() if key not in after or after[key].shape != d.shape]
-    return sorted(found, key=lambda d: d.start)
+def _changed(before: list[Definition], after: list[Definition]) -> list[Definition]:
+    """Definitions in the buggy file that the repair removed or altered, in file order.
+
+    A buggy definition is unchanged when the repaired file still has a same-named
+    definition with the same shape. Each repaired definition vouches for one buggy
+    one, so a same-named definition the repair adds, such as an `@overload` stub,
+    never makes an untouched one look changed.
+    """
+    remaining = Counter((d.qualname, d.shape) for d in after)
+    found = []
+    for definition in before:
+        key = (definition.qualname, definition.shape)
+        if remaining[key]:
+            remaining[key] -= 1
+        else:
+            found.append(definition)
+    return found
 
 
 def compare(path: str, buggy: str, fixed: str | None) -> FileChange:
     """Compare one buggy file with its repaired version. `fixed` is None for a deleted file."""
     functions, classes = definitions(buggy)
-    after_functions, after_classes = definitions(fixed) if fixed is not None else ({}, {})
-    altered = fixed is None or ast.dump(ast.parse(buggy)) != ast.dump(ast.parse(fixed))
+    after_functions, after_classes = definitions(fixed) if fixed is not None else ([], [])
+    altered = fixed is None or ast.dump(parse(buggy)) != ast.dump(parse(fixed))
     return FileChange(
         path,
         _changed(functions, after_functions),

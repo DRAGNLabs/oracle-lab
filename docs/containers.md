@@ -88,10 +88,11 @@ helper built with the image that produced the evidence.
 
 Where each piece belongs:
 
-- `repository.py` and its helper: workspace reset, test visibility,
+- `container/repository.py` and its helper: workspace reset, test visibility,
   baseline creation, and applying a repair.
-- `generation.py`: sorting the submission's files and checking their integrity.
-- `judge/workspace.py`: the privileged judge bundle. It is built there rather
+- `generation.py`: sorting the submission's files.
+- `contracts/run.py`: checking the frozen submission's integrity (`verify_bundle`).
+- `judge/generation/workspace.py`: the privileged judge bundle. It is built there rather
   than by loosening either module above.
 - Each harness adapter: its own flags, limits, and trace parsing.
   `harnesses/launch.py` holds the launch I/O they share.

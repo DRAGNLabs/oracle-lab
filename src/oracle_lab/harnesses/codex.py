@@ -5,7 +5,9 @@ from __future__ import annotations
 from dataclasses import asdict
 from pathlib import Path
 
+from oracle_lab.container.paths import ORACLE_HOME
 from oracle_lab.container.sandbox import Sandbox
+from oracle_lab.contracts.run import Usage
 from oracle_lab.harnesses.launch import (
     AgentTurnRequest,
     run_agent_turn,
@@ -13,7 +15,6 @@ from oracle_lab.harnesses.launch import (
 )
 from oracle_lab.harnesses.steps import OtherTool, Shell, Step, read_trace
 from oracle_lab.harnesses.transcript import as_text
-from oracle_lab.results import Usage
 
 # Codex writes its final response to a file instead of the JSON event stream.
 LAST_MESSAGE_PATH = "/tmp/oracle-agent/final.txt"
@@ -159,7 +160,7 @@ def run_turn(sandbox: Sandbox, request: AgentTurnRequest) -> dict:
         sandbox,
         request,
         argv,
-        {"CODEX_HOME": "/home/oracle/.codex"},
+        {"CODEX_HOME": ORACLE_HOME + "/.codex"},
         credential_name,
         last_message_path=LAST_MESSAGE_PATH,
     )

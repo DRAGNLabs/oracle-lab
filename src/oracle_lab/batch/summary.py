@@ -10,10 +10,10 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Callable
 
+from oracle_lab.contracts.judgment import JUDGMENT_LABEL_KEYS, read_judgment_state
+from oracle_lab.contracts.run import MATRIX_CELLS, read_evaluation_result, read_run_cost
 from oracle_lab.io import read_json, write_json
-from oracle_lab.judge.contracts import JUDGMENT_LABEL_KEYS, read_judgment_state
-from oracle_lab.paths import RunPaths
-from oracle_lab.results import MATRIX_CELLS, read_evaluation_result, read_run_cost
+from oracle_lab.paths import BatchPaths, RunPaths
 
 
 def summarize_job(job: dict) -> dict:
@@ -80,7 +80,7 @@ def _summarize_judge(paths: RunPaths) -> dict:
     return summary
 
 
-def write_summary(batch_dir: Path, name: str, jobs: list[dict]) -> dict:
+def write_summary(batch: BatchPaths, name: str, jobs: list[dict]) -> dict:
     job_summaries = [summarize_job(job) for job in jobs]
     attempted = sum(job["state"] != "pending" for job in jobs)
     completed = sum("matrix" in job for job in job_summaries)
@@ -114,8 +114,8 @@ def write_summary(batch_dir: Path, name: str, jobs: list[dict]) -> dict:
         "judge": judge_aggregation,
         "jobs": job_summaries,
     }
-    write_json(batch_dir / "summary.json", summary)
-    _write_report(batch_dir, summary)
+    write_json(batch.summary, summary)
+    _write_report(batch, summary)
     return summary
 
 
@@ -172,7 +172,7 @@ def _percent(value: float | None) -> str:
     return "—" if value is None else f"{value:.1%}"
 
 
-def _write_report(batch_dir: Path, summary: dict) -> None:
+def _write_report(batch: BatchPaths, summary: dict) -> None:
     lines = _headline_lines(summary)
     lines += _job_table_lines(summary["jobs"])
     lines += [
@@ -189,7 +189,7 @@ def _write_report(batch_dir: Path, summary: dict) -> None:
         "See [summary.json](summary.json) for machine-readable per-instance details.",
         "",
     ]
-    (batch_dir / "report.md").write_text("\n".join(lines))
+    batch.report.write_text("\n".join(lines))
 
 
 def _headline_lines(summary: dict) -> list[str]:
@@ -230,10 +230,9 @@ def _job_table_lines(jobs: list[dict]) -> list[str]:
         instance = job.get("instance_id", Path(job["config"]).stem)
         run_id = "—"
         if job.get("run_dir"):
-            run_dir = Path(job["run_dir"])
-            run_id = f"`{run_dir.name}`"
-            report = run_dir / "report.md"
-            instance = f"[{instance}]({report.as_posix()})"
+            run = RunPaths(Path(job["run_dir"]))
+            run_id = f"`{run.root.name}`"
+            instance = f"[{instance}]({run.report.as_posix()})"
         judge = job.get("judge", {})
         lines.append(
             f"| {instance} | {run_id} | {job['state']} "

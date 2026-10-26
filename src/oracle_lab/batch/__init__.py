@@ -12,9 +12,9 @@ from pydantic import Field, model_validator
 from oracle_lab.batch.summary import write_summary
 from oracle_lab.config import ConfigModel, NonBlank, RunConfig, load_config
 from oracle_lab.container.lifecycle import preserve_failure
+from oracle_lab.contracts.run import read_status
 from oracle_lab.io import digest, read_json, write_json
-from oracle_lab.paths import OutputPaths
-from oracle_lab.results import read_status
+from oracle_lab.paths import BatchPaths, OutputPaths, RunPaths
 from oracle_lab.run import run
 
 
@@ -62,17 +62,17 @@ def load_batch_config(path: Path) -> tuple[BatchConfig, list[Path], OutputPaths]
     return config, configs, OutputPaths(Path(outputs.pop()))
 
 
-def _write_manifest(batch_dir: Path, config: BatchConfig, jobs: list[dict]) -> None:
+def _write_manifest(batch: BatchPaths, config: BatchConfig, jobs: list[dict]) -> None:
     write_json(
-        batch_dir / "batch.resolved.json",
+        batch.manifest,
         {"name": config.name, "execution": config.execution.model_dump(), "jobs": jobs},
     )
 
 
-def _new_batch(path: Path) -> tuple[Path, BatchConfig, list[dict]]:
+def _new_batch(path: Path) -> tuple[BatchPaths, BatchConfig, list[dict]]:
     config, paths, output = load_batch_config(path)
-    batch_dir = output.new_batch()
-    shutil.copyfile(path, batch_dir / "batch.input.yaml")
+    batch = output.new_batch()
+    shutil.copyfile(path, batch.input)
     jobs = [
         {
             "index": index,
@@ -84,13 +84,13 @@ def _new_batch(path: Path) -> tuple[Path, BatchConfig, list[dict]]:
         }
         for index, job_path in enumerate(paths, start=1)
     ]
-    _write_manifest(batch_dir, config, jobs)
-    return batch_dir, config, jobs
+    _write_manifest(batch, config, jobs)
+    return batch, config, jobs
 
 
-def _resume_batch(batch_dir: Path) -> tuple[Path, BatchConfig, list[dict]]:
-    batch_dir = batch_dir.resolve()
-    resolved = read_json(batch_dir / "batch.resolved.json")
+def _resume_batch(batch_dir: Path) -> tuple[BatchPaths, BatchConfig, list[dict]]:
+    batch = BatchPaths(batch_dir.resolve())
+    resolved = read_json(batch.manifest)
     config = BatchConfig(
         name=resolved["name"],
         jobs=[BatchJob(config=job["config"]) for job in resolved["jobs"]],
@@ -101,7 +101,7 @@ def _resume_batch(batch_dir: Path) -> tuple[Path, BatchConfig, list[dict]]:
         path = Path(job["config"])
         if digest(path.read_bytes()) != job["config_sha256"]:
             raise ValueError(f"Cannot resume: job config changed: {path}")
-    return batch_dir, config, jobs
+    return batch, config, jobs
 
 
 def run_batch(
@@ -111,18 +111,18 @@ def run_batch(
     run_one: Callable[[RunConfig], Path] = run,
 ) -> Path:
     """Run pending jobs in order, persisting progress after every transition."""
-    batch_dir, config, jobs = _resume_batch(path) if resume else _new_batch(path)
-    write_json(batch_dir / "status.json", {"state": "running"})
+    batch, config, jobs = _resume_batch(path) if resume else _new_batch(path)
+    write_json(batch.status, {"state": "running"})
     try:
         for job in jobs:
             if job["state"] in {"completed", "completed_with_errors"}:
                 continue
             job.update(state="running", error=None)
-            _write_manifest(batch_dir, config, jobs)
+            _write_manifest(batch, config, jobs)
             try:
                 run_dir = run_one(load_config(Path(job["config"])))
                 job["run_dir"] = str(run_dir)
-                job["state"] = read_status(run_dir / "status.json").state
+                job["state"] = read_status(RunPaths(run_dir).status).state
             except KeyboardInterrupt:
                 job["state"] = "interrupted"
                 raise
@@ -133,17 +133,17 @@ def run_batch(
             finally:
                 # A summary that cannot be written must not hide why the job stopped.
                 with preserve_failure("The batch summary could not be updated."):
-                    _write_manifest(batch_dir, config, jobs)
-                    write_summary(batch_dir, config.name, jobs)
+                    _write_manifest(batch, config, jobs)
+                    write_summary(batch, config.name, jobs)
     except KeyboardInterrupt:
-        write_json(batch_dir / "status.json", {"state": "interrupted"})
+        write_json(batch.status, {"state": "interrupted"})
         raise
     except Exception:
-        write_json(batch_dir / "status.json", {"state": "failed"})
+        write_json(batch.status, {"state": "failed"})
         raise
 
     final_state = (
         "completed" if all(job["state"] == "completed" for job in jobs) else "completed_with_errors"
     )
-    write_json(batch_dir / "status.json", {"state": final_state})
-    return batch_dir
+    write_json(batch.status, {"state": final_state})
+    return batch.root

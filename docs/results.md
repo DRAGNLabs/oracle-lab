@@ -9,7 +9,7 @@ output/
 ├── preflight/<run-id>/                         # oracle-lab preflight
 ├── batches/<batch-id>/                         # oracle-lab batch
 ├── classifications/<instance-id>/<attempt-id>/ # oracle-lab classify
-└── agreement/<UTC timestamp>/                  # oracle-lab agreement (default)
+└── agreement/<agreement-id>/                   # oracle-lab agreement (default)
 ```
 
 Run, batch, and attempt IDs are the UTC start time and a random suffix, such as
@@ -209,7 +209,7 @@ SHA-256.
 
 The judge's disposable container receives:
 
-- `rubric.md` and the rendered `instructions.md`;
+- `rubric.md`;
 - the `/oracle-judge/buggy` and `/oracle-judge/golden` repository views, each
   with the generated submission;
 - the issue and the patches;
@@ -365,7 +365,7 @@ The normalized judgment. A completed one has `status`, `tests_issue`,
 and `no_attempt_reason` a `no`; otherwise each is JSON `null`.
 
 `failure_modes` decides every start-list label (the keys in
-`judge/contracts.FAILURE_MODES`): `{"decision": "absent"}`, or
+`contracts/judgment.FAILURE_MODES`): `{"decision": "absent"}`, or
 `{"decision": "present", "steps": [...], "justification": "..."}` with at least one
 trace step. `added_failure_modes` lists the judge's own labels, each with `name`,
 `definition`, `steps`, and `justification`. Steps are the step numbers of
@@ -734,7 +734,7 @@ the nearest stage log.
 ## Agreement reports
 
 `oracle-lab agreement` writes a directory, by default
-`output/agreement/<UTC timestamp>/` in the current directory, holding:
+`output/agreement/<agreement-id>/` in the current directory, holding:
 
 - `agreement.json`: `created_at`, the `inputs` it read, every `raters` ID, and
   per stage (`judge`, `classification`) the number of targets and reviews and,
@@ -770,7 +770,7 @@ needs `HF_TOKEN`, read from the environment or `.env`.
 ```
 
 Each table's columns are the fields of its row model in
-`src/oracle_lab/export/contracts.py`:
+`src/oracle_lab/contracts/export.py`:
 
 - `runs`: one row per run, with its configuration, status, cost, generation
   usage, submission, paired matrix counts, and judge status.

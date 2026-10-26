@@ -21,12 +21,12 @@ from fixtures import (
 )
 
 from oracle_lab.cli import main
-from oracle_lab.export.contracts import TABLES
+from oracle_lab.contracts.export import TABLES
+from oracle_lab.contracts.judgment import FAILURE_MODES
 from oracle_lab.export.hub import upload_dataset
 from oracle_lab.export.tables import collect
 from oracle_lab.export.writer import export_dataset, schema
 from oracle_lab.io import read_json, write_json
-from oracle_lab.judge.contracts import FAILURE_MODES
 from oracle_lab.paths import OutputPaths, RunPaths
 from oracle_lab.review.store import save_review
 from oracle_lab.review.targets import ClassificationTarget, JudgmentTarget

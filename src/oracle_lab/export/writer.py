@@ -15,11 +15,11 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import yaml
 
-from oracle_lab.export.contracts import TABLES, ExportManifest
+from oracle_lab.contracts.base import ArtifactModel
+from oracle_lab.contracts.export import TABLES, ExportManifest
 from oracle_lab.export.tables import Collected, collect
 from oracle_lab.io import write_json
 from oracle_lab.paths import OutputPaths
-from oracle_lab.results import ArtifactModel
 
 DATASET_CARD = Path(__file__).resolve().parent / "templates/dataset-card.md"
 _SCALARS = {str: pa.string(), int: pa.int64(), float: pa.float64(), bool: pa.bool_()}

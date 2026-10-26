@@ -171,12 +171,12 @@ pipeline stage, and `run.py` calls each stage once:
 - `localization/` names the code a localized run targets.
 - `generation.py` runs the agent and freezes its submission.
 - `evaluation/` runs that submission on both versions.
-- `judge/` rates it.
+- `judge/generation/` rates it.
 - `report.py` renders the result.
 
 The rest supports them. `cli.py` and `config.py` define the interface.
 `container/` wraps the Docker Python SDK. `harnesses/` launches the agent CLIs.
-`repository.py` prepares checkouts. [Container development](docs/containers.md)
+`container/repository.py` prepares checkouts. [Container development](docs/containers.md)
 covers the Docker API and building images on their own.
 
 ## Tests

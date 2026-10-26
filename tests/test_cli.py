@@ -3,6 +3,7 @@ import os
 import pytest
 from fixtures import RUN_CONFIG
 
+import oracle_lab.preflight as preflight_module
 from oracle_lab import cli
 
 SAMPLE = RUN_CONFIG
@@ -112,8 +113,8 @@ def test_preflight_checks_every_config_and_fails_if_any_fails(tmp_path, monkeypa
         return tmp_path / path.stem
 
     monkeypatch.setattr(cli, "load_dotenv", unexpected_load)
-    monkeypatch.setattr(cli, "load_config", lambda path: path)
-    monkeypatch.setattr(cli, "preflight", preflight)
+    monkeypatch.setattr(preflight_module, "load_config", lambda path: path)
+    monkeypatch.setattr(preflight_module, "preflight", preflight)
 
     assert cli.main(["preflight", "bad.yaml", "good.yaml"]) == 1
     output = capsys.readouterr().out

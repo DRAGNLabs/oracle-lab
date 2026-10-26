@@ -13,10 +13,11 @@ from fixtures import (
 )
 from fixtures import completed_judgment as fixture_completed_judgment
 
+from oracle_lab.contracts.base import write_result
+from oracle_lab.contracts.run import MATRIX_CELLS
 from oracle_lab.io import write_json
 from oracle_lab.paths import AttemptPaths, OutputPaths, RunPaths
 from oracle_lab.report import report
-from oracle_lab.results import MATRIX_CELLS, write_result
 
 
 @pytest.mark.parametrize(

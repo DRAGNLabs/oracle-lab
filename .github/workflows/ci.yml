@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests and lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install
+        run: uv sync --locked --extra dev
+      - name: Tests
+        run: uv run pytest -q
+      - name: Lint
+        run: uv run ruff check src tests
+      - name: Format
+        run: uv run ruff format --check src tests
+
+  docker-smoke:
+    name: Docker smoke
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install
+        run: uv sync --locked --extra dev
+      # Builds the harness and runtime images for the smoke instance, then runs the
+      # reference and environment checks in real containers. Calls no model.
+      - name: Preflight
+        run: uv run oracle-lab preflight configs/smoke.yaml
+      - name: Find preflight directory
+        run: echo "ORACLE_LAB_SMOKE_RUN=$(ls -d "$PWD"/output/preflight/* | tail -n 1)" >> "$GITHUB_ENV"
+      # The judge-workspace test needs a completed agent run, which needs a model.
+      - name: Docker tests
+        run: uv run pytest -q -m docker -k "not reconstruct_privileged_judge_workspace"
+      - name: Upload preflight output
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: preflight-output
+          path: output/preflight/
+          retention-days: 7

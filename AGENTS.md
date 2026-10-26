@@ -62,9 +62,11 @@ The pipeline stages run in this order, and each is one module or package that
 - `src/oracle_lab/instance/`: resolve — dataset record, runtime, and private
   ground truth.
 - `src/oracle_lab/container/images.py`: build — the prepared runtime image.
-- `src/oracle_lab/localization/`: localize — for localized runs, the target
-  named in the prompt. `patches.py` applies the golden patch on the host and
-  `target.py` compares the buggy and repaired syntax trees.
+- `src/oracle_lab/localization/`: localize — the target named in a localized
+  prompt, and the fix's scope. Preflight computes it once per problem;
+  `load_target` copies it into runs and classifications. `patches.py` applies the
+  golden patch on the host and `target.py` compares the buggy and repaired syntax
+  trees.
 - `src/oracle_lab/evaluation/`: reference and evaluate — paired execution in
   `__init__.py` and outcome pairing in `outcomes.py`.
 - `src/oracle_lab/generation.py`: generate — one agent turn in a buggy

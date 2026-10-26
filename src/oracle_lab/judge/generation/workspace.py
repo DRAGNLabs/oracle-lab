@@ -180,8 +180,13 @@ def judge_evidence(
     )
     write_result(submission_manifest, manifest)
 
+    # A localized run's target and fix scope; a repository-scope run has none.
+    target = (
+        [(paths.target, JUDGE_ROOT + "/instance/target.json")] if paths.target.is_file() else []
+    )
     return [
         (paths.judge.rubric, JUDGE_ROOT + "/rubric.md"),
+        *target,
         (paths.ground_truth / "issue.md", JUDGE_ROOT + "/instance/issue.md"),
         (paths.ground_truth / "fix.patch", REPAIR),
         (reference_patch, JUDGE_ROOT + "/instance/reference-tests.patch"),

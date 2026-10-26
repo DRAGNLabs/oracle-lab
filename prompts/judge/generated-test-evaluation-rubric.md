@@ -16,7 +16,10 @@ The judgment has two parts:
 
 - `/oracle-judge/instance/`: the issue (`issue.md`), the repair (`fix.patch`),
   the reference-test patch (`reference-tests.patch`), and `metadata.json` with
-  the instance ID, base commit, and reference test IDs.
+  the instance ID, base commit, and reference test IDs. A localized run also has
+  `target.json`: `text` is the target the agent was told to test, and `scope`
+  says where the repair's changes live (`function`, `class`, or `module`). A
+  `module` scope means part of the repair is outside that target.
 - `/oracle-judge/buggy/`: the buggy repository with the generated tests added.
 - `/oracle-judge/golden/`: the repaired repository with the identical generated
   tests added.

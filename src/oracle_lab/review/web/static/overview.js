@@ -29,9 +29,11 @@ function runHeader(target) {
     : "None: the agent was asked to test the whole issue";
   const rows = [
     ["Agent", `${esc(harness)} · ${esc(model)}`],
-    ["Scope", esc(scope)],
+    ["Task scope", esc(scope)],
     ["Localized target", targetText],
   ];
+  // Where the fix's changes live. `module` means part of the fix is outside the target.
+  if (target.fix_scope) rows.push(["Fix scope", esc(target.fix_scope)]);
   const prompt = target.prompt
     ? `<details><summary>Prompt given to the agent</summary><pre class="wrap">${esc(target.prompt)}</pre></details>`
     : `<p class="muted">No prompt was saved with this run.</p>`;

@@ -24,18 +24,22 @@ from oracle_lab.report import report
     ("scope", "target", "expected_scope"),
     [
         ("repository", None, "target: whole repository"),
-        ("localized", localized_target(), "target: `package/core.py`: `Client.send`;"),
+        (
+            "localized",
+            localized_target(),
+            "target: `package/core.py`: `Client.send` (fix scope: function);",
+        ),
         (
             "localized",
             localized_target(
-                level="class",
                 files=[
-                    {"path": "a.py", "names": ["A"], "lines": 3},
-                    {"path": "b.py", "names": ["B", "C"], "lines": 9},
+                    {"path": "a.py", "functions": [], "classes": ["A"], "lines": 3},
+                    {"path": "b.py", "functions": [], "classes": ["B", "C"], "lines": 9},
                 ],
                 text="- `a.py`: class `A`\n- `b.py`: classes `B`, `C`",
+                scope="module",
             ),
-            "target: `a.py`: class `A`; `b.py`: classes `B`, `C`;",
+            "target: `a.py`: class `A`; `b.py`: classes `B`, `C` (fix scope: module);",
         ),
     ],
 )

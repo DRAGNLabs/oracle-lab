@@ -16,7 +16,12 @@ from oracle_lab.config import RunConfig, load_config, validate_prompt_scope
 from oracle_lab.container.repository import Repository
 from oracle_lab.container.sandbox import Profile, Sandbox, docker_client
 from oracle_lab.contracts.base import write_result
-from oracle_lab.contracts.run import InstanceRecord, VersionResult, write_status
+from oracle_lab.contracts.run import (
+    InstanceRecord,
+    VersionResult,
+    read_localized_target,
+    write_status,
+)
 from oracle_lab.evaluation import run_version
 from oracle_lab.evaluation.outcomes import pair_results
 from oracle_lab.paths import OutputPaths, RunPaths
@@ -42,7 +47,9 @@ def preflight(config: RunConfig) -> Path:
     stages = Stages(run_dir)
     try:
         with docker_client() as client:
-            instance, image = prepare(client, config, paths, stages, prompt_template)
+            instance, image = prepare(
+                client, config, paths, stages, prompt_template, preflight=True
+            )
             stages.start("environment")
             check_environment(client, config, image, instance, paths)
         write_status(run_dir, "finished", "passed")
@@ -66,8 +73,15 @@ def preflight_all(configs: list[Path]) -> bool:
         except Exception as exc:
             outcomes.append(("failed", path, exc))
     for state, path, detail in outcomes:
-        print(f"{state}  {path}  {detail}")
+        print(f"{state}  {path}  {detail}{_scope_note(detail)}")
     return all(state == "passed" for state, _, _ in outcomes)
+
+
+def _scope_note(detail: Path | Exception) -> str:
+    """A localized preflight's fix scope, which says how much of the fix its target names."""
+    if isinstance(detail, Exception) or not RunPaths(detail).target.is_file():
+        return ""
+    return f"  fix scope: {read_localized_target(RunPaths(detail).target).scope}"
 
 
 def check_environment(

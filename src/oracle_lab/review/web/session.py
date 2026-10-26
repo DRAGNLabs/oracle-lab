@@ -225,6 +225,7 @@ def _judgment_details(target: JudgmentTarget) -> dict:
     return {
         "run": _run_label(target),
         "test_target": evaluation.test_target.text if evaluation.test_target else None,
+        "fix_scope": evaluation.test_target.scope if evaluation.test_target else None,
         "prompt": prompt.read_text() if prompt.is_file() else None,
         "outcomes": {
             "matrix": {cell.value: entry.count for cell, entry in evaluation.matrix.items()},

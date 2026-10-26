@@ -1,4 +1,4 @@
-"""The single-instance pipeline: resolve, build, localize, check reference, generate, evaluate, judge.
+"""The single-instance pipeline: resolve, localize, build, check reference, generate, evaluate, judge.
 
 Every stage records itself in `status.json` before it starts, so an interrupted or
 failed run names the stage it stopped in rather than leaving a silent directory.
@@ -40,7 +40,7 @@ from oracle_lab.harnesses.spend import measure_spend
 from oracle_lab.instance import resolve_source, write_private_instance_artifacts
 from oracle_lab.io import read_json, write_json
 from oracle_lab.judge.generation.run import judge_stage
-from oracle_lab.localization import localize
+from oracle_lab.localization import load_target, localize
 from oracle_lab.paths import OutputPaths, RunPaths
 from oracle_lab.report import report
 
@@ -117,19 +117,29 @@ def prepare(
     paths: RunPaths,
     stages: Stages,
     prompt_template: str,
+    *,
+    preflight: bool = False,
 ) -> tuple[InstanceRecord, str]:
-    """Run every stage before generation, and return the instance and image."""
+    """Run every stage before generation, and return the instance and image.
+
+    A localized run tells the agent which code to test: the code the golden
+    repair changes. Preflight finds it in the image, once per problem; a run
+    copies what preflight found, before spending time on a build.
+    """
+    localized = config.task.scope == "localized"
     stages.start("resolve")
     instance = _resolve(config, paths)
+
+    target = None
+    if localized and not preflight:
+        stages.start("localize")
+        target = load_target(OutputPaths(Path(config.output)), instance, paths)
 
     stages.start("build")
     image = prepare_image(client, config, paths.build)
     write_json(paths.runtime, {"image": image})
 
-    # A localized run tells the agent which code to test: the code the
-    # golden repair changes, read from the image. A repository run does not.
-    target = None
-    if config.task.scope == "localized":
+    if localized and preflight:
         stages.start("localize")
         target = localize(client, config, image, instance, paths)
     paths.prompt.write_text(render_prompt(prompt_template, config, target.text if target else None))

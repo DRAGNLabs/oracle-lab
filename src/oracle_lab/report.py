@@ -158,8 +158,9 @@ def _pipeline_lines(
 
 
 def _target_summary(target: LocalizedTarget) -> str:
-    """The prompt's one-line-per-file target, on a single line for a table cell."""
-    return "; ".join(line.removeprefix("- ") for line in target.text.splitlines())
+    """The prompt's one-line-per-file target on a single line, then the fix's scope."""
+    names = "; ".join(line.removeprefix("- ") for line in target.text.splitlines())
+    return f"{names} (fix scope: {target.scope})"
 
 
 def _harness_text(result: HarnessResult) -> str:

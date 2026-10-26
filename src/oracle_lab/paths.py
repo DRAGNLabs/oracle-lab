@@ -58,6 +58,10 @@ class OutputPaths:
         """Every run directory under `runs/`, in ID order."""
         return [RunPaths(run) for run in _subdirectories(self.runs)]
 
+    def saved_preflights(self) -> list[RunPaths]:
+        """Every preflight directory under `preflight/`, in ID order."""
+        return [RunPaths(run) for run in _subdirectories(self.preflight)]
+
     def saved_attempts(self) -> list[AttemptPaths]:
         """Every classification attempt, by instance ID and then attempt ID."""
         return [
@@ -145,6 +149,20 @@ class InstancePaths:
         return self.inputs / "instance.json"
 
     @property
+    def target(self) -> Path:
+        """The localized target and the fix's scope."""
+        return self.inputs / "target.json"
+
+    @property
+    def target_log(self) -> Path:
+        return self.inputs / "target.log"
+
+    @property
+    def target_source(self) -> Path:
+        """The preflight a copied target came from, relative to the output root."""
+        return self.inputs / "target-source.txt"
+
+    @property
     def runtime(self) -> Path:
         return self.build / "runtime.json"
 
@@ -200,14 +218,6 @@ class RunPaths(InstancePaths):
     @property
     def prompt(self) -> Path:
         return self.inputs / "prompt.txt"
-
-    @property
-    def target(self) -> Path:
-        return self.inputs / "target.json"
-
-    @property
-    def target_log(self) -> Path:
-        return self.inputs / "target.log"
 
     @property
     def results(self) -> Path:

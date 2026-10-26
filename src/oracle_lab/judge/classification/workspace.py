@@ -53,5 +53,6 @@ def classification_evidence(attempt: AttemptPaths) -> list[tuple[Path, str]]:
     """
     return [
         (attempt.instance, CLASSIFICATION_ROOT + "/instance.json"),
+        (attempt.target, CLASSIFICATION_ROOT + "/target.json"),
         (attempt.judge.rubric, CLASSIFICATION_ROOT + "/rubric.md"),
     ]

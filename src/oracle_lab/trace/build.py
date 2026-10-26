@@ -65,7 +65,11 @@ def build_run_trace(paths: RunPaths) -> RunTrace:
     checkout = Checkout(config.require_runtime().workdir, config.task.generated_dir)
     steps = read_steps(config.agent.harness, paths.generation / "trace.jsonl")
     target = read_localized_target(paths.target) if paths.target.exists() else None
-    target_names = [name for file in target.files for name in file.names] if target else []
+    target_names = (
+        [name for file in target.files for name in [*file.functions, *file.classes]]
+        if target
+        else []
+    )
     regions = PatchedRegions.from_patch(
         read_instance_record(paths.instance).golden_patch, target_names
     )
@@ -279,7 +283,7 @@ def _defect_summary(
 def _target_read(events: list[Event], target: LocalizedTarget) -> bool:
     """Whether a read or search of a target file showed a target name's definition."""
     for file in target.files:
-        names = [name.split(".")[-1] for name in file.names]
+        names = [name.split(".")[-1] for name in [*file.functions, *file.classes]]
         pattern = re.compile(rf"\b(?:def|class)\s+(?:{'|'.join(map(re.escape, names))})\b")
         for event in events:
             if event.action in {ActionType.READ, ActionType.SEARCH} and any(

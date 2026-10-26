@@ -112,6 +112,7 @@ def install_pipeline_fakes(monkeypatch, runtime, instance, judge_effect=None):
     monkeypatch.setattr(run_module, "prepare_image", lambda *args: "example/runtime")
     target = LocalizedTarget.model_validate(localized_target())
     monkeypatch.setattr(run_module, "localize", Mock(return_value=target))
+    monkeypatch.setattr(run_module, "load_target", Mock(return_value=target))
     monkeypatch.setattr(run_module, "check_reference", Mock())
     manifest = SubmissionManifest.model_validate(submission_manifest())
     monkeypatch.setattr(run_module, "generate_submission", Mock(return_value=manifest))
@@ -206,7 +207,7 @@ def test_run_fills_the_agent_prompt_environment(tmp_path, monkeypatch):
     )
 
 
-def test_a_localized_run_localizes_after_the_build_and_before_the_reference_check(
+def test_a_localized_run_loads_its_target_before_the_build_and_never_localizes(
     tmp_path, monkeypatch
 ):
     config, runtime, instance = configured_pipeline(tmp_path, False)
@@ -215,9 +216,9 @@ def test_a_localized_run_localizes_after_the_build_and_before_the_reference_chec
     install_pipeline_fakes(monkeypatch, runtime, instance)
     order = []
     monkeypatch.setattr(run_module, "prepare_image", lambda *args: order.append("build") or "img")
-    located = run_module.localize
+    loaded = run_module.load_target
     monkeypatch.setattr(
-        run_module, "localize", lambda *args: order.append("localize") or located(*args)
+        run_module, "load_target", lambda *args: order.append("localize") or loaded(*args)
     )
 
     def check_reference(client, config, image, instance, paths):
@@ -229,7 +230,8 @@ def test_a_localized_run_localizes_after_the_build_and_before_the_reference_chec
 
     run_module.run(config)
 
-    assert order == ["build", "localize", "reference"]
+    assert order == ["localize", "build", "reference"]
+    run_module.localize.assert_not_called()
 
 
 def test_a_repository_run_never_localizes(tmp_path, monkeypatch):
@@ -239,6 +241,7 @@ def test_a_repository_run_never_localizes(tmp_path, monkeypatch):
     run_dir = run_module.run(config)
 
     run_module.localize.assert_not_called()
+    run_module.load_target.assert_not_called()
     assert RunPaths(run_dir).prompt.read_text() == "Generate tests"
 
 
@@ -247,10 +250,10 @@ def test_a_localize_failure_stops_the_run_at_that_stage(tmp_path, monkeypatch):
     config.task.scope = "localized"
     Path(config.task.prompt).write_text("Test ${test_target}")
     install_pipeline_fakes(monkeypatch, runtime, instance)
-    failure = ValueError("hunk at line 3 matches nowhere in the buggy file")
-    monkeypatch.setattr(run_module, "localize", Mock(side_effect=failure))
+    failure = ValueError("No passed preflight has a target for owner__project-1")
+    monkeypatch.setattr(run_module, "load_target", Mock(side_effect=failure))
 
-    with pytest.raises(ValueError, match="matches nowhere"):
+    with pytest.raises(ValueError, match="No passed preflight"):
         run_module.run(config)
 
     (run_dir,) = OutputPaths(Path(config.output)).runs.iterdir()
@@ -435,6 +438,20 @@ def test_reevaluation_marks_existing_judgment_stale_without_calling_a_model(tmp_
     assert judgment["previous_judgment"]["tests_issue"]["answer"] == "yes"
     assert read_json(run_dir / "status.json")["judge_status"] == "stale"
     judge_call.assert_not_called()
+
+
+def test_a_localized_preflight_localizes_after_the_build(tmp_path, monkeypatch):
+    config, runtime, instance = configured_pipeline(tmp_path, False)
+    config.task.scope = "localized"
+    Path(config.task.prompt).write_text("Test ${test_target}")
+    install_pipeline_fakes(monkeypatch, runtime, instance)
+    monkeypatch.setattr(preflight_module, "docker_client", context_of(Mock()))
+    monkeypatch.setattr(preflight_module, "check_environment", Mock())
+
+    preflight_module.preflight(config)
+
+    run_module.localize.assert_called_once()
+    run_module.load_target.assert_not_called()
 
 
 def test_preflight_checks_the_environment_without_credentials_or_generation(tmp_path, monkeypatch):

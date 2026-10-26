@@ -6,15 +6,16 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
-from fixtures import RUN_CONFIG, instance_record, run_config
+from fixtures import RUN_CONFIG, instance_record, passed_preflight, run_config
 
 import oracle_lab.localization as localization
 from oracle_lab.contracts.base import write_result
 from oracle_lab.contracts.run import LocalizedTarget, TargetFile, read_localized_target
-from oracle_lab.localization import production_diffs, read_source
+from oracle_lab.io import write_json
+from oracle_lab.localization import load_target, production_diffs, read_source
 from oracle_lab.localization.patches import apply_patch, parse_patch
-from oracle_lab.localization.target import choose_target, compare
-from oracle_lab.paths import RunPaths
+from oracle_lab.localization.target import choose_target, compare, fix_scope
+from oracle_lab.paths import OutputPaths, RunPaths
 
 BASE = """\
 import os
@@ -58,24 +59,25 @@ def diff(before: str, after: str, path: str = "m.py", context: int = 3) -> str:
     return f"diff --git a/{path} b/{path}\n" + "\n".join(lines) + "\n"
 
 
-def target(after: str | None, before: str = BASE) -> tuple[str, list[str]]:
+def target(after: str | None, before: str = BASE) -> tuple[list[str], list[str]]:
+    """The functions and classes named in m.py; both empty for a whole-file target."""
     result = choose_target([compare("m.py", before, after)])
     assert [entry.path for entry in result.files] == ["m.py"]
-    return result.level, result.files[0].names
+    return result.files[0].functions, result.files[0].classes
 
 
 def test_a_body_change_names_the_qualified_method():
     after = change("self.records = []", "self.records = None")
-    assert target(after) == ("function", ["Handler.reset"])
+    assert target(after) == (["Handler.reset"], [])
 
 
 def test_a_nested_function_change_names_the_outer_function():
     after = change("        return value\n", "        return value + 1\n")
-    assert target(after) == ("function", ["helper"])
+    assert target(after) == (["helper"], [])
 
 
 def test_a_decorator_change_names_the_decorated_function():
-    assert target(change("@name.setter", "@name.deleter")) == ("function", ["Handler.name"])
+    assert target(change("@name.setter", "@name.deleter")) == (["Handler.name"], [])
 
 
 def test_a_new_function_counts_only_through_its_call_site():
@@ -84,27 +86,27 @@ def test_a_new_function_counts_only_through_its_call_site():
         "def check(value):\n    return _clean(value)\n\n\ndef _clean(\n    value,\n) -> int:\n"
         "    return value\n",
     )
-    assert target(after) == ("function", ["check"])
+    assert target(after) == (["check"], [])
 
 
 def test_comment_and_formatting_changes_name_nothing():
     after = change("def check(value):\n", "def check( value ):  # identity\n")
-    assert target(after) == ("file", [])
+    assert target(after) == ([], [])
 
 
 def test_a_new_method_alone_names_its_class():
     after = change("    @property\n", "    def clear(self):\n        pass\n\n    @property\n")
-    assert target(after) == ("class", ["Handler"])
+    assert target(after) == ([], ["Handler"])
 
 
 def test_a_class_attribute_change_names_its_class():
-    assert target(change("level = 1", "level = 2")) == ("class", ["Handler"])
+    assert target(change("level = 1", "level = 2")) == ([], ["Handler"])
 
 
 def test_a_module_level_change_alone_names_the_whole_file():
     result = choose_target([compare("m.py", BASE, change("import os", "import re"))])
-    assert result.level == "file"
-    assert result.files == [TargetFile(path="m.py", names=[], lines=len(BASE.splitlines()))]
+    lines = len(BASE.splitlines())
+    assert result.files == [TargetFile(path="m.py", functions=[], classes=[], lines=lines)]
 
 
 def test_a_property_setter_is_told_apart_from_its_getter():
@@ -113,19 +115,21 @@ def test_a_property_setter_is_told_apart_from_its_getter():
     )
     result = choose_target([compare("m.py", BASE, after)])
     # The setter's decorator, `def` line and body.
-    assert result.files == [TargetFile(path="m.py", names=["Handler.name"], lines=3)]
+    assert result.files == [
+        TargetFile(path="m.py", functions=["Handler.name"], classes=[], lines=3)
+    ]
 
 
-def test_a_deleted_file_names_every_function():
-    assert target(None) == ("function", ["Handler.reset", "Handler.name", "helper", "check"])
+def test_a_deleted_file_names_every_function_and_class():
+    assert target(None) == (["Handler.reset", "Handler.name", "helper", "check"], ["Handler"])
 
 
 def test_an_emptied_file_is_not_mistaken_for_a_deleted_one():
     result = choose_target([compare("m.py", "VALUE = 1\n", "")])
-    assert result.level == "file"
+    assert result.text == "- `m.py` (whole file)"
 
 
-def test_functions_in_one_file_outrank_class_and_module_changes_in_others():
+def test_functions_and_class_code_are_named_across_files_but_module_code_is_not():
     result = choose_target(
         [
             compare("a.py", BASE, change("level = 1", "level = 2")),
@@ -133,8 +137,23 @@ def test_functions_in_one_file_outrank_class_and_module_changes_in_others():
             compare("c.py", BASE, change("import os", "import re")),
         ]
     )
-    assert result.level == "function"
-    assert [(entry.path, entry.names) for entry in result.files] == [("b.py", ["Handler.reset"])]
+    named = [(entry.path, entry.functions, entry.classes) for entry in result.files]
+    assert named == [("a.py", [], ["Handler"]), ("b.py", ["Handler.reset"], [])]
+
+
+def test_a_function_and_its_class_code_are_named_together():
+    after = change("level = 1", "level = 2", change("self.records = []", "self.records = None"))
+    assert target(after) == (["Handler.reset"], ["Handler"])
+    assert choose_target([compare("m.py", BASE, after)]).text == (
+        "- `m.py`: `Handler.reset`, class `Handler`"
+    )
+
+
+def test_new_methods_name_their_class_only_when_nothing_else_changed():
+    new_method = ("    @property\n", "    def clear(self):\n        pass\n\n    @property\n")
+    assert target(change(*new_method)) == ([], ["Handler"])
+    after = change(*new_method, change("self.records = []", "self.records = None"))
+    assert target(after) == (["Handler.reset"], [])
 
 
 def test_a_file_target_leaves_out_files_with_only_comment_changes():
@@ -144,13 +163,13 @@ def test_a_file_target_leaves_out_files_with_only_comment_changes():
             compare("b.py", BASE, change("import os", "import re")),
         ]
     )
-    assert result.level == "file"
     assert [entry.path for entry in result.files] == ["b.py"]
+    assert result.text == "- `b.py` (whole file)"
 
 
 def test_an_async_function_is_named_like_any_function():
     before = "async def fetch():\n    return 1\n"
-    assert target(before.replace("1", "2"), before) == ("function", ["fetch"])
+    assert target(before.replace("1", "2"), before) == (["fetch"], [])
 
 
 CONDITIONAL = """\
@@ -175,44 +194,125 @@ def test_functions_under_module_level_if_and_try_are_named():
     after = change("return 2", "return 20", CONDITIONAL)
     result = choose_target([compare("m.py", CONDITIONAL, after)])
     # Only the second `pick`, the one the repair changed, is counted.
-    assert result.files == [TargetFile(path="m.py", names=["pick"], lines=2)]
-    assert target(change("return 3", "return 30", CONDITIONAL), CONDITIONAL) == (
-        "function",
-        ["load"],
-    )
+    assert result.files == [TargetFile(path="m.py", functions=["pick"], classes=[], lines=2)]
+    assert target(change("return 3", "return 30", CONDITIONAL), CONDITIONAL) == (["load"], [])
 
 
 def test_a_class_inside_a_function_belongs_to_the_function():
     before = "def make():\n    class Local:\n        x = 1\n    return Local\n"
-    assert target(change("x = 1", "x = 2", before), before) == ("function", ["make"])
+    assert target(change("x = 1", "x = 2", before), before) == (["make"], [])
 
 
 def test_a_class_decorator_change_names_the_class():
     before = "from dataclasses import dataclass\n\n\n@dataclass\nclass Point:\n    x: int\n"
     after = change("@dataclass\n", "@dataclass(frozen=True)\n", before)
-    assert target(after, before) == ("class", ["Point"])
+    assert target(after, before) == ([], ["Point"])
 
 
 def test_docstring_changes_name_nothing():
     before = '"""Module."""\n\n\nclass C:\n    """Class."""\n\n    def m(self):\n        """Method."""\n        return 1\n'
     after = before.replace("Module.", "Mod.").replace("Class.", "Cls.").replace("Method.", "Meth.")
-    assert target(after, before) == ("file", [])
+    assert target(after, before) == ([], [])
 
 
 def test_a_function_whose_docstring_and_code_change_is_named():
     before = 'def f():\n    """Old."""\n    return 1\n'
-    assert target('def f():\n    """New."""\n    return 2\n', before) == ("function", ["f"])
+    assert target('def f():\n    """New."""\n    return 2\n', before) == (["f"], [])
 
 
 def test_a_function_left_with_only_its_docstring_is_named():
     before = 'def f():\n    """Doc."""\n    return 1\n'
-    assert target('def f():\n    """Doc."""\n', before) == ("function", ["f"])
+    assert target('def f():\n    """Doc."""\n', before) == (["f"], [])
 
 
 def test_an_added_overload_does_not_name_the_unchanged_function():
     before = "from typing import overload\n\n\ndef f(x):\n    return x\n"
     after = change("def f(x):", "@overload\ndef f(x: int) -> int: ...\n\n\ndef f(x):", before)
-    assert target(after, before) == ("file", [])
+    assert target(after, before) == ([], [])
+
+
+def scope(after: str | None, before: str = BASE) -> str:
+    return fix_scope([compare("m.py", before, after)])
+
+
+BODY_CHANGE = ("self.records = []", "self.records = None")
+MODULE_CHANGE = ("import os\n", "import os\n\nLIMIT = 3\n")
+
+
+def test_changes_inside_functions_are_function_scope():
+    assert scope(change(*BODY_CHANGE)) == "function"
+
+
+def test_a_class_attribute_change_is_class_scope():
+    assert scope(change("level = 1", "level = 2", change(*BODY_CHANGE))) == "class"
+
+
+def test_a_class_decorator_change_is_class_scope():
+    assert scope(change("class Handler:", "@final\nclass Handler:")) == "class"
+
+
+def test_module_level_code_is_module_scope_even_beside_other_changes():
+    after = change(*MODULE_CHANGE, change("level = 1", "level = 2", change(*BODY_CHANGE)))
+    assert scope(after) == "module"
+    assert scope(change(*MODULE_CHANGE)) == "module"
+
+
+def test_imports_and_new_definitions_beside_a_function_change_do_not_count():
+    after = change(
+        "import os\n",
+        "import os\nimport re\n\ntry:\n    import fast\nexcept ImportError:\n    import slow\n"
+        "\nif TYPE_CHECKING:\n    from typing import Any\n\n\ndef new_helper():\n    pass\n",
+        change(*BODY_CHANGE),
+    )
+    after = change(
+        "    @property\n", "    def clear(self):\n        pass\n\n    @property\n", after
+    )
+    assert scope(after) == "function"
+
+
+def test_an_import_fallback_that_assigns_is_module_scope():
+    after = change(
+        "import os\n", "import os\n\ntry:\n    import fast\nexcept ImportError:\n    fast = None\n"
+    )
+    assert scope(after) == "module"
+
+
+def test_new_methods_alone_are_class_scope():
+    assert (
+        scope(change("    @property\n", "    def clear(self):\n        pass\n\n    @property\n"))
+        == "class"
+    )
+
+
+def test_a_new_function_alone_is_module_scope():
+    assert scope(BASE + "\n\ndef added():\n    pass\n") == "module"
+
+
+def test_removing_a_method_is_function_scope_and_removing_a_class_is_class_scope():
+    assert scope(change("    def reset(self):\n        self.records = []\n\n", "")) == "function"
+    before = "class Gone:\n    def m(self):\n        pass\n\n\nclass Kept:\n    pass\n"
+    assert scope("class Kept:\n    pass\n", before) == "class"
+
+
+def test_an_imports_only_repair_is_module_scope_with_a_whole_file_target():
+    after = change("import os", "import re")
+    assert scope(after) == "module"
+    assert target(after) == ([], [])
+
+
+def test_a_nested_class_attribute_names_the_nested_class():
+    before = "class Outer:\n    class Inner:\n        size = 1\n"
+    after = before.replace("size = 1", "size = 2")
+    assert target(after, before) == ([], ["Outer.Inner"])
+    assert scope(after, before) == "class"
+
+
+def test_the_broadest_scope_across_files_wins():
+    changes = [
+        compare("a.py", BASE, change(*BODY_CHANGE)),
+        compare("b.py", BASE, change("level = 1", "level = 2")),
+    ]
+    assert fix_scope(changes) == "class"
 
 
 def test_a_buggy_file_that_does_not_parse_is_an_error():
@@ -325,7 +425,7 @@ def test_the_target_artifact_round_trips_and_rejects_an_empty_target(tmp_path):
     write_result(tmp_path / "target.json", target)
     assert read_localized_target(tmp_path / "target.json") == target
     with pytest.raises(ValueError):
-        LocalizedTarget(level="file", files=[], text="")
+        LocalizedTarget(files=[], text="", scope="function")
 
 
 # The stage: read buggy files from the image, then compare.
@@ -377,7 +477,9 @@ def test_the_stage_reads_the_reset_checkout_and_saves_the_target(monkeypatch, tm
     assert [profile.value for _, profile in opened] == ["localization"]
     assert sandbox.commands == [["git", "reset", "--hard", "a" * 40]]
     assert sandbox.downloads == ["/testbed/package/core.py"]
-    assert target.files == [TargetFile(path="package/core.py", names=["Handler.reset"], lines=2)]
+    assert target.files == [
+        TargetFile(path="package/core.py", functions=["Handler.reset"], classes=[], lines=2)
+    ]
     assert read_localized_target(paths.target) == target
 
 
@@ -390,7 +492,7 @@ def test_the_stage_skips_created_and_test_files_and_compares_a_deleted_file(monk
     target, sandbox, _, _ = run_stage(monkeypatch, tmp_path, patch, {"package/old.py": BASE})
 
     assert sandbox.downloads == ["/testbed/package/old.py"]
-    assert target.files[0].names == ["Handler.reset", "Handler.name", "helper", "check"]
+    assert target.files[0].functions == ["Handler.reset", "Handler.name", "helper", "check"]
 
 
 def test_a_patch_that_does_not_match_the_image_stops_the_stage(monkeypatch, tmp_path):
@@ -460,3 +562,35 @@ def test_apply_patch_rebuilds_what_git_diffed(tmp_path, context):
             continue
         (file,) = parse_patch(git_diff(before, after, tmp_path, context))
         assert apply_patch(before, file) == after, (case, before, after)
+
+
+# Loading the target preflight found.
+
+
+def test_a_run_copies_the_newest_passed_preflight_of_its_problem(tmp_path):
+    instance = instance_record()
+    older = passed_preflight(tmp_path, instance, scope="function")
+    # IDs order by start time; one created in the same second would tie by chance.
+    older.root.rename(older.root.with_name("20200101T000000Z-00000000"))
+    newest = passed_preflight(tmp_path, instance, scope="class")
+    paths = RunPaths.create(tmp_path / "run")
+
+    target = load_target(OutputPaths(tmp_path), instance, paths)
+
+    assert target.scope == "class"
+    assert paths.target.read_bytes() == newest.target.read_bytes()
+    assert paths.target_log.read_text() == "localize log\n"
+    assert paths.target_source.read_text() == f"preflight/{newest.root.name}\n"
+
+
+def test_only_a_passed_preflight_of_the_same_record_is_used(tmp_path):
+    instance = instance_record()
+    failed = passed_preflight(tmp_path, instance)
+    write_json(failed.status, {"stage": "reference", "state": "failed", "updated_at": "now"})
+    passed_preflight(tmp_path, instance_record(instance_id="other__project-2"))
+    passed_preflight(tmp_path, instance_record(base_commit="b" * 40))
+    no_target = passed_preflight(tmp_path, instance)
+    no_target.target.unlink()
+
+    with pytest.raises(ValueError, match="No passed preflight has a target for owner__project-1"):
+        load_target(OutputPaths(tmp_path), instance, RunPaths.create(tmp_path / "run"))

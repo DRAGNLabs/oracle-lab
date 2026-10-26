@@ -105,6 +105,7 @@ def test_a_judgment_overview_has_the_questions_answers_and_core_evidence(session
     assert "issue" not in overview
     assert overview["run"]["harness"] == "claude"
     assert overview["test_target"] is None
+    assert overview["fix_scope"] is None
     assert overview["outcomes"]["matrix"]["fail_on_buggy_pass_on_golden"] == 1
     assert overview["submission"]["files"] == ["oracle_tests/test_generated.py"]
     assert "evidence/agent-session.log" in overview["evidence"]
@@ -116,7 +117,7 @@ def test_a_classification_overview_has_its_questions_and_evidence(session):
     assert overview["views"] == ["buggy"]
     assert len(overview["questions"]) == len(CLASSIFICATION_LABELS)
     assert overview["questions"][0]["label"] == "Task nature"
-    assert overview["evidence"] == ["instance.json", "rubric.md"]
+    assert overview["evidence"] == ["instance.json", "rubric.md", "target.json"]
     assert "outcomes" not in overview
 
 

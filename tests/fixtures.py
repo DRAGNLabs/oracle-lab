@@ -19,7 +19,7 @@ from oracle_lab.contracts.judgment import FAILURE_MODES, JUDGMENT_LABEL_KEYS
 from oracle_lab.contracts.run import MATRIX_CELLS, InstanceRecord, SubmissionManifest
 from oracle_lab.io import digest, write_json
 from oracle_lab.judge.generation.workspace import save_trace
-from oracle_lab.paths import AttemptPaths, RunPaths
+from oracle_lab.paths import AttemptPaths, OutputPaths, RunPaths
 
 # The run config tests start from, independent of the sample configs.
 RUN_CONFIG = Path(__file__).parent / "run-config.yaml"
@@ -85,9 +85,11 @@ def swerebench_v2_record(**changes) -> dict:
 def localized_target(**changes) -> dict:
     """A saved localized target naming one changed method."""
     target = {
-        "level": "function",
-        "files": [{"path": "package/core.py", "names": ["Client.send"], "lines": 12}],
+        "files": [
+            {"path": "package/core.py", "functions": ["Client.send"], "classes": [], "lines": 12}
+        ],
         "text": "- `package/core.py`: `Client.send`",
+        "scope": "function",
     }
     target.update(changes)
     return target
@@ -422,6 +424,16 @@ def traced_run(root: Path) -> RunPaths:
     return paths
 
 
+def passed_preflight(output: Path, instance: InstanceRecord | None = None, **target) -> RunPaths:
+    """A preflight that passed and localized `instance`, as `load_target` finds it."""
+    paths = OutputPaths(output).new_preflight()
+    write_result(paths.instance, instance or instance_record())
+    write_json(paths.target, localized_target(**target))
+    paths.target_log.write_text("localize log\n")
+    write_json(paths.status, {"stage": "finished", "state": "passed", "updated_at": "now"})
+    return paths
+
+
 def classified_attempt(
     root: Path, result: dict | None = None, instance: InstanceRecord | None = None
 ) -> AttemptPaths:
@@ -429,6 +441,7 @@ def classified_attempt(
     paths = AttemptPaths.create(root)
     instance = instance or instance_record()
     write_result(paths.instance, instance)
+    write_json(paths.target, localized_target())
     paths.config.write_text("source: owner__project-1\n")
     paths.judge.rubric.write_text("# Classification rubric\n")
     write_json(paths.judge.result, judge_attempt(model="classifier-model"))

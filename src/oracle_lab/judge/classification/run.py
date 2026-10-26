@@ -28,6 +28,7 @@ from oracle_lab.harnesses.spend import measure_spend
 from oracle_lab.instance import resolve_source
 from oracle_lab.io import archive_files, digest, write_json
 from oracle_lab.judge.classification.workspace import build_classification_workspace
+from oracle_lab.localization import load_target
 from oracle_lab.paths import AttemptPaths, ClassifierPaths, OutputPaths
 
 
@@ -43,6 +44,11 @@ def classify(config: ClassificationConfig) -> Path:
         config.rubric = str(attempt.judge.rubric.resolve())
         attempt.config.write_text(yaml.safe_dump(config.model_dump(), sort_keys=False))
         write_result(attempt.instance, instance)
+
+        # The classifier reads the target and fix scope preflight found for this problem.
+        stage = "localize"
+        write_status(attempt.root, stage)
+        load_target(OutputPaths(Path(config.output)), instance, attempt)
 
         with docker_client() as client:
             stage = "build"

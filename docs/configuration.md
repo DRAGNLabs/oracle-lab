@@ -290,27 +290,34 @@ Oracle Lab fills them in and saves the exact text sent as `prompt.txt`. Write
 - **Default:** `repository`
 
 `localized` points the agent at the existing code the golden repair changes.
-After the image build, a `localize` stage:
+`oracle-lab preflight` finds that code once per problem, and every localized run
+and task classification of the problem copies the result, so a problem must pass
+preflight first. After the image build, preflight's `localize` stage:
 
 1. reads each changed production Python file from the image;
 2. applies the golden patch to it;
 3. compares the buggy and repaired syntax trees.
 
-The target is the most specific level any changed file reaches:
+The target names:
 
-1. Existing functions and methods whose syntax tree changed, qualified by class
-   (`Outer.method`). A change inside a nested function counts for the function
-   that encloses it.
-2. If no function changed: classes whose own body changed, such as a new method
-   or a changed attribute.
-3. If no class changed either: the changed files.
+- existing functions and methods whose syntax tree changed, qualified by class
+  (`Outer.method`). A change inside a nested function counts for the function
+  that encloses it;
+- classes whose own code changed: an attribute, a base, or a decorator.
 
-Comment and formatting edits never enter the target. Nor do definitions the
-repair adds; a new function counts only through the existing code that calls it.
+When neither exists, it names the classes that gained or lost methods, and
+failing that, the changed files. Module-level code is never named.
+
+Comment, formatting, and docstring edits never enter the target. Nor do
+definitions the repair adds; a new function counts only through the existing code
+that calls it. The stage also records the fix's scope (`function`, `class`, or
+`module`), which preflight and the report show; see
+[`inputs/target.json`](results.md#inputstargetjson).
 The prompt gets the target through `${test_target}`, for example:
 
 ```text
 - `src/_pytest/logging.py`: `LogCaptureFixture.clear`
+- `sphinx/domains/std.py`: `make_glossary_term`, class `StandardDomain`
 - `sklearn/pipeline.py`: class `Pipeline`
 ```
 

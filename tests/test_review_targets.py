@@ -1,5 +1,7 @@
 """A review target is one completed LLM output and the evidence its judge was shown."""
 
+import json
+
 import pytest
 from fixtures import (
     added_failure_mode,
@@ -7,11 +9,13 @@ from fixtures import (
     completed_judgment,
     instance_record,
     judged_run,
+    localized_target,
     out_of_scope_classification,
 )
 
 from oracle_lab.contracts.classification import CLASSIFICATION_LABELS
 from oracle_lab.contracts.judgment import FAILURE_MODES
+from oracle_lab.io import write_json
 from oracle_lab.paths import RunPaths
 from oracle_lab.review.targets import (
     ClassificationTarget,
@@ -70,10 +74,19 @@ def test_judge_evidence_is_what_the_judge_was_shown_without_the_views(tmp_path):
     assert not any(name.startswith(("buggy/", "golden/")) for name in evidence)
 
 
-def test_classification_evidence_is_the_record_and_the_rubric(tmp_path):
+def test_a_localized_run_shows_the_judge_its_target(tmp_path):
+    paths = judged_run(tmp_path)
+    assert "instance/target.json" not in JudgmentTarget.load(paths.root).evidence()
+
+    write_json(paths.target, localized_target(scope="module"))
+    evidence = JudgmentTarget.load(paths.root).evidence()
+    assert json.loads(evidence["instance/target.json"])["scope"] == "module"
+
+
+def test_classification_evidence_is_the_record_the_target_and_the_rubric(tmp_path):
     evidence = ClassificationTarget.load(classified_attempt(tmp_path).root).evidence()
 
-    assert list(evidence) == ["instance.json", "rubric.md"]
+    assert list(evidence) == ["instance.json", "target.json", "rubric.md"]
 
 
 def test_each_target_reads_the_issue_its_judge_read(tmp_path):

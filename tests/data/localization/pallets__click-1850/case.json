@@ -7,15 +7,16 @@
   ],
   "patch": "diff --git a/CHANGES.rst b/CHANGES.rst\nindex 86942e5..d532792 100644\n--- a/CHANGES.rst\n+++ b/CHANGES.rst\n@@ -210,6 +210,8 @@ Unreleased\n     ``result_callback``. The old name is deprecated. :issue:`1160`\n -   Fix issues with ``CliRunner`` output when using ``echo_stdin=True``.\n     :issue:`1101`\n+-   Fix a bug of ``click.utils.make_default_short_help`` for which the\n+    returned string could be as long as ``max_width + 3``. :issue:`1849`\n \n \n Version 7.1.2\ndiff --git a/src/click/utils.py b/src/click/utils.py\nindex 41ce001..114afcc 100644\n--- a/src/click/utils.py\n+++ b/src/click/utils.py\n@@ -47,35 +47,54 @@ def make_str(value):\n     return str(value)\n \n \n-def make_default_short_help(help, max_length=45):\n-    \"\"\"Return a condensed version of help string.\"\"\"\n-    line_ending = help.find(\"\\n\\n\")\n-    if line_ending != -1:\n-        help = help[:line_ending]\n+def make_default_short_help(help: str, max_length: int = 45) -> str:\n+    \"\"\"Returns a condensed version of help string.\"\"\"\n+    # Consider only the first paragraph.\n+    paragraph_end = help.find(\"\\n\\n\")\n+\n+    if paragraph_end != -1:\n+        help = help[:paragraph_end]\n+\n+    # Collapse newlines, tabs, and spaces.\n     words = help.split()\n-    total_length = 0\n-    result = []\n-    done = False\n \n+    if not words:\n+        return \"\"\n+\n+    # The first paragraph started with a \"no rewrap\" marker, ignore it.\n     if words[0] == \"\\b\":\n         words = words[1:]\n \n-    for word in words:\n-        if word[-1:] == \".\":\n-            done = True\n-        new_length = 1 + len(word) if result else len(word)\n-        if total_length + new_length > max_length:\n-            result.append(\"...\")\n-            done = True\n-        else:\n-            if result:\n-                result.append(\" \")\n-            result.append(word)\n-        if done:\n+    total_length = 0\n+    last_index = len(words) - 1\n+\n+    for i, word in enumerate(words):\n+        total_length += len(word) + (i > 0)\n+\n+        if total_length > max_length:  # too long, truncate\n             break\n-        total_length += new_length\n \n-    return \"\".join(result)\n+        if word[-1] == \".\":  # sentence end, truncate without \"...\"\n+            return \" \".join(words[: i + 1])\n+\n+        if total_length == max_length and i != last_index:\n+            break  # not at sentence end, truncate with \"...\"\n+    else:\n+        return \" \".join(words)  # no truncation needed\n+\n+    # Account for the length of the suffix.\n+    total_length += len(\"...\")\n+\n+    # remove words until the length is short enough\n+    while i > 0:\n+        total_length -= len(words[i]) + (i > 0)\n+\n+        if total_length <= max_length:\n+            break\n+\n+        i -= 1\n+\n+    return \" \".join(words[:i]) + \"...\"\n \n \n class LazyFile:\n",
   "expected": {
-    "level": "function",
     "files": [
       {
         "path": "src/click/utils.py",
-        "names": [
+        "functions": [
           "make_default_short_help"
         ],
+        "classes": [],
         "lines": 29
       }
-    ]
+    ],
+    "scope": "function"
   }
 }

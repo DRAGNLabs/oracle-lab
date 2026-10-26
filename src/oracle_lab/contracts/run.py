@@ -105,9 +105,14 @@ class TargetFile(ArtifactModel):
     """One file of a localized target, and what in it the agent is pointed at."""
 
     path: str
-    # Qualified functions or classes, in file order; empty when the whole file is the target.
-    names: list[str]
+    # Qualified names in file order. Both are empty when the whole file is the target.
+    functions: list[str]
+    classes: list[str]
     lines: int  # buggy-file lines this entry spans
+
+
+# Where a golden repair's changes live, narrowest first. See `localization.target.fix_scope`.
+FixScope = Literal["function", "class", "module"]
 
 
 class LocalizedTarget(ArtifactModel):
@@ -117,9 +122,9 @@ class LocalizedTarget(ArtifactModel):
     private data, but it contains no patch text or changed lines.
     """
 
-    level: Literal["function", "class", "file"]
     files: Annotated[list[TargetFile], Field(min_length=1)]
     text: str  # exactly what replaces `${test_target}` in the prompt
+    scope: FixScope  # where the repair's changes live; never shown to the agent
 
 
 class TestCase(ArtifactModel):

@@ -7,15 +7,16 @@
   ],
   "patch": "diff --git a/CHANGELOG.md b/CHANGELOG.md\nindex cb3e1ee..64b5707 100644\n--- a/CHANGELOG.md\n+++ b/CHANGELOG.md\n@@ -10,6 +10,7 @@\n -   [ENH] Add `xlsx_table`, for reading tables from an Excel sheet. @samukweku\n -   [ENH] minor improvements for conditional_join; equality only joins are no longer supported; there has to be at least one non-equi join present. @samukweku\n -   [BUG] `sort_column_value_order` no longer mutates original dataframe.\n+-   [BUG] Extend `fill_empty`'s `column_names` type range. Issue #998. @Zeroto521\n \n ## [v0.22.0] - 2021-11-21\n \ndiff --git a/janitor/functions/fill.py b/janitor/functions/fill.py\nindex 169d75e..dd899dd 100644\n--- a/janitor/functions/fill.py\n+++ b/janitor/functions/fill.py\n@@ -1,3 +1,4 @@\n+from collections.abc import Iterable as abcIterable\n from enum import Enum\n from operator import methodcaller\n from typing import Hashable, Iterable, Union\n@@ -145,7 +146,7 @@ def fill_empty(\n     return _fill_empty(df, column_names, value=value)\n \n \n-@dispatch(pd.DataFrame, (list, tuple))\n+@dispatch(pd.DataFrame, abcIterable)\n def _fill_empty(df, column_names, value=None):\n     \"\"\"Fill empty function for the case that column_names is list or tuple.\"\"\"\n     fill_mapping = {c: value for c in column_names}\n",
   "expected": {
-    "level": "function",
     "files": [
       {
         "path": "janitor/functions/fill.py",
-        "names": [
+        "functions": [
           "_fill_empty"
         ],
+        "classes": [],
         "lines": 5
       }
-    ]
+    ],
+    "scope": "function"
   }
 }

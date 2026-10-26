@@ -5,9 +5,9 @@ record; the private evidence it writes never reaches the generation agent.
 """
 
 from oracle_lab.config import RuntimeConfig, SourceConfig
+from oracle_lab.contracts.run import InstanceRecord
 from oracle_lab.instance import swebench, swerebench_v2
 from oracle_lab.paths import RunPaths
-from oracle_lab.results import InstanceRecord
 
 
 def resolve_source(config: SourceConfig) -> tuple[InstanceRecord, RuntimeConfig]:

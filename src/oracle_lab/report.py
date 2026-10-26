@@ -2,19 +2,17 @@
 
 from pathlib import Path
 
-from oracle_lab.classification.contracts import (
+from oracle_lab.config import RunConfig, load_config
+from oracle_lab.contracts.classification import (
     CLASSIFICATION_LABELS,
     latest_classification,
 )
-from oracle_lab.config import RunConfig, load_config
-from oracle_lab.io import read_json
-from oracle_lab.judge.contracts import (
+from oracle_lab.contracts.judgment import (
     FAILURE_MODES,
     JUDGMENT_LABELS,
     read_judgment_state,
 )
-from oracle_lab.paths import AttemptPaths, RunPaths
-from oracle_lab.results import (
+from oracle_lab.contracts.run import (
     MATRIX_CELLS,
     VERSIONS,
     AgentAttempt,
@@ -23,7 +21,6 @@ from oracle_lab.results import (
     LocalizedTarget,
     MatrixCellName,
     Usage,
-    last_error_message,
     read_agent_attempt,
     read_evaluation_result,
     read_instance_record,
@@ -31,6 +28,9 @@ from oracle_lab.results import (
     read_run_cost,
     read_version_result,
 )
+from oracle_lab.contracts.turn import last_error_message
+from oracle_lab.io import read_json
+from oracle_lab.paths import AttemptPaths, RunPaths
 
 
 def report(paths: RunPaths) -> Path:
@@ -158,8 +158,9 @@ def _pipeline_lines(
 
 
 def _target_summary(target: LocalizedTarget) -> str:
-    """The prompt's one-line-per-file target, on a single line for a table cell."""
-    return "; ".join(line.removeprefix("- ") for line in target.text.splitlines())
+    """The prompt's one-line-per-file target on a single line, then the fix's scope."""
+    names = "; ".join(line.removeprefix("- ") for line in target.text.splitlines())
+    return f"{names} (fix scope: {target.scope})"
 
 
 def _harness_text(result: HarnessResult) -> str:
@@ -410,7 +411,7 @@ def _link(paths: RunPaths, path: Path) -> str:
     return (
         path.relative_to(paths.root).as_posix()
         if path.is_relative_to(paths.root)
-        else (path.as_posix())
+        else path.as_posix()
     )
 
 

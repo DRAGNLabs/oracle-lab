@@ -11,10 +11,10 @@ from oracle_lab.container.sandbox import CommandResult
 from oracle_lab.harnesses import claude, codex, generate, opencode, run_turn
 from oracle_lab.harnesses.launch import (
     AgentTurnRequest,
-    read_trace,
     run_agent_turn,
     turn_status,
 )
+from oracle_lab.harnesses.steps import read_trace
 from oracle_lab.paths import RunPaths
 
 
@@ -118,9 +118,9 @@ def test_interruption_remains_visible_when_collection_fails(tmp_path, monkeypatc
         request = AgentTurnRequest(
             harness=config.agent,
             harness_version="1.2.3",
-            prompt=RunPaths.open(tmp_path).prompt,
+            prompt=RunPaths(tmp_path).prompt,
             working_directory="/testbed",
-            artifact_directory=RunPaths.open(tmp_path).generation,
+            artifact_directory=RunPaths(tmp_path).generation,
         )
         run_agent_turn(sandbox, request, ["codex", "exec"], {}, "CODEX_API_KEY")
     assert "collection also failed" in error.value.__notes__[0]
@@ -244,7 +244,7 @@ def test_a_trace_keeps_json_objects_and_counts_every_other_non_blank_line(tmp_pa
     trace = tmp_path / "trace.jsonl"
     trace.write_text('{"type": "a"}\n\n   \nnot json\n[1, 2]\n{"type": "b"}\n')
 
-    assert read_trace(trace) == ([{"type": "a"}, {"type": "b"}], 2)
+    assert read_trace(trace) == ([(1, {"type": "a"}), (6, {"type": "b"})], 2)
     assert read_trace(tmp_path / "missing.jsonl") == ([], 0)
 
 

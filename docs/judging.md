@@ -79,7 +79,7 @@ rated, and a sidebar with reference (the problem, the stage rubric, and for a
 judgment the trace legend and the selected trace event). Drag the divider to
 resize the sidebar. It shows the rater what the judge had:
 
-- the judge's answers and justifications beside three rating buttons, and after
+- the judge's answers and justifications beside two rating buttons, and after
   saving, a link to the next unreviewed task;
 - a Problem tab: the issue, the task record's other texts, the golden patch, and
   the reference tests;
@@ -115,7 +115,7 @@ uv run oracle-lab agreement ../oracle-lab-data
 It takes one or more runs, classification attempts, or output roots holding
 `runs/` and `classifications/`, and reads every rater's review. It writes
 `agreement.json` and `agreement.md` to `--output`, or by default to
-`output/agreement/<UTC timestamp>/` in the current directory. It needs no Docker,
+`output/agreement/<agreement-id>/` in the current directory. It needs no Docker,
 network, or credentials.
 
 The two stages are reported separately. Each submission question, each

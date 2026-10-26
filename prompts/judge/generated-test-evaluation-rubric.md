@@ -14,26 +14,34 @@ The judgment has two parts:
 
 ## Workspace
 
-- `/oracle-judge/instructions.md` guides you through the workspace and
-  summarizes the saved outcomes.
-- `/oracle-judge/instance/` contains the issue, repair, reference-test patch,
-  and metadata.
-- `/oracle-judge/buggy/` contains the buggy repository and the generated
-  submission.
-- `/oracle-judge/golden/` contains the repaired repository and the identical
-  submission.
-- `/oracle-judge/evidence/` contains the submission manifest, the saved
-  execution evidence, and the agent's recorded session:
+- `/oracle-judge/instance/`: the issue (`issue.md`), the repair (`fix.patch`),
+  the reference-test patch (`reference-tests.patch`), and `metadata.json` with
+  the instance ID, base commit, and reference test IDs. A localized run also has
+  `target.json`: `text` is the target the agent was told to test, and `scope`
+  says where the repair's changes live (`function`, `class`, or `module`). A
+  `module` scope means part of the repair is outside that target.
+- `/oracle-judge/buggy/`: the buggy repository with the generated tests added.
+- `/oracle-judge/golden/`: the repaired repository with the identical generated
+  tests added.
+- `/oracle-judge/evidence/`: what was saved from generation and evaluation.
   - `agent-trace.md`: one numbered line per step, with its action type, what it
     did, and facts about it: which steps read or touched the lines the repair
     changes, which mention a function or class the repair changes, pytest
     counts, and the order of test edits and runs. It ends with each generated
-    test file's versions. Start here.
+    test file's versions.
   - `agent-trace.json`: every step in full, with its command, text, and output,
     under the same step numbers.
   - `agent-session.log`: the readable transcript.
   - `agent-trace.jsonl`: the raw trace, present only when `agent-trace.md` could
     not be built. Then cite its line numbers as steps.
+  - `paired-results.json`: each generated test's outcome on both versions, and
+    its paired outcome, such as `fail_on_buggy_pass_on_golden`.
+  - `buggy-tests.json`, `golden-tests.json`: per-version pytest results,
+    including collection errors and failures.
+  - `buggy-output.log`, `golden-output.log`: the raw pytest output.
+  - `workspace.diff`: every change the agent made to the repository.
+  - `submission-manifest.json`: the captured test files, their hashes, and any
+    edits outside the allowed test directory.
 
 Do not modify either repository. Do not rerun broad test suites; the saved
 results are the authoritative execution evidence.

@@ -6,10 +6,11 @@ import re
 from dataclasses import asdict, replace
 from pathlib import Path
 
+from oracle_lab.container.paths import ORACLE_HOME
 from oracle_lab.container.sandbox import Sandbox
+from oracle_lab.contracts.run import Usage
 from oracle_lab.harnesses.launch import (
     AgentTurnRequest,
-    read_trace,
     run_agent_turn,
     turn_status,
 )
@@ -22,16 +23,17 @@ from oracle_lab.harnesses.steps import (
     Shell,
     Step,
     WriteFile,
-    numbered_events,
+    read_trace,
 )
-from oracle_lab.results import Usage
+from oracle_lab.harnesses.transcript import as_text
 
 # Whether `read_steps` reasoning is the model's own text or a CLI-written summary.
 REASONING = "summary"
 
 
 def parse_trace(path: Path) -> dict:
-    events, malformed = read_trace(path)
+    numbered, malformed = read_trace(path)
+    events = [event for _, event in numbered]
     result = next((event for event in reversed(events) if event.get("type") == "result"), None)
 
     completed = bool(result and result.get("subtype") == "success" and not result.get("is_error"))
@@ -63,7 +65,7 @@ def read_steps(path: Path) -> list[Step]:
     """
     steps: list[Step] = []
     calls: dict[str, int] = {}  # tool_use id -> index in steps
-    for line, event in numbered_events(path):
+    for line, event in read_trace(path)[0]:
         message = event.get("message")
         if event.get("type") not in {"assistant", "user"} or not isinstance(message, dict):
             continue
@@ -85,6 +87,35 @@ def read_steps(path: Path) -> list[Step]:
                 index = calls.pop(block["tool_use_id"])
                 steps[index] = _with_result(steps[index], block, event.get("tool_use_result"))
     return steps
+
+
+def render_event(event: dict) -> list[str] | None:
+    """`session.log` lines for a message event: its typed content blocks."""
+    message = event.get("message")
+    if not isinstance(message, dict) or not isinstance(message.get("content"), list):
+        return None
+    lines = []
+    for block in message["content"]:
+        if not isinstance(block, dict):
+            lines.append(as_text(block))
+            continue
+        block_type = block.get("type")
+        if block_type == "text":
+            lines.append(block.get("text", ""))
+        elif block_type == "thinking":
+            lines += ["[Thinking output]", block.get("thinking") or "[Not exposed by CLI]"]
+        elif block_type == "tool_use":
+            lines += [f"Tool: {block.get('name')} [{block.get('id')}]", as_text(block.get("input"))]
+        elif block_type == "tool_result":
+            lines += [
+                f"Tool result: {block.get('tool_use_id')} (error={block.get('is_error', False)})",
+                as_text(block.get("content")),
+            ]
+        else:
+            lines.append(as_text(block))
+    if event.get("parent_tool_use_id"):
+        lines.append(f"Parent tool: {event['parent_tool_use_id']}")
+    return lines
 
 
 def _action(name: str, arguments: dict) -> Action:
@@ -166,7 +197,7 @@ def run_turn(sandbox: Sandbox, request: AgentTurnRequest) -> dict:
     if not harness.multi_agent:
         argv += ["--tools", "Bash,Read,Write,Edit,Glob,Grep"]
 
-    environment = {"CLAUDE_CONFIG_DIR": "/home/oracle/.claude", "DISABLE_AUTOUPDATER": "1"}
+    environment = {"CLAUDE_CONFIG_DIR": ORACLE_HOME + "/.claude", "DISABLE_AUTOUPDATER": "1"}
     credential_name = harness.credential_env
     if harness.provider == "openrouter":
         environment.update(

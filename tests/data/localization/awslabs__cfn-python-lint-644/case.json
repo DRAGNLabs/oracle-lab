@@ -1,0 +1,23 @@
+{
+  "instance_id": "awslabs__cfn-python-lint-644",
+  "repo": "awslabs/cfn-python-lint",
+  "base_commit": "387836c8d3479368712a86ec29e1491ddc49ab45",
+  "source_roots": [
+    "."
+  ],
+  "patch": "diff --git a/src/cfnlint/conditions.py b/src/cfnlint/conditions.py\nindex 8ad07f8fd..f1d65c3ff 100644\n--- a/src/cfnlint/conditions.py\n+++ b/src/cfnlint/conditions.py\n@@ -96,17 +96,24 @@ class Condition(object):\n     Equals = None\n     Influenced_Equals = None\n \n-    def __init__(self, template, name):\n+    def __init__(self, template, name=None, sub_condition=None):\n         self.And = []\n         self.Or = []\n         self.Not = []\n         self.Influenced_Equals = {}\n-        value = template.get('Conditions', {}).get(name, {})\n-        try:\n-            self.process_condition(template, value)\n-        except ConditionParseError:\n-            LOGGER.debug('Error parsing condition: %s', name)\n-            self.Equal = None\n+        if name is not None:\n+            value = template.get('Conditions', {}).get(name, {})\n+            try:\n+                self.process_condition(template, value)\n+            except ConditionParseError:\n+                LOGGER.debug('Error parsing condition: %s', name)\n+                self.Equals = None\n+        elif sub_condition is not None:\n+            try:\n+                self.process_condition(template, sub_condition)\n+            except ConditionParseError:\n+                LOGGER.debug('Error parsing condition: %s', name)\n+                self.Equals = None\n \n     def test(self, scenarios):\n         \"\"\" Test a condition based on a scenario \"\"\"\n@@ -123,7 +130,6 @@ class Condition(object):\n         if self.Not:\n             for n in self.Not:\n                 return not n.test(scenarios)\n-\n         return self.Equals.test(scenarios)\n \n     def process_influenced_equal(self, equal):\n@@ -172,7 +178,11 @@ class Condition(object):\n             if isinstance(value, dict):\n                 if len(value) == 1:\n                     for k, v in value.items():\n-                        if k == 'Condition':\n+                        if k == cfnlint.helpers.FUNCTION_EQUALS:\n+                            equal = Equals(v)\n+                            self.process_influenced_equal(equal)\n+                            results.append(equal)\n+                        elif k == 'Condition':\n                             condition = Condition(template, v)\n                             results.append(condition)\n                             for i_e_k, i_e_v in condition.Influenced_Equals.items():\n@@ -180,10 +190,14 @@ class Condition(object):\n                                     self.Influenced_Equals[i_e_k] = set()\n                                 for s_v in i_e_v:\n                                     self.Influenced_Equals[i_e_k].add(s_v)\n-                        elif k == cfnlint.helpers.FUNCTION_EQUALS:\n-                            equal = Equals(v)\n-                            self.process_influenced_equal(equal)\n-                            results.append(equal)\n+                        else:\n+                            condition = Condition(template, None, value)\n+                            results.append(condition)\n+                            for i_e_k, i_e_v in condition.Influenced_Equals.items():\n+                                if not self.Influenced_Equals.get(i_e_k):\n+                                    self.Influenced_Equals[i_e_k] = set()\n+                                for s_v in i_e_v:\n+                                    self.Influenced_Equals[i_e_k].add(s_v)\n \n         return results\n \n",
+  "expected": {
+    "files": [
+      {
+        "path": "src/cfnlint/conditions.py",
+        "functions": [
+          "Condition.__init__",
+          "Condition.process_function"
+        ],
+        "classes": [],
+        "lines": 32
+      }
+    ],
+    "scope": "function"
+  }
+}

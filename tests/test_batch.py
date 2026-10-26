@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from fixtures import completed_judgment, evaluation_result, judge_attempt
+from fixtures import completed_judgment, evaluation_result, judge_attempt, run_status
 
 from oracle_lab.batch import load_batch_config, run_batch
 from oracle_lab.batch.summary import _aggregate_judgments
@@ -63,7 +63,7 @@ def fake_result(
             matrix=matrix,
         ),
     )
-    write_json(run_dir / "status.json", {"state": "completed"})
+    write_json(run_dir / "status.json", run_status())
 
 
 def fake_judgment(
@@ -74,7 +74,7 @@ def fake_judgment(
     reason: str = "other_target_behavior",
     answer: str = "yes",
 ) -> None:
-    paths = RunPaths.open(run_dir)
+    paths = RunPaths(run_dir)
     paths.judge.root.mkdir(parents=True, exist_ok=True)
     paths.judge.rubric.write_text("rubric")
     if status == "completed":

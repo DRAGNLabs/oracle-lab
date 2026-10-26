@@ -10,8 +10,8 @@ source and tests. Only the repos listed there work.
 from __future__ import annotations
 
 from oracle_lab.config import RuntimeConfig, SourceConfig
+from oracle_lab.contracts.run import InstanceRecord
 from oracle_lab.instance.swebench import RepositoryLayout, instance_from, load_record
-from oracle_lab.results import InstanceRecord
 
 REPOSITORY_LAYOUTS = {
     "wtforms/wtforms": RepositoryLayout("src/wtforms", "wtforms", ("tests",)),
@@ -54,6 +54,4 @@ def runtime_for(record: dict) -> RuntimeConfig:
         python="/usr/local/bin/python",
         pythonpath=layout.pythonpath,
         pytest_plugins=list(layout.pytest_plugins),
-        # The image already contains an editable install of the checkout.
-        rebuild=":",
     )

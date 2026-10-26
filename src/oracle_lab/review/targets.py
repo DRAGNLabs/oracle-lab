@@ -14,22 +14,32 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import ClassVar, NamedTuple, Self
 
-from oracle_lab.classification.contracts import (
+from oracle_lab.config import RunConfig, load_config, repo_path
+from oracle_lab.container.paths import CLASSIFICATION_ROOT, JUDGE_ROOT
+from oracle_lab.contracts.classification import (
     CLASSIFICATION_LABELS,
     InScopeClassification,
     OutOfScopeClassification,
     read_saved_classification,
 )
-from oracle_lab.classification.workspace import CLASSIFICATION_ROOT, classification_evidence
-from oracle_lab.config import RunConfig, load_config, repo_path
-from oracle_lab.io import read_json
-from oracle_lab.judge.contracts import (
+from oracle_lab.contracts.judgment import (
     FAILURE_MODES,
     JUDGMENT_LABELS,
     CompletedJudgment,
     validate_judgment,
 )
-from oracle_lab.judge.workspace import JUDGE_ROOT, judge_evidence
+from oracle_lab.contracts.review import Stage
+from oracle_lab.contracts.run import (
+    EvaluationResult,
+    InstanceRecord,
+    SubmissionManifest,
+    read_evaluation_result,
+    read_instance_record,
+    read_submission_manifest,
+)
+from oracle_lab.io import read_json
+from oracle_lab.judge.classification.workspace import classification_evidence
+from oracle_lab.judge.generation.workspace import judge_evidence
 from oracle_lab.paths import (
     AttemptPaths,
     ClassifierPaths,
@@ -38,15 +48,6 @@ from oracle_lab.paths import (
     OutputPaths,
     RunPaths,
 )
-from oracle_lab.results import (
-    EvaluationResult,
-    InstanceRecord,
-    SubmissionManifest,
-    read_evaluation_result,
-    read_instance_record,
-    read_submission_manifest,
-)
-from oracle_lab.review.contracts import Stage
 
 
 class TargetError(ValueError):
@@ -121,7 +122,7 @@ class ReviewTarget(ABC):
         """The files the judge read besides the repository views, by path in its workspace.
 
         Files built for the judge rather than copied from the run, such as its
-        instructions, are rebuilt by the current code.
+        trace summary, are rebuilt by the current code.
         """
         with TemporaryDirectory(prefix="oracle-review-evidence-") as staging:
             return {
@@ -144,7 +145,7 @@ class JudgmentTarget(ReviewTarget):
 
     @classmethod
     def load(cls, root: Path) -> Self:
-        paths = RunPaths.open(root)
+        paths = RunPaths(root)
         if not paths.judge.judgment.is_file():
             raise TargetError("The run has no judgment")
         answers = validate_judgment(read_json(paths.judge.judgment))
@@ -155,7 +156,7 @@ class JudgmentTarget(ReviewTarget):
 
     @property
     def paths(self) -> RunPaths:
-        return RunPaths.open(self.root)
+        return RunPaths(self.root)
 
     @property
     def judge(self) -> JudgmentPaths:
@@ -186,9 +187,7 @@ class JudgmentTarget(ReviewTarget):
         }
 
     def _evidence_table(self, staging: Path) -> list[tuple[Path, str]]:
-        return judge_evidence(
-            self.paths, staging, self.instance, self.evaluation(), self.manifest()
-        )
+        return judge_evidence(self.paths, staging, self.instance, self.manifest())
 
 
 class ClassificationTarget(ReviewTarget):
@@ -297,12 +296,8 @@ def find_targets(path: Path) -> tuple[list[ReviewTarget], list[UnreviewableTarge
         candidates = [(ClassificationTarget, path)]
     else:
         output = OutputPaths(path)
-        candidates = [(JudgmentTarget, run) for run in _directories(output.runs)]
-        candidates += [
-            (ClassificationTarget, attempt)
-            for instance in _directories(output.classifications)
-            for attempt in _directories(instance)
-        ]
+        candidates = [(JudgmentTarget, run.root) for run in output.saved_runs()]
+        candidates += [(ClassificationTarget, attempt.root) for attempt in output.saved_attempts()]
     if not candidates:
         raise TargetError(f"No runs or classification attempts under {path}")
 
@@ -330,9 +325,3 @@ def _is_run(path: Path) -> bool:
 
 def _is_attempt(path: Path) -> bool:
     return AttemptPaths(path).judge.classification.is_file()
-
-
-def _directories(path: Path) -> list[Path]:
-    if not path.is_dir():
-        return []
-    return sorted(child for child in path.iterdir() if child.is_dir())

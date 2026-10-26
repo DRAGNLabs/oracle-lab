@@ -5,15 +5,16 @@ from __future__ import annotations
 from dataclasses import asdict
 from pathlib import Path
 
+from oracle_lab.container.paths import ORACLE_HOME
 from oracle_lab.container.sandbox import Sandbox
+from oracle_lab.contracts.run import Usage
 from oracle_lab.harnesses.launch import (
     AgentTurnRequest,
-    read_trace,
     run_agent_turn,
     turn_status,
 )
-from oracle_lab.harnesses.steps import OtherTool, Shell, Step, numbered_events
-from oracle_lab.results import Usage
+from oracle_lab.harnesses.steps import OtherTool, Shell, Step, read_trace
+from oracle_lab.harnesses.transcript import as_text
 
 # Codex writes its final response to a file instead of the JSON event stream.
 LAST_MESSAGE_PATH = "/tmp/oracle-agent/final.txt"
@@ -28,7 +29,8 @@ def parse_trace(path: Path) -> dict:
     errors = []
     completed = False
     failed = False
-    events, malformed = read_trace(path)
+    numbered, malformed = read_trace(path)
+    events = [event for _, event in numbered]
     for event in events:
         if event.get("type") == "turn.completed":
             usage = _usage(event.get("usage"))
@@ -56,7 +58,7 @@ def read_steps(path: Path) -> list[Step]:
     Codex records no timestamps.
     """
     steps = []
-    for line, event in numbered_events(path):
+    for line, event in read_trace(path)[0]:
         item = event.get("item")
         if event.get("type") != "item.completed" or not isinstance(item, dict):
             continue
@@ -79,6 +81,22 @@ def read_steps(path: Path) -> list[Step]:
             fields = {key: value for key, value in item.items() if key not in {"id", "type"}}
             steps.append(Step("tool", line, action=OtherTool(str(kind), fields)))
     return steps
+
+
+def render_event(event: dict) -> list[str] | None:
+    """`session.log` lines for an item event: a command that ran, or some text."""
+    item = event.get("item")
+    if not isinstance(item, dict):
+        return None
+    if item.get("type") == "command_execution":
+        return [
+            f"Command [{item.get('id')}]: {item.get('command', '')}",
+            f"Status: {item.get('status')} | Exit code: {item.get('exit_code')}",
+            item.get("aggregated_output", ""),
+        ]
+    if "text" in item:
+        return [f"{item.get('type')} [{item.get('id')}]", as_text(item["text"])]
+    return None
 
 
 def _usage(raw: dict | None) -> dict | None:
@@ -142,7 +160,7 @@ def run_turn(sandbox: Sandbox, request: AgentTurnRequest) -> dict:
         sandbox,
         request,
         argv,
-        {"CODEX_HOME": "/home/oracle/.codex"},
+        {"CODEX_HOME": ORACLE_HOME + "/.codex"},
         credential_name,
         last_message_path=LAST_MESSAGE_PATH,
     )

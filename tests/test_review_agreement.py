@@ -9,9 +9,9 @@ from fixtures import (
     judgment_ratings,
 )
 
+from oracle_lab.contracts.review import AgreementReport
 from oracle_lab.io import read_json, write_json
 from oracle_lab.review.agreement import agreement, compute_agreement, krippendorff_alpha
-from oracle_lab.review.contracts import AgreementReport
 
 RATINGS = ("agree", "disagree")
 

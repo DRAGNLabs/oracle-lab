@@ -19,8 +19,6 @@ Read these references before changing related behavior:
 - `docs/containers.md` for Docker transport and image builds.
 - `docs/research-framing.md` for the research questions, oracle states, and
   failure-mode start list behind the judge rubrics.
-- `docs/features/data-export/implementation.md` for the planned output layout
-  and Hugging Face dataset export.
 
 ## Architecture and trust boundaries
 
@@ -64,16 +62,17 @@ The pipeline stages run in this order, and each is one module or package that
 - `src/oracle_lab/instance/`: resolve — dataset record, runtime, and private
   ground truth.
 - `src/oracle_lab/container/images.py`: build — the prepared runtime image.
-- `src/oracle_lab/localization/`: localize — for localized runs, the target
-  named in the prompt. `patches.py` applies the golden patch on the host and
-  `target.py` compares the buggy and repaired syntax trees.
+- `src/oracle_lab/localization/`: localize — the target named in a localized
+  prompt, and the fix's scope. Preflight computes it once per problem;
+  `load_target` copies it into runs and classifications. `patches.py` applies the
+  golden patch on the host and `target.py` compares the buggy and repaired syntax
+  trees.
 - `src/oracle_lab/evaluation/`: reference and evaluate — paired execution in
   `__init__.py` and outcome pairing in `outcomes.py`.
 - `src/oracle_lab/generation.py`: generate — one agent turn in a buggy
   checkout, then capture and freeze the submission.
-- `src/oracle_lab/judge/`: judge — `contracts.py` (every persisted judge
-  contract, plus judgment parsing and saved state), `workspace.py` (building the
-  privileged `/oracle-judge` bundle), and `run.py` (the LLM judge stage).
+- `src/oracle_lab/judge/generation/`: judge — `workspace.py` (building the
+  privileged `/oracle-judge` bundle) and `run.py` (the LLM judge stage).
 - `src/oracle_lab/report.py`: report — Markdown rendering from saved artifacts.
 
 Supporting these:
@@ -84,13 +83,12 @@ Supporting these:
 - `src/oracle_lab/preflight.py`: `preflight`, which runs the stages before
   generation plus an environment check, without calling a model.
 - `src/oracle_lab/batch/`: sequential batch execution and its summary.
-- `src/oracle_lab/classification/`: standalone task classification, run with
-  `classify` outside the run stages. Its `contracts.py`, `workspace.py`, and
-  `run.py` mirror `judge/`. Reports read the newest matching attempt.
+- `src/oracle_lab/judge/classification/`: standalone task classification, run
+  with `classify` outside the run stages. Its `workspace.py` and `run.py`
+  mirror `judge/generation/`. Reports read the newest matching
+  attempt.
 - `src/oracle_lab/review/`: human review of the LLM judges, one problem (task
   instance) at a time.
-  - `contracts.py`: the rating scale, the review, its provenance, and the
-    agreement report.
   - `targets.py`: `JudgmentTarget` and `ClassificationTarget`, which hold
     everything particular to each stage, finding them on disk, and grouping them
     into a `Problem` per instance, in rating order.
@@ -98,31 +96,45 @@ Supporting these:
     fetch.
   - `store.py`: saving and reading reviews.
   - `agreement.py`: inter-rater agreement and judge quality.
-- `src/oracle_lab/web/`: the local review page. `session.py` answers what the
-  page asks, `server.py` serves it over HTTP on `127.0.0.1`, and `static/` is the
-  page itself: one ES module per view, with pinned libraries in `static/vendor/`.
-  It holds no review logic of its own.
+  - `web/`: the local review page. `session.py` answers what the page asks,
+    `server.py` serves it over HTTP on `127.0.0.1`, and `static/` is the page
+    itself: one ES module per view, with pinned libraries in `static/vendor/`.
+    It holds no review logic of its own.
 - `src/oracle_lab/trace/`: a run's agent trace as typed, annotated events, for
   the review page's Agent trace and Test files tabs. Harness adapters turn traces
   into shared steps (`harnesses/steps.py`); `shell.py` classifies shell commands
   with tree-sitter-bash; `facts.py` adds patch overlap and test file versions;
   `build.py` reads the run with the strict contracts. It annotates facts only,
   never failure modes.
-- `src/oracle_lab/export/`: an output root as a dataset. `contracts.py` holds
-  one row model per table and the export manifest; `tables.py` reads runs,
+- `src/oracle_lab/export/`: an output root as a dataset. `tables.py` reads runs,
   attempts, and reviews through the persisted contracts; `writer.py` writes
   Parquet, raw copies, and the dataset card; `hub.py` uploads to Hugging Face.
-- `src/oracle_lab/spend.py`: the OpenRouter key spend measured around a run's
-  model stages, saved as `cost.json`.
-- `src/oracle_lab/config.py`, `paths.py`, `results.py`: the input contract, the
-  artifact layout, and the result contracts. `paths.py` names every directory
-  under the output root: `OutputPaths`, `RunPaths`, `AttemptPaths`, and the
-  `judge/` directory each LLM judge writes (`JudgePaths`).
-- `src/oracle_lab/repository.py`: the repository checkout inside a sandbox,
-  shared by generation and evaluation.
+- `src/oracle_lab/contracts/`: every persisted contract, and how each saved
+  file is read back.
+  - `base.py`: `ArtifactModel` (files Oracle Lab or a container writes),
+    `StrictModel` (what a model wrote), and the shared hash types.
+  - `run.py`: what a run or classification attempt saves, from the instance
+    record to the evaluation result, cost, and status. It also verifies the
+    frozen submission's checksums (`verify_bundle`).
+  - `turn.py`: what both LLM judges share: answers, failed turns, and parsing
+    a model's JSON.
+  - `judgment.py`: the generated-test judgment, its parsing, and saved state.
+  - `classification.py`: the task classification.
+  - `review.py`: the rating scale, the review, its provenance, and the
+    agreement report.
+  - `export.py`: one row model per exported table, and the export manifest.
+- `src/oracle_lab/config.py`, `paths.py`: the input contract and the artifact
+  layout. `paths.py` names every
+  directory under the output root: `OutputPaths`, `RunPaths` and
+  `AttemptPaths` (which share `InstancePaths`), `BatchPaths`, `AgreementPaths`,
+  and the `judge/` directory each LLM judge writes (`JudgePaths`).
 - `src/oracle_lab/container/`, `harnesses/`: Docker transport and the agent CLI
-  adapters. Within `container/`, `helpers/` holds the scripts copied into images and
-  `docker/` the checked-in harness/runtime Dockerfiles.
+  adapters. Within `container/`, `repository.py` is the repository checkout
+  inside a sandbox, shared by generation and evaluation; `paths.py` names the
+  container locations more than one module uses; `helpers/` holds the
+  scripts copied into images and `docker/` the checked-in harness/runtime
+  Dockerfiles. Within `harnesses/`, `spend.py` measures the OpenRouter key spend
+  around a run's model stages and saves it as `cost.json`.
 - `src/oracle_lab/io.py`: JSON reading/writing and hashing.
 
 - `configs/`: runnable example configurations.
@@ -166,9 +178,8 @@ When adding or changing persisted artifacts:
 3. Update `docs/results.md` and report links when applicable.
 4. Add tests for parsing, failure behavior, integrity, or rendering.
 
-Model every persisted contract in `results.py`, `judge/contracts.py`,
-`classification/contracts.py`, or `review/contracts.py`, and validate it where
-container output enters the host, not at each reader. Test fixtures for these
+Model every persisted contract in `contracts/`, and validate it where container
+output enters the host, not at each reader. Test fixtures for these
 artifacts belong in `tests/fixtures.py` so one schema change breaks in one place.
 
 Two conventions keep call sites predictable: `RunPaths` is the handle for a run,

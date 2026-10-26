@@ -9,7 +9,7 @@ output/
 ├── preflight/<run-id>/                         # oracle-lab preflight
 ├── batches/<batch-id>/                         # oracle-lab batch
 ├── classifications/<instance-id>/<attempt-id>/ # oracle-lab classify
-└── agreement/<UTC timestamp>/                  # oracle-lab agreement (default)
+└── agreement/<agreement-id>/                   # oracle-lab agreement (default)
 ```
 
 Run, batch, and attempt IDs are the UTC start time and a random suffix, such as
@@ -36,7 +36,8 @@ report.
 │   ├── instance.json
 │   ├── prompt.txt
 │   ├── target.json (localized runs only)
-│   └── target.log (localized runs only)
+│   ├── target.log (localized runs only)
+│   └── target-source.txt (localized runs only)
 ├── image-build/
 │   ├── runtime.json
 │   ├── harnesses/{harnesses.Dockerfile,package.json,package-lock.json}
@@ -86,7 +87,8 @@ report.
 │   ├── prompt.md
 │   ├── judgment.raw.txt
 │   ├── judgment.json
-│   ├── agent/{command.json,version.txt,trace.jsonl,stderr.log,final.txt,result.json}
+│   ├── agent/{command.json,version.txt,trace.jsonl,stderr.log,launch.log,final.txt,result.json}
+│   ├── agent-history/<UTC timestamp>/agent/ (when a transient failure was retried)
 │   ├── reviews/<rater>/{review.json,provenance.json} (after human review)
 │   └── reviews-history/<rater>/<UTC timestamp>/ (replaced reviews)
 ├── judge-history/<archived judge attempts>/
@@ -101,8 +103,8 @@ When a file is missing, check `status.json` and the last stage's log.
 Generation, judge, and classification turns are retried after a recognized
 transient API or transport error. There are up to three retries, after 30, 90,
 and 180 seconds. Each retry uses a fresh container and workspace. The earlier
-attempt is kept under `generation-history/`, `judge-history/`, or a
-classification attempt's `agent-history/`. Other harness failures and deadlines
+attempt is kept under `generation-history/` for generation, and under
+`judge/agent-history/` for the judge and the classifier. Other harness failures and deadlines
 are not retried; they end with their normal status.
 
 ## Preflight directories
@@ -110,7 +112,8 @@ are not retried; they end with their normal status.
 `oracle-lab preflight` checks an instance without calling a model. Each config
 gets a timestamped directory under `<output>/preflight/`, apart from real runs.
 It runs resolve, build, localize (localized configs only), and the reference
-check, the same way a run does, then an environment check:
+check, then an environment check. Preflight is the only command that computes a
+target; runs and classifications copy it from here:
 
 ```text
 <output>/preflight/<run-id>/
@@ -149,7 +152,10 @@ Task classifications are stored per task instance, not in run directories:
 ├── cost.json
 ├── inputs/
 │   ├── config.resolved.yaml
-│   └── instance.json
+│   ├── instance.json
+│   ├── target.json
+│   ├── target.log
+│   └── target-source.txt
 ├── image-build/
 └── judge/
     ├── rubric.md
@@ -162,6 +168,11 @@ Task classifications are stored per task instance, not in run directories:
     ├── reviews/<rater>/{review.json,provenance.json} (after human review)
     └── reviews-history/<rater>/<UTC timestamp>/ (replaced reviews)
 ```
+
+An attempt copies its [`inputs/target.json`](#inputstargetjson) from the problem's
+preflight, as a localized run does, and puts it in the classifier's workspace.
+The classifier then sees the automated fix scope beside the task record. A
+problem without a passed preflight is not classified.
 
 Every `classify` call creates a new attempt. The classifier's files are never
 changed; human reviews are added beside them, in the same format as
@@ -208,10 +219,11 @@ SHA-256.
 
 The judge's disposable container receives:
 
-- `rubric.md` and the rendered `instructions.md`;
+- `rubric.md`;
 - the `/oracle-judge/buggy` and `/oracle-judge/golden` repository views, each
   with the generated submission;
 - the issue and the patches;
+- a localized run's `target.json`, with the target and the fix scope;
 - the saved evaluation evidence;
 - the agent's trace: `evidence/agent-trace.md` (summarized) and
   `evidence/agent-trace.json` (`judge/trace.json`), or the raw
@@ -304,8 +316,8 @@ The run's latest checkpoint: `stage`, `state`, `updated_at`, and an error if
 there was one. The stages, in order:
 
 1. `resolve`
-2. `build`
-3. `localize` (localized runs only)
+2. `localize` (localized runs only): copy the target the problem's preflight found
+3. `build`
 4. `reference`
 5. `generate`, which includes capturing the submission
 6. `evaluate`
@@ -364,7 +376,7 @@ The normalized judgment. A completed one has `status`, `tests_issue`,
 and `no_attempt_reason` a `no`; otherwise each is JSON `null`.
 
 `failure_modes` decides every start-list label (the keys in
-`judge/contracts.FAILURE_MODES`): `{"decision": "absent"}`, or
+`contracts/judgment.FAILURE_MODES`): `{"decision": "absent"}`, or
 `{"decision": "present", "steps": [...], "justification": "..."}` with at least one
 trace step. `added_failure_modes` lists the judge's own labels, each with `name`,
 `definition`, `steps`, and `justification`. Steps are the step numbers of
@@ -438,27 +450,51 @@ text, changed line numbers, or expected behavior.
 
 ### `inputs/target.json`
 
-The part of the buggy repository the agent is told to test. Only localized runs
-have it. It names the existing code the golden repair changes. That code is
+The part of the buggy repository the agent is told to test, and the fix's scope.
+Localized runs and classification attempts have it. It names the existing code the golden repair changes. That code is
 found by comparing the syntax trees of the buggy and repaired files. The file
 holds no patch text or changed lines.
 
 | Field | Meaning |
 |---|---|
-| `level` | `function`, `class` or `file`: the most specific level any changed file reaches |
-| `files` | One entry per file, each with `path`, `names` and `lines` |
-| `files[].names` | Qualified functions (`Outer.method`) or classes, in file order; empty for a whole-file entry |
+| `files` | One entry per file, each with `path`, `functions`, `classes` and `lines` |
+| `files[].functions` | Qualified functions and methods (`Outer.method`), in file order |
+| `files[].classes` | Qualified classes, in file order. Both lists are empty for a whole-file entry |
 | `files[].lines` | Lines the entry spans in the buggy file |
 | `text` | Exactly what replaces `${test_target}` in the prompt |
+| `scope` | Where the repair's changes live: `function`, `class`, or `module`. Never shown to the agent |
 
-One level is chosen for all changed production files. Changed existing
-functions come first. Classes whose own body changed are used only when no
-function changed. Whole files are used only when neither changed. Comment and
-formatting edits never enter the target, and nor do definitions the repair adds.
+The target names every changed existing function and every class whose own
+code (attributes, bases, decorators) changed. When neither exists, it names the
+classes that gained or lost methods, and failing that, the changed files.
+Module-level code is never named. Comment, formatting, and docstring edits never
+enter the target, and nor do definitions the repair adds.
 
-`inputs/target.log` is the container output from reading the buggy files. The
-stage first resets the checkout to `base_commit`, as the agent's workspace is, so
-it reads the same code the agent sees.
+`scope` is the broadest place the repair changes code, whatever the target names:
+
+- `function`: every change is inside existing functions or methods, including
+  removing one.
+- `class`: some change is in a class's own code: an attribute, base, or
+  decorator, or removing the class.
+- `module`: some change is module-level code outside any function or class.
+
+Comments, formatting, docstrings, imports, and new definitions do not count.
+When new definitions are the whole repair, the scope is where they were added:
+`class` for new methods, `module` for new top-level definitions. The target names
+everything in a `function` or `class` scope. A `module` scope means part of the
+fix is outside the target, so preflight and `report.md` show the scope.
+
+Preflight computes the target once per problem. `inputs/target.log` is the
+container output from reading the buggy files. The stage first resets the
+checkout to `base_commit`, as the agent's workspace is, so it reads the same code
+the agent sees.
+
+A localized run and a task classification copy `target.json` and `target.log`
+from the newest preflight in the same output root that passed for the same
+record (instance ID, base commit, and record checksum).
+`inputs/target-source.txt` names that preflight, such as
+`preflight/20261023T193937Z-9101b7e0`. Without one, the run or classification
+stops at `localize` and asks for a preflight.
 
 ## `image-build/`
 
@@ -519,8 +555,9 @@ the OpenRouter key (see [`cost.json`](#costjson)).
 
 ### `generation/command.json`
 
-The exact agent CLI arguments: the model, isolation flags, provider overrides,
-and the wall-time limit. No credential values.
+The exact agent CLI arguments: the model, isolation flags, and provider
+overrides. No credential values. The wall-time limit is enforced by the
+container, not passed to the CLI.
 
 ### `generation/version.txt`
 
@@ -544,6 +581,7 @@ Normalized generation metadata.
 | `errors` | Structured errors extracted from the trace |
 | `unparsed_trace_lines` | Lines that were not valid JSON |
 | `usage` | Token counts with one meaning for every harness, or null |
+| `harness`, `provider`, `model`, `harness_version`, `limit` | Which CLI, model, and stopping limit ran the turn |
 
 `usage` has the same fields for every harness:
 
@@ -564,7 +602,7 @@ count. Each adapter adds them back.
 | File | Contents |
 |---|---|
 | `stderr.log` | Agent CLI standard error; often empty on success |
-| `setup.log` | Generation-container creation, repository reset/rebuild, test visibility, and initial snapshot diagnostics |
+| `setup.log` | Generation-container creation, repository reset, test visibility, and initial snapshot diagnostics |
 | `launch.log` | Agent launch and setup diagnostics |
 | `capture.log` | Final snapshot, workspace diff, and generated-file copy diagnostics |
 
@@ -672,9 +710,10 @@ collect.
 | File | Contents |
 |---|---|
 | `imports.json` | Each configured module and the file it imported from; catches an import from another installed copy |
-| `runner.json` | The in-container runner's inputs: workdir, output, targets, source roots, and imports |
+| `runner.json` | The in-container runner's inputs: workdir, output, targets, import probes, and pytest plugins |
 | `command.json` | The pytest command (not the agent command) |
 | `execution.json` | The runner's exit code, duration, and timeout flag |
+| `tests.raw.json` | The runner's own `tests.json`, kept when it could not be read; `tests.json` then holds the normalized `runner_error` |
 | `output.log` | Output from workspace setup, patching, pytest, and Docker |
 | `repair.patch` | The exact golden source patch; golden executions only |
 | `reference.patch` | The private test patch; reference executions only |
@@ -699,8 +738,8 @@ uv run oracle-lab evaluate output/runs/<run-id>
 
 does three things:
 
-1. It moves the current `evaluation/` into `evaluation-history/<UTC timestamp>/`.
-2. It verifies the frozen manifest.
+1. It verifies the frozen manifest.
+2. It moves the current `evaluation/` into `evaluation-history/<UTC timestamp>/`.
 3. It evaluates the frozen tests in fresh containers.
 
 Generation files, provenance, the runtime image, and the frozen tests stay
@@ -730,7 +769,7 @@ the nearest stage log.
 ## Agreement reports
 
 `oracle-lab agreement` writes a directory, by default
-`output/agreement/<UTC timestamp>/` in the current directory, holding:
+`output/agreement/<agreement-id>/` in the current directory, holding:
 
 - `agreement.json`: `created_at`, the `inputs` it read, every `raters` ID, and
   per stage (`judge`, `classification`) the number of targets and reviews and,
@@ -766,7 +805,7 @@ needs `HF_TOKEN`, read from the environment or `.env`.
 ```
 
 Each table's columns are the fields of its row model in
-`src/oracle_lab/export/contracts.py`:
+`src/oracle_lab/contracts/export.py`:
 
 - `runs`: one row per run, with its configuration, status, cost, generation
   usage, submission, paired matrix counts, and judge status.

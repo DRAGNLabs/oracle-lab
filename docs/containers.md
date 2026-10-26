@@ -41,13 +41,10 @@ with docker_client() as client:
         workspace.prepare(base_commit, evaluation_dir)
 ```
 
-Each container runs under a profile:
-
-- Generation, evaluation, reference, and judge containers use Docker's outbound
-  bridge network. Repository tests then see the same environment every time, and
-  the judge can reach its model provider.
-- Human-judge workspaces are named, long-running containers. They have no
-  network and no model credential.
+Each container is labeled with its profile: generation, localization, reference,
+evaluation, judge, or classification. Every profile uses Docker's outbound bridge
+network. Repository tests then see the same environment every time, and the judge
+can reach its model provider.
 
 Every container gets resource limits and `no-new-privileges`, and no host
 mounts. Creating and starting a container are separate steps, so a failed start
@@ -91,10 +88,11 @@ helper built with the image that produced the evidence.
 
 Where each piece belongs:
 
-- `repository.py` and its helper: workspace reset, rebuild, test visibility,
+- `container/repository.py` and its helper: workspace reset, test visibility,
   baseline creation, and applying a repair.
-- `generation.py`: sorting the submission's files and checking their integrity.
-- `judge/workspace.py`: the privileged judge bundle. It is built there rather
+- `generation.py`: sorting the submission's files.
+- `contracts/run.py`: checking the frozen submission's integrity (`verify_bundle`).
+- `judge/generation/workspace.py`: the privileged judge bundle. It is built there rather
   than by loosening either module above.
 - Each harness adapter: its own flags, limits, and trace parsing.
   `harnesses/launch.py` holds the launch I/O they share.

@@ -36,22 +36,24 @@ oracle_lab = [
     "container/docker/*.Dockerfile",
     "container/docker/package*.json",
     "container/docker/*.md",
-    "judge/templates/*.md",
-    "judge/templates/*.json",
     "export/templates/*.md",
-    "web/static/*",
-    "web/templates/*.md",
-    "web/static/vendor/*",
+    "review/web/static/*",
+    "review/web/templates/*.md",
+    "review/web/static/vendor/*",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
 markers = ["docker: requires a working Docker daemon and downloaded images"]
+# Fixture data holds real repositories' Python files; never collect or import them.
+norecursedirs = [".*", "*.egg", "build", "dist", "venv", "data"]
 
 [tool.ruff]
 target-version = "py311"
 line-length = 100
+# Real repositories' files, kept byte for byte as test fixtures.
+extend-exclude = ["tests/data/localization/*/buggy"]
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "I"]

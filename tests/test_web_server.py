@@ -7,8 +7,8 @@ import threading
 import pytest
 from fixtures import REVIEWED_RUN, judgment_ratings, review_set, upstream_repository
 
-from oracle_lab.web.server import ReviewServer
-from oracle_lab.web.session import ReviewSession
+from oracle_lab.review.web.server import ReviewServer
+from oracle_lab.review.web.session import ReviewSession
 
 RATINGS = judgment_ratings(attempt_detail="disagree")
 

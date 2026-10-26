@@ -12,16 +12,17 @@ from fixtures import (
     instance_record,
     judgment_labels,
     run_config,
+    run_status,
     usage,
     write_submission,
 )
 
 from oracle_lab.config import JudgeConfig, load_config
+from oracle_lab.contracts.base import write_result
 from oracle_lab.harnesses import claude
 from oracle_lab.io import read_json, write_json
-from oracle_lab.judge.run import judge as run_judge
+from oracle_lab.judge.generation.run import judge as run_judge
 from oracle_lab.paths import RunPaths
-from oracle_lab.results import write_result
 
 SAMPLE = RUN_CONFIG
 VALID_JUDGMENT = json.dumps(judgment_labels(attempt_detail="missing_required_condition"), indent=2)
@@ -47,7 +48,7 @@ def saved_run(tmp_path):
     paths.config.write_text(yaml.safe_dump(config.model_dump(), sort_keys=False))
     paths.judge.rubric.write_text("# Frozen rubric\n\nChoose labels.\n")
     write_json(paths.runtime, {"image": "example/runtime"})
-    write_json(paths.status, {"stage": "finished", "state": "completed", "judge_status": "missing"})
+    write_json(paths.status, run_status(judge_status="missing"))
     write_result(paths.instance, instance_record())
     write_json(paths.results, evaluation_result())
     write_submission(paths)
@@ -77,9 +78,9 @@ def install_fakes(monkeypatch, final_text=VALID_JUDGMENT, status="completed"):
             "errors": [] if status == "completed" else [{"message": "harness failed"}],
         }
 
-    monkeypatch.setattr("oracle_lab.judge.run.docker_client", client_context)
-    monkeypatch.setattr("oracle_lab.judge.run.open_sandbox", sandbox_context)
-    monkeypatch.setattr("oracle_lab.judge.run.build_judge_workspace", Mock())
+    monkeypatch.setattr("oracle_lab.judge.generation.run.docker_client", client_context)
+    monkeypatch.setattr("oracle_lab.judge.generation.run.open_sandbox", sandbox_context)
+    monkeypatch.setattr("oracle_lab.judge.generation.run.build_judge_workspace", Mock())
     monkeypatch.setattr("oracle_lab.harnesses.claude.run_turn", claude_turn)
     return client
 
@@ -153,7 +154,7 @@ def test_transient_harness_failure_is_archived_and_retried(tmp_path, monkeypatch
     assert output.status == "completed"
     assert attempts == 2
     delay.assert_called_once_with(30)
-    archived = list(paths.judge.history.iterdir())
+    archived = list(paths.judge.agent_history.iterdir())
     assert len(archived) == 1
     assert (archived[0] / "agent/trace.jsonl").read_text() == "attempt 1\n"
 
@@ -183,7 +184,7 @@ def test_transient_harness_failure_stops_after_three_retries(tmp_path, monkeypat
     assert output.status == "failed"
     assert turn.call_count == 4
     assert [call.args[0] for call in delay.call_args_list] == [30, 90, 180]
-    assert len(list(paths.judge.history.iterdir())) == 3
+    assert len(list(paths.judge.agent_history.iterdir())) == 3
 
 
 @pytest.mark.parametrize(
@@ -225,7 +226,7 @@ def test_missing_credential_fails_before_docker(tmp_path, monkeypatch):
     paths = saved_run(tmp_path)
     monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
     docker = Mock()
-    monkeypatch.setattr("oracle_lab.judge.run.docker_client", docker)
+    monkeypatch.setattr("oracle_lab.judge.generation.run.docker_client", docker)
 
     with pytest.raises(RuntimeError, match="CLAUDE_CODE_OAUTH_TOKEN"):
         judge(paths)
@@ -238,7 +239,7 @@ def test_missing_evaluation_results_fail_before_docker(tmp_path, monkeypatch):
     paths.results.unlink()
     monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "credential-fixture")
     docker = Mock()
-    monkeypatch.setattr("oracle_lab.judge.run.docker_client", docker)
+    monkeypatch.setattr("oracle_lab.judge.generation.run.docker_client", docker)
 
     with pytest.raises(FileNotFoundError, match="results.json"):
         judge(paths)
@@ -274,7 +275,9 @@ def test_workspace_failure_is_recorded_by_standalone_judge(tmp_path, monkeypatch
     paths = saved_run(tmp_path)
     monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "credential-fixture")
     install_fakes(monkeypatch)
-    monkeypatch.setattr("oracle_lab.judge.run.build_judge_workspace", Mock(side_effect=error))
+    monkeypatch.setattr(
+        "oracle_lab.judge.generation.run.build_judge_workspace", Mock(side_effect=error)
+    )
 
     judge(paths)
 
@@ -293,7 +296,7 @@ def test_late_failure_keeps_the_judgment_the_attempt_already_produced(tmp_path, 
         yield Mock()
         raise RuntimeError("Could not remove benchmark container")
 
-    monkeypatch.setattr("oracle_lab.judge.run.open_sandbox", failing_cleanup)
+    monkeypatch.setattr("oracle_lab.judge.generation.run.open_sandbox", failing_cleanup)
 
     judge(paths)
 
@@ -313,7 +316,7 @@ def test_missing_runtime_image_does_not_archive_previous_attempt(tmp_path, monke
 
     client_context = context_of(client)
 
-    monkeypatch.setattr("oracle_lab.judge.run.docker_client", client_context)
+    monkeypatch.setattr("oracle_lab.judge.generation.run.docker_client", client_context)
 
     with pytest.raises(RuntimeError, match="runtime image is missing"):
         judge(paths)
@@ -326,7 +329,7 @@ def test_a_tampered_submission_is_rejected_before_docker(tmp_path, monkeypatch):
     (paths.submission / "files/oracle_tests/test_generated.py").write_text("tampered")
     monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "credential-fixture")
     docker = Mock()
-    monkeypatch.setattr("oracle_lab.judge.run.docker_client", docker)
+    monkeypatch.setattr("oracle_lab.judge.generation.run.docker_client", docker)
 
     with pytest.raises(ValueError, match="checksum mismatch"):
         judge(paths)
@@ -341,7 +344,7 @@ def test_empty_submission_is_rejected_before_docker(tmp_path, monkeypatch):
     write_json(paths.submission / "manifest.json", manifest)
     monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "credential-fixture")
     docker = Mock()
-    monkeypatch.setattr("oracle_lab.judge.run.docker_client", docker)
+    monkeypatch.setattr("oracle_lab.judge.generation.run.docker_client", docker)
 
     with pytest.raises(ValueError, match="no generated tests"):
         judge(paths)

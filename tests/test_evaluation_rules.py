@@ -1,7 +1,7 @@
 """The rules that define the experiment, checked on the real evaluation code.
 
 A recording sandbox stands in for Docker. The real `Repository` drives it, so
-each test sees the exact command sequence: patches, rebuilds, uploads, and the
+each test sees the exact command sequence: patches, uploads, and the
 tests the runner was asked to run.
 """
 
@@ -15,10 +15,10 @@ from fixtures import RUN_CONFIG, instance_record, write_submission
 import oracle_lab.evaluation as evaluation
 from oracle_lab.config import RuntimeConfig, load_config
 from oracle_lab.container.sandbox import CommandResult
+from oracle_lab.contracts.run import read_paired_result
 from oracle_lab.io import read_json, write_json
 from oracle_lab.paths import RunPaths
 from oracle_lab.preflight import check_environment
-from oracle_lab.results import read_paired_result
 
 RUNNER = "/pytest_runner.py"
 
@@ -61,7 +61,6 @@ def setup(tmp_path, monkeypatch):
         source_roots=["app"],
         import_modules=["app"],
         existing_test_globs=["tests"],
-        rebuild="make install",
     )
     paths = RunPaths.create(tmp_path)
     instance = instance_record(
@@ -92,11 +91,7 @@ def applied_patches(sandbox: RecordingSandbox) -> list[str]:
     ]
 
 
-def rebuild_positions(sandbox: RecordingSandbox) -> list[int]:
-    return [i for i, argv in enumerate(sandbox.commands()) if argv[:2] == ["/bin/bash", "-c"]]
-
-
-def test_golden_gets_the_repair_and_a_rebuild_after_it_and_buggy_gets_neither(setup):
+def test_golden_gets_the_repair_and_buggy_does_not(setup):
     config, paths, instance, sandboxes, _ = setup
     manifest = write_submission(paths, {"oracle_tests/test_new.py": "def test_a(): pass\n"})
 
@@ -107,9 +102,6 @@ def test_golden_gets_the_repair_and_a_rebuild_after_it_and_buggy_gets_neither(se
     assert applied_patches(buggy) == []
     assert applied_patches(golden) == ["repair.patch"]
     assert (paths.evaluation / "golden/repair.patch").read_text() == "GOLDEN PATCH"
-    commands = golden.commands()
-    applied = commands.index(["git", "apply", "/tmp/oracle.patch"])
-    assert max(rebuild_positions(golden)) > applied
     # Both versions start from the same reset checkout.
     for sandbox in (buggy, golden):
         assert sandbox.commands()[0] == ["git", "reset", "--hard", instance.base_commit]

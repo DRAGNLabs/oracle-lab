@@ -2,7 +2,7 @@
 
 import pytest
 
-from oracle_lab.results import last_error_message, parse_json_object
+from oracle_lab.contracts.turn import last_error_message, parse_json_object
 
 
 @pytest.mark.parametrize(

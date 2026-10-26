@@ -267,9 +267,11 @@ def test_real_requests_pair_and_artifact_copy(tmp_path, visibility, monkeypatch,
         )
         report = reevaluate(config, paths)
         assert report.is_file()
-        replay = read_json(paths.results)
-        assert replay["matrix"] == result["matrix"]
-        assert replay["artifact_sha256"] == read_json(paths.submission / "manifest.json")["sha256"]
+        replay = read_evaluation_result(paths.results)
+        assert replay.matrix == result.matrix
+        assert replay.artifact_sha256 == read_json(paths.submission / "manifest.json")["sha256"]
+        # No agent ran, so the replay completes with only the generation problem.
+        assert replay.completion_problems == ["generation not_run_handwritten_probe"]
 
 
 def test_localize_reads_the_saved_image_and_reproduces_the_saved_target(tmp_path, request):

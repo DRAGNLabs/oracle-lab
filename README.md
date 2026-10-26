@@ -214,3 +214,9 @@ Run `newgrp docker`, or log out and back in. Then check `docker info` again.
   outside that directory are recorded as violations, and the results become
   diagnostic only. Configuration decides whether existing repository tests stay
   visible.
+
+## License
+
+Copyright 2026 Brigham Young University. Licensed under the
+[Apache License, Version 2.0](LICENSE). See [NOTICE](NOTICE) for attribution and
+bundled third-party software.

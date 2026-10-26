@@ -1,0 +1,10 @@
+Oracle Lab
+Copyright 2026 Brigham Young University
+
+Developed by Jay Orten at DRAGN Labs, Brigham Young University.
+
+This product bundles the following third-party software, each under its own
+license, in src/oracle_lab/web/static/vendor/:
+
+- highlight.js, BSD 3-Clause License (highlight.LICENSE)
+- marked, MIT License (marked.LICENSE.md)

@@ -12,7 +12,7 @@ output/
 └── agreement/<agreement-id>/                   # oracle-lab agreement (default)
 ```
 
-Run, batch, and attempt IDs are the UTC start time and a random suffix, such as
+Run, batch, attempt, and agreement IDs are the UTC start time and a random suffix, such as
 `20261023T193937Z-9101b7e0`.
 
 Each LLM judge's files sit in a `judge/` directory beside what it judged: a run's
@@ -331,7 +331,8 @@ completed and the submission was compliant. Otherwise it is
 the stage it happened in and a failed state.
 
 `judge_status` is separate. It is `disabled`, `completed`, `invalid_output`,
-`failed`, `timed_out`, `skipped`, `stale`, or `missing`. A configured judge is
+`failed`, `timed_out`, `skipped`, `stale`, `missing`, or `invalid_artifact` (a
+saved `judgment.json` that no longer validates). A configured judge is
 `skipped`, with no model call, when generation wrote no test files or neither
 version collected a generated test (`no_tests`). Tests captured from a timed-out
 or otherwise incomplete generation are still evaluated and judged. A judge

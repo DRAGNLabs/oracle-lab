@@ -339,8 +339,8 @@ before it creates a run directory.
 Whether the repository's existing tests stay visible to the agent and present
 in the evaluation workspace. Evaluation runs only the generated tests either way.
 
-`hide_all` removes the test files and test directories that the SWE-bench
-adapter lists for the repository. Inside those directories it removes only the
+`hide_all` removes the test files and test directories that the source
+adapter (SWE-bench or SWE-rebench V2) lists for the repository. Inside those directories it removes only the
 modules pytest would collect. Package initializers, fixtures, runners, helpers,
 and data stay, because some projects import them at runtime.
 
@@ -384,7 +384,7 @@ repository's `output/`. See [results](results.md) for the layout.
 ## Resolved-only sections
 
 `config.resolved.yaml` adds `runtime` and `toolchain` sections. Oracle Lab
-fills them in from the SWE-bench instance and its own pinned versions. An input
+fills them in from the dataset record and its own pinned versions. An input
 file that sets either is rejected.
 
 - `runtime`: the source image, platform, workdir, Python, optional source import

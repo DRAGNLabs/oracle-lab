@@ -17,8 +17,9 @@ Read these references before changing related behavior:
 - `docs/judging.md` for the LLM judge and the human review page.
 - `docs/human-review.md` for sharing review sets with raters.
 - `docs/containers.md` for Docker transport and image builds.
-- `docs/research-framing.md` for the research questions, oracle states, and
-  failure-mode start list behind the judge rubrics.
+- `docs/research-framing.md` for the research questions, the task
+  classification's prior work and facets, oracle states, and the failure-mode
+  start list behind the judge rubrics.
 
 ## Architecture and trust boundaries
 

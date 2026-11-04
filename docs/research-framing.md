@@ -18,8 +18,8 @@ The two meet in the analysis: failure modes cross-tabulated by problem class.
 Each stage has an LLM judge, and human raters rate how far they agree with each
 answer it gave.
 
-1. **Classification** (per task): the task's nature, defect mechanism, required
-   setup, and the kind and source of its test oracle.
+1. **Classification** (per task): what kind of problem the task is, and what a
+   test needs to detect it. See [task classification](#task-classification).
 2. **Generation** (per run): did the generated tests target the oracle problem,
    and what failure modes did the agent show? The judge reads the final tests and
    the agent's trace together and answers both.
@@ -29,6 +29,94 @@ adapted from MAST (Cemri et al., "Why Do Multi-Agent LLM Systems Fail?"). That
 plan is dropped. The LLM judge now applies a start list of failure modes, and
 may add its own labels. Humans rate those labels instead of coding traces
 themselves.
+
+## Task classification
+
+The classifier describes each task through several independent questions,
+called facets, instead of one label. Real defects span categories, and a single
+label would mix unrelated sources of difficulty. The labels themselves live in
+`prompts/judge/task-classification-rubric.md`. This section records where the
+questions come from and why each one is asked.
+
+### Prior work
+
+- **Orthogonal Defect Classification (ODC)**, from IBM Research (Chillarege et
+  al., 1992). It sorts defects into types such as assignment, checking,
+  algorithm, interface, and timing. It also separates a defect from the trigger
+  that exposed it. It is the basis for `defect_mechanisms`.
+- **IEEE 1044**, a standard for classifying software anomalies. It is thorough
+  but too process-oriented to use directly.
+- **Hayes et al.**, a language-independent code-fault taxonomy: control and
+  logic, data flow, interface, error handling, and configuration.
+- **Sobreira et al. (2018), "Dissection of a Bug Dataset"**, which annotates
+  the Defects4J benchmark. It is the closest precedent for characterizing an
+  existing bug benchmark. Its categories describe the developer's repair, not
+  the defect or why it is hard to test. It concludes that there is no standard
+  way to characterize benchmark bugs, which justifies an adapted taxonomy.
+- **TestExplora (2026)**, a benchmark of the same capability: generating tests
+  that fail on a buggy repository and pass on its repair. It finds cross-module
+  interactions a major source of difficulty.
+
+SWE-bench has no taxonomy of defect types. Its paper analyzes repository, issue
+length, patch size, and the files and functions touched. SWE-bench Verified adds
+human annotations for problem-statement quality, test correctness, and
+estimated human time. A later audit of Verified found reference tests that were
+too narrow, tests that demanded behavior the issue never specified, and
+underspecified issues. Problems like these can pass for model difficulty, so the
+classifier screens for them.
+
+### Why each question
+
+- `task_nature`: SWE-bench's mining also captures enhancements, refactors, and
+  documentation changes. Only a behavioral bug or a performance problem calls for
+  a fail-to-pass test. Anything else is `out_of_scope`, and classification stops
+  there.
+- `defect_mechanisms`: what is wrong in the code, adapted from ODC. Several can
+  apply.
+- `primary_assertion_target`: what a minimal fail-to-pass test inspects to tell
+  the two versions apart. It is separate from the mechanism, because one
+  interface defect can surface as an exception, a wrong output, or a missing
+  call.
+- `required_test_setup`: the one prerequisite without which a test cannot reach
+  the bug.
+- `oracle_kind` and `oracle_source`: whether the buggy repository tells a test
+  author what to assert, and where. See [oracle kind](#oracle-kind-per-problem).
+  An agent can find and trigger a bug yet still fail because nothing tells it
+  the correct outcome. That is a different difficulty from the defect's
+  mechanism.
+- `required_test_scope`: how much of the system a test has to assemble, from a
+  single unit up to the environment or platform.
+- `benchmark_quality`: whether the task can give a trustworthy result at all.
+  It filters tasks and qualifies results. It does not measure agent ability.
+
+The classifier also receives the fix scope (`function`, `class`, or `module`),
+which preflight computes from the golden repair rather than asking a model.
+
+Build the taxonomy from the dataset, not only from agent failures. Otherwise it
+encodes one model's failure modes instead of the tasks' properties.
+
+### Analysis
+
+Model detection directly before building any difficulty score:
+
+```text
+detects_bug
+    ~ defect mechanisms + assertion target + test setup + oracle kind
+    + test scope + fix scope + benchmark quality
+    + model/harness + repository
+```
+
+A mixed-effects logistic regression, with repository, model, and instance as
+random effects, uses repeated runs of each task. It can answer questions such
+as:
+
+- Are cross-module bugs harder once patch size is controlled for?
+- Are derived oracles harder than specified ones?
+- Are stateful bugs harder than boundary-value bugs?
+- Do apparently hard bugs turn out to be underspecified or misaligned tasks?
+
+This is more useful than deciding in advance that, for example, concurrency
+bugs have difficulty 5 and conditionals difficulty 2.
 
 ## Recognition, retrieval, derivation
 
@@ -196,6 +284,20 @@ A start list makes the judge likelier to find what is on it. Two checks:
 
 ## References
 
+- Chillarege et al. (1992), "Orthogonal Defect Classification: A Concept for
+  In-Process Measurements" (IEEE TSE).
+- IEEE 1044, Standard Classification for Software Anomalies.
+- Hayes et al., a language-independent code-fault taxonomy.
+- Sobreira et al. (SANER 2018), "Dissection of a Bug Dataset: Anatomy of 395
+  Patches from Defects4J" (arXiv:1801.06393).
+- TestExplora (2026), repository-level test generation for bug discovery
+  (arXiv:2602.10471).
+- Jimenez et al. (ICLR 2024), "SWE-bench: Can Language Models Resolve Real-World
+  GitHub Issues?" (arXiv:2310.06770).
+- OpenAI, "Introducing SWE-bench Verified" and "Why we no longer evaluate
+  SWE-bench Verified".
+- Barr et al. (IEEE TSE 2015), "The Oracle Problem in Software Testing: A
+  Survey".
 - Cemri et al. (2025), "Why Do Multi-Agent LLM Systems Fail?" (MAST).
 - Saldaña, *The Coding Manual for Qualitative Researchers*: provisional coding.
 - Miles & Huberman (1994), *Qualitative Data Analysis*: the start list.

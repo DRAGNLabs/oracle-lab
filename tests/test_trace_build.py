@@ -1,9 +1,12 @@
 import json
 
+import pytest
 from fixtures import TRACE_TEST_ID, traced_run
+from pydantic import ValidationError
 
-from oracle_lab.io import read_json
+from oracle_lab.io import read_json, write_json
 from oracle_lab.trace.build import build_run_trace
+from oracle_lab.trace.events import read_run_trace
 from oracle_lab.trace.markdown import trace_markdown
 
 
@@ -44,3 +47,18 @@ def test_the_judge_reads_the_same_steps_a_rater_sees(tmp_path):
     assert "### oracle_tests/test_mod.py" in text
     assert "1 version; the last matches the submitted file." in text
     assert "  - pytest at step 4: 1 passed" in text
+
+
+def test_a_saved_trace_round_trips_and_a_drifted_one_is_refused(tmp_path):
+    paths = traced_run(tmp_path / "run")
+
+    reread = read_run_trace(paths.judge.trace).to_json()
+    assert json.loads(json.dumps(reread)) == read_json(paths.judge.trace)
+
+    saved = read_json(paths.judge.trace)
+    saved["events"][0]["touches"] = [
+        {"path": "a.py", "category": "source", "lines": None, "overlap": "none", "extra": 1}
+    ]
+    write_json(paths.judge.trace, saved)
+    with pytest.raises(ValidationError):
+        read_run_trace(paths.judge.trace)

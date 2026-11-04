@@ -1,0 +1,22 @@
+{
+  "instance_id": "wtforms__wtforms-688",
+  "repo": "wtforms/wtforms",
+  "base_commit": "32c75649f5d06802c3b4a0a7cbe8c3b43e07b171",
+  "source_roots": [
+    "src/wtforms"
+  ],
+  "patch": "diff --git a/CHANGES.rst b/CHANGES.rst\nindex 8bb26bc..c846991 100644\n--- a/CHANGES.rst\n+++ b/CHANGES.rst\n@@ -9,6 +9,8 @@ Unreleased\n -   :meth:`~fields.FormField.populate_obj` always calls :func:`setattr`\n     :pr:`675`\n -   WTForms has a new logo. :issue:`569` :pr:`689`\n+-   Fixed :class:`~fields.RadioField` `render_kw` rendering. :issue:`490`\n+    :pr:`628` :pr:`688`\n \n Version 3.0.0a1\n ---------------\ndiff --git a/src/wtforms/fields/core.py b/src/wtforms/fields/core.py\nindex c5045f3..96484a9 100644\n--- a/src/wtforms/fields/core.py\n+++ b/src/wtforms/fields/core.py\n@@ -503,6 +503,7 @@ class SelectFieldBase(Field):\n             widget=self.option_widget,\n             validators=self.validators,\n             name=self.name,\n+            render_kw=self.render_kw,\n             _form=None,\n             _meta=self.meta,\n         )\n",
+  "expected": {
+    "files": [
+      {
+        "path": "src/wtforms/fields/core.py",
+        "functions": [
+          "SelectFieldBase.__iter__"
+        ],
+        "classes": [],
+        "lines": 13
+      }
+    ],
+    "scope": "function"
+  }
+}

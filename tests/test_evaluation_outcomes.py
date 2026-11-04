@@ -8,8 +8,8 @@ import sys
 import pytest
 from fixtures import HELPERS
 
+from oracle_lab.contracts.run import MatrixCellName, VersionResult, read_version_result
 from oracle_lab.evaluation.outcomes import incomplete_result, pair_results
-from oracle_lab.results import MatrixCellName, VersionResult, read_version_result
 
 
 def execute(tmp_path, source, tests, *, modules=None, extra=None):

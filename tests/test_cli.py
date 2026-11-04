@@ -1,9 +1,13 @@
 import os
 
 import pytest
-from fixtures import RUN_CONFIG
+from fixtures import RUN_CONFIG, localized_target
 
+import oracle_lab.preflight as preflight_module
 from oracle_lab import cli
+from oracle_lab.contracts.base import write_result
+from oracle_lab.contracts.run import LocalizedTarget
+from oracle_lab.paths import RunPaths
 
 SAMPLE = RUN_CONFIG
 
@@ -75,7 +79,7 @@ def test_judge_loads_credentials_and_uses_saved_run(tmp_path, monkeypatch):
     (tmp_path / "status.json").write_text('{"state": "completed"}\n')
 
     config = object()
-    monkeypatch.setattr(cli, "_load_saved_run", lambda path: (config, cli.RunPaths.open(path)))
+    monkeypatch.setattr(cli, "_load_saved_run", lambda path: (config, cli.RunPaths(path)))
 
     def invoke(loaded_config, paths):
         assert loaded_config is config
@@ -112,13 +116,25 @@ def test_preflight_checks_every_config_and_fails_if_any_fails(tmp_path, monkeypa
         return tmp_path / path.stem
 
     monkeypatch.setattr(cli, "load_dotenv", unexpected_load)
-    monkeypatch.setattr(cli, "load_config", lambda path: path)
-    monkeypatch.setattr(cli, "preflight", preflight)
+    monkeypatch.setattr(preflight_module, "load_config", lambda path: path)
+    monkeypatch.setattr(preflight_module, "preflight", preflight)
 
     assert cli.main(["preflight", "bad.yaml", "good.yaml"]) == 1
     output = capsys.readouterr().out
     assert "failed  bad.yaml  reference pair did not reproduce" in output
     assert f"passed  good.yaml  {tmp_path / 'good'}" in output
+
+
+def test_preflight_names_a_localized_target_fix_scope(tmp_path, monkeypatch, capsys):
+    paths = RunPaths.create(tmp_path / "localized")
+    write_result(paths.target, LocalizedTarget.model_validate(localized_target(scope="class")))
+    monkeypatch.setattr(preflight_module, "load_config", lambda path: path)
+    monkeypatch.setattr(preflight_module, "preflight", lambda path: paths.root)
+
+    assert cli.main(["preflight", "localized.yaml"]) == 0
+    assert capsys.readouterr().out.endswith(
+        f"passed  localized.yaml  {paths.root}  fix scope: class\n"
+    )
 
 
 def test_review_serves_the_page_without_loading_credentials(tmp_path, monkeypatch):

@@ -12,6 +12,8 @@ from docker.models.images import Image
 
 from oracle_lab.config import HARNESS_VERSIONS, ClassificationConfig, RunConfig
 from oracle_lab.container.lifecycle import setup_deadline
+from oracle_lab.container.paths import ORACLE_HOME
+from oracle_lab.container.sandbox import ORACLE_USER
 from oracle_lab.io import digest, write_json
 
 
@@ -39,8 +41,8 @@ def inspect_harness_versions(client: DockerClient, image: Image) -> dict[str, st
         output = client.containers.run(
             image_id(image),
             [harness, "--version"],
-            user="10001:10001",
-            environment={"HOME": "/home/oracle"},
+            user=ORACLE_USER,
+            environment={"HOME": ORACLE_HOME},
             network_disabled=True,
             remove=True,
         )

@@ -6,14 +6,17 @@ from pathlib import Path
 
 import pytest
 
-from oracle_lab.classification.contracts import (
+from oracle_lab.container.paths import CLASSIFICATION_ROOT, JUDGE_ROOT
+from oracle_lab.contracts.classification import (
     ORACLE_SOURCES,
     InScopeClassification,
     OutOfScopeClassification,
     parse_classification,
 )
-from oracle_lab.judge.contracts import FAILURE_MODES, JudgmentLabels, parse_judgment
-from oracle_lab.results import Answered
+from oracle_lab.contracts.judgment import FAILURE_MODES, JudgmentLabels, parse_judgment
+from oracle_lab.contracts.turn import Answered
+from oracle_lab.judge.classification.workspace import classification_evidence
+from oracle_lab.paths import AttemptPaths
 
 RUBRICS = Path(__file__).parents[1] / "prompts/judge"
 JUDGE_RUBRIC = RUBRICS / "generated-test-evaluation-rubric.md"
@@ -123,3 +126,22 @@ def test_every_classification_rubric_output_example_parses():
     assert len(examples) == 2
     for example in examples:
         assert parse_classification(example).status == "completed"
+
+
+def workspace_paths(path: Path) -> set[str]:
+    """Every absolute `/oracle-*` path a rubric names in backticks."""
+    return set(re.findall(r"`(/oracle-[^`]*)`", path.read_text()))
+
+
+def test_the_judge_rubric_names_paths_in_the_judge_workspace():
+    named = workspace_paths(JUDGE_RUBRIC)
+    assert named
+    assert all(path.startswith(JUDGE_ROOT + "/") for path in named)
+
+
+def test_the_classification_rubric_names_only_files_the_classifier_receives(tmp_path):
+    named = workspace_paths(CLASSIFICATION_RUBRIC)
+    exposed = {destination for _, destination in classification_evidence(AttemptPaths(tmp_path))}
+    assert named
+    assert named <= exposed
+    assert all(path.startswith(CLASSIFICATION_ROOT + "/") for path in named)

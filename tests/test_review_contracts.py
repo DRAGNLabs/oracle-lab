@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from oracle_lab.review.contracts import RATING_DEFINITIONS, RATINGS, parse_review
+from oracle_lab.contracts.review import RATING_DEFINITIONS, RATINGS, parse_review
 
 ITEMS = ["tests_issue", "cheating", "failure_modes.flagged_bug", "added_failure_modes.0"]
 

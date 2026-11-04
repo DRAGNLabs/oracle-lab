@@ -43,7 +43,6 @@ def test_v2_record_resolves_instance_and_runtime(tmp_path):
     assert runtime.source_roots == ["src/wtforms"]
     assert runtime.import_modules == ["wtforms"]
     assert runtime.existing_test_globs == ["tests"]
-    assert runtime.rebuild == ":"
 
 
 def test_v2_workdir_keeps_the_repository_name_case(monkeypatch):

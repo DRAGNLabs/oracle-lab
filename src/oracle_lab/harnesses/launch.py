@@ -1,12 +1,12 @@
 """Shared execution and artifact policy for one coding-agent turn."""
 
-import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
 
 from oracle_lab.config import HarnessConfig
 from oracle_lab.container.lifecycle import preserve_failure
+from oracle_lab.container.paths import ORACLE_HOME
 from oracle_lab.container.sandbox import ORACLE_USER, CommandResult, Sandbox
 from oracle_lab.io import write_json
 
@@ -29,25 +29,6 @@ class AgentTurnRequest:
     prompt: Path
     working_directory: str
     artifact_directory: Path
-
-
-def read_trace(path: Path) -> tuple[list[dict], int]:
-    """A JSON Lines trace's events, and how many non-blank lines were not JSON objects."""
-    events, malformed = [], 0
-    if path.exists():
-        for line in path.read_text(errors="replace").splitlines():
-            if not line.strip():
-                continue
-            try:
-                event = json.loads(line)
-            except json.JSONDecodeError:
-                malformed += 1
-                continue
-            if isinstance(event, dict):
-                events.append(event)
-            else:
-                malformed += 1
-    return events, malformed
 
 
 def turn_status(outcome: CommandResult, parsed: dict) -> str:
@@ -74,7 +55,7 @@ def run_agent_turn(
     directory.mkdir(parents=True, exist_ok=True)
     log = directory / "launch.log"
     key = os.environ[request.harness.credential_env]
-    environment = {**environment, credential_name: key, "HOME": "/home/oracle"}
+    environment = {**environment, credential_name: key, "HOME": ORACLE_HOME}
     write_json(directory / "command.json", argv)
 
     # The CLIs expect their config directories to already exist.
@@ -83,10 +64,10 @@ def run_agent_turn(
             "mkdir",
             "-p",
             "/tmp/oracle-agent",
-            "/home/oracle/.codex",
-            "/home/oracle/.claude",
-            "/home/oracle/.config/opencode",
-            "/home/oracle/.local/share/opencode",
+            ORACLE_HOME + "/.codex",
+            ORACLE_HOME + "/.claude",
+            ORACLE_HOME + "/.config/opencode",
+            ORACLE_HOME + "/.local/share/opencode",
         ],
         user=ORACLE_USER,
         log=log,

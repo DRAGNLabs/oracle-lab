@@ -15,8 +15,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Literal
 
+from oracle_lab.contracts.run import InstanceRecord
 from oracle_lab.localization.patches import parse_patch
-from oracle_lab.results import InstanceRecord
 from oracle_lab.review.targets import ReviewTarget, SubmittedFile
 
 # What changed a file: the repair, the reference-test patch, or the submission.

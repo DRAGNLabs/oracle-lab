@@ -1,0 +1,23 @@
+{
+  "instance_id": "jupyter__qtconsole-611",
+  "repo": "jupyter/qtconsole",
+  "base_commit": "56e5a5ec5cfccf5afd098fe8bb5b2c558a1dc8f9",
+  "source_roots": [
+    "."
+  ],
+  "patch": "diff --git a/qtconsole/ansi_code_processor.py b/qtconsole/ansi_code_processor.py\nindex 08f222f..8ebe5c9 100644\n--- a/qtconsole/ansi_code_processor.py\n+++ b/qtconsole/ansi_code_processor.py\n@@ -61,7 +61,7 @@ class AnsiCodeProcessor(object):\n \n     # Whether to increase intensity or set boldness for SGR code 1.\n     # (Different terminals handle this in different ways.)\n-    bold_text_enabled = False\n+    bold_text_enabled = True\n \n     # We provide an empty default color map because subclasses will likely want\n     # to use a custom color format.\n@@ -302,7 +302,7 @@ class QtAnsiCodeProcessor(AnsiCodeProcessor):\n         0  : 'black',       # black\n         1  : 'darkred',     # red\n         2  : 'darkgreen',   # green\n-        3  : 'brown',       # yellow\n+        3  : 'gold',       # yellow\n         4  : 'darkblue',    # blue\n         5  : 'darkviolet',  # magenta\n         6  : 'steelblue',   # cyan\n",
+  "expected": {
+    "files": [
+      {
+        "path": "qtconsole/ansi_code_processor.py",
+        "functions": [],
+        "classes": [
+          "AnsiCodeProcessor",
+          "QtAnsiCodeProcessor"
+        ],
+        "lines": 334
+      }
+    ],
+    "scope": "class"
+  }
+}

@@ -15,20 +15,16 @@ from fixtures import (
     submission_manifest,
 )
 
-import oracle_lab.judge.run as judge_module
+import oracle_lab.judge.generation.run as judge_module
 import oracle_lab.preflight as preflight_module
 import oracle_lab.run as run_module
 from oracle_lab.config import JudgeConfig, RuntimeConfig, load_config
+from oracle_lab.contracts.base import write_result
+from oracle_lab.contracts.run import EvaluationResult, LocalizedTarget, SubmissionManifest
 from oracle_lab.evaluation import archive_previous_evaluation
 from oracle_lab.harnesses import require_credentials
 from oracle_lab.io import read_json, write_json
 from oracle_lab.paths import OutputPaths, RunPaths
-from oracle_lab.results import (
-    EvaluationResult,
-    LocalizedTarget,
-    SubmissionManifest,
-    write_result,
-)
 from oracle_lab.run import completion_state
 
 SAMPLE = RUN_CONFIG
@@ -116,6 +112,7 @@ def install_pipeline_fakes(monkeypatch, runtime, instance, judge_effect=None):
     monkeypatch.setattr(run_module, "prepare_image", lambda *args: "example/runtime")
     target = LocalizedTarget.model_validate(localized_target())
     monkeypatch.setattr(run_module, "localize", Mock(return_value=target))
+    monkeypatch.setattr(run_module, "load_target", Mock(return_value=target))
     monkeypatch.setattr(run_module, "check_reference", Mock())
     manifest = SubmissionManifest.model_validate(submission_manifest())
     monkeypatch.setattr(run_module, "generate_submission", Mock(return_value=manifest))
@@ -204,13 +201,13 @@ def test_run_fills_the_agent_prompt_environment(tmp_path, monkeypatch):
 
     run_dir = run_module.run(config)
 
-    assert RunPaths.open(run_dir).prompt.read_text() == (
+    assert RunPaths(run_dir).prompt.read_text() == (
         f"Write to oracle_tests from {runtime.workdir} using {runtime.python}; "
         f"target {localized_target()['text']}; $HOME remains literal."
     )
 
 
-def test_a_localized_run_localizes_after_the_build_and_before_the_reference_check(
+def test_a_localized_run_loads_its_target_before_the_build_and_never_localizes(
     tmp_path, monkeypatch
 ):
     config, runtime, instance = configured_pipeline(tmp_path, False)
@@ -219,9 +216,9 @@ def test_a_localized_run_localizes_after_the_build_and_before_the_reference_chec
     install_pipeline_fakes(monkeypatch, runtime, instance)
     order = []
     monkeypatch.setattr(run_module, "prepare_image", lambda *args: order.append("build") or "img")
-    located = run_module.localize
+    loaded = run_module.load_target
     monkeypatch.setattr(
-        run_module, "localize", lambda *args: order.append("localize") or located(*args)
+        run_module, "load_target", lambda *args: order.append("localize") or loaded(*args)
     )
 
     def check_reference(client, config, image, instance, paths):
@@ -233,7 +230,8 @@ def test_a_localized_run_localizes_after_the_build_and_before_the_reference_chec
 
     run_module.run(config)
 
-    assert order == ["build", "localize", "reference"]
+    assert order == ["localize", "build", "reference"]
+    run_module.localize.assert_not_called()
 
 
 def test_a_repository_run_never_localizes(tmp_path, monkeypatch):
@@ -243,7 +241,8 @@ def test_a_repository_run_never_localizes(tmp_path, monkeypatch):
     run_dir = run_module.run(config)
 
     run_module.localize.assert_not_called()
-    assert RunPaths.open(run_dir).prompt.read_text() == "Generate tests"
+    run_module.load_target.assert_not_called()
+    assert RunPaths(run_dir).prompt.read_text() == "Generate tests"
 
 
 def test_a_localize_failure_stops_the_run_at_that_stage(tmp_path, monkeypatch):
@@ -251,16 +250,16 @@ def test_a_localize_failure_stops_the_run_at_that_stage(tmp_path, monkeypatch):
     config.task.scope = "localized"
     Path(config.task.prompt).write_text("Test ${test_target}")
     install_pipeline_fakes(monkeypatch, runtime, instance)
-    failure = ValueError("hunk at line 3 matches nowhere in the buggy file")
-    monkeypatch.setattr(run_module, "localize", Mock(side_effect=failure))
+    failure = ValueError("No passed preflight has a target for owner__project-1")
+    monkeypatch.setattr(run_module, "load_target", Mock(side_effect=failure))
 
-    with pytest.raises(ValueError, match="matches nowhere"):
+    with pytest.raises(ValueError, match="No passed preflight"):
         run_module.run(config)
 
     (run_dir,) = OutputPaths(Path(config.output)).runs.iterdir()
     final = read_json(run_dir / "status.json")
     assert (final["stage"], final["state"]) == ("localize", "failed")
-    assert not RunPaths.open(run_dir).prompt.exists()
+    assert not RunPaths(run_dir).prompt.exists()
     run_module.check_reference.assert_not_called()
 
 
@@ -279,7 +278,7 @@ def test_run_renders_each_bundled_agent_prompt(tmp_path, monkeypatch, name, scop
     install_pipeline_fakes(monkeypatch, runtime, instance)
 
     run_dir = run_module.run(config)
-    prompt = RunPaths.open(run_dir).prompt.read_text()
+    prompt = RunPaths(run_dir).prompt.read_text()
 
     assert "oracle_tests" in prompt
     assert runtime.python in prompt
@@ -303,7 +302,7 @@ def test_saved_config_points_at_the_run_s_own_rubric_copy(tmp_path, monkeypatch)
 
     run_dir = run_module.run(config)
 
-    paths = RunPaths.open(run_dir)
+    paths = RunPaths(run_dir)
     assert paths.judge.rubric.read_bytes() == source_rubric.read_bytes()
 
     # Reload the way `evaluate` and `judge` do, from a different working directory.
@@ -324,7 +323,7 @@ def test_judge_failure_preserves_completed_evaluation(tmp_path, monkeypatch):
     final = read_json(run_dir / "status.json")
     assert final["state"] == "completed"
     assert final["judge_status"] == "failed"
-    assert read_json(RunPaths.open(run_dir).judge.judgment)["status"] == "failed"
+    assert read_json(RunPaths(run_dir).judge.judgment)["status"] == "failed"
 
 
 def test_empty_generation_skips_configured_judge(tmp_path, monkeypatch):
@@ -341,7 +340,7 @@ def test_empty_generation_skips_configured_judge(tmp_path, monkeypatch):
 
     run_dir = run_module.run(config)
 
-    paths = RunPaths.open(run_dir)
+    paths = RunPaths(run_dir)
     assert read_json(paths.status)["judge_status"] == "skipped"
     assert read_json(paths.judge.judgment) == {
         "status": "skipped",
@@ -439,6 +438,20 @@ def test_reevaluation_marks_existing_judgment_stale_without_calling_a_model(tmp_
     assert judgment["previous_judgment"]["tests_issue"]["answer"] == "yes"
     assert read_json(run_dir / "status.json")["judge_status"] == "stale"
     judge_call.assert_not_called()
+
+
+def test_a_localized_preflight_localizes_after_the_build(tmp_path, monkeypatch):
+    config, runtime, instance = configured_pipeline(tmp_path, False)
+    config.task.scope = "localized"
+    Path(config.task.prompt).write_text("Test ${test_target}")
+    install_pipeline_fakes(monkeypatch, runtime, instance)
+    monkeypatch.setattr(preflight_module, "docker_client", context_of(Mock()))
+    monkeypatch.setattr(preflight_module, "check_environment", Mock())
+
+    preflight_module.preflight(config)
+
+    run_module.localize.assert_called_once()
+    run_module.load_target.assert_not_called()
 
 
 def test_preflight_checks_the_environment_without_credentials_or_generation(tmp_path, monkeypatch):

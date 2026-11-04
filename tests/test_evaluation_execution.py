@@ -7,15 +7,15 @@ from fixtures import instance_record, localized_target, run_config, submission_m
 
 import oracle_lab.evaluation as evaluation
 from oracle_lab.container.sandbox import CommandResult
-from oracle_lab.evaluation import run_tests
-from oracle_lab.io import read_json, write_json
-from oracle_lab.paths import RunPaths
-from oracle_lab.results import (
+from oracle_lab.contracts.run import (
     SubmissionManifest,
     VersionResult,
     read_evaluation_result,
     read_localized_target,
 )
+from oracle_lab.evaluation import run_tests
+from oracle_lab.io import read_json, write_json
+from oracle_lab.paths import RunPaths
 
 
 @pytest.fixture
@@ -68,6 +68,8 @@ def test_unreadable_runner_output_becomes_an_explicit_incomplete_result(config, 
 
     assert result.status == "runner_error"
     assert "Unreadable runner output" in result.error
+    # The runner's own file is kept beside the normalized one.
+    assert "not an object" in (tmp_path / "tests.raw.json").read_text()
 
 
 def test_runner_interruption_survives_failed_partial_collection(config, tmp_path):

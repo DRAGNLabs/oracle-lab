@@ -24,8 +24,8 @@ from oracle_lab.container.images import (
     runtime_arguments,
 )
 from oracle_lab.container.lifecycle import setup_deadline
+from oracle_lab.container.repository import Repository
 from oracle_lab.container.sandbox import Profile, Sandbox, docker_client, open_sandbox
-from oracle_lab.repository import Repository
 
 
 @pytest.fixture
@@ -200,8 +200,7 @@ def test_workspace_preserves_preparation_order(config, tmp_path, visibility, ref
     workspace.prepare("a" * 40, tmp_path, reference=reference)
     calls = sandbox.run.call_args_list
     assert calls[0].args[0][:3] == ["git", "reset", "--hard"]
-    assert calls[1].args[0][:2] == ["/bin/bash", "-c"]
-    assert calls[2].args[0][1] == "/helpers/prepare.py"
+    assert calls[1].args[0][1] == "/helpers/prepare.py"
     settings = json.loads((tmp_path / "workspace.json").read_text())
     assert settings["hide"] == hide
     assert settings["sanitize_history"] is False

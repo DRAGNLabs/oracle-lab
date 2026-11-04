@@ -5,14 +5,14 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from oracle_lab.io import digest, read_json, utc_stamp, write_json
-from oracle_lab.review.contracts import (
+from oracle_lab.contracts.review import (
     RATER_ID,
     Review,
     ReviewProvenance,
     parse_review,
     require_rater,
 )
+from oracle_lab.io import digest, read_json, utc_stamp, write_json
 from oracle_lab.review.targets import ReviewTarget
 
 

@@ -25,8 +25,7 @@ directory.
 Credentials and task patches go only to the disposable containers that need
 them. Generation, evaluation, reference, and judge containers use Docker's
 outbound bridge network, so tests that need the network can run, and so can the
-judge's model call. Human-judge workspaces get no model credential and no
-network.
+judge's model call.
 
 ## Project image requirements
 

@@ -8,8 +8,8 @@ from oracle_lab.harnesses import claude, codex, opencode
 from oracle_lab.harnesses.launch import AgentTurnRequest, require_credential
 from oracle_lab.harnesses.steps import Step
 from oracle_lab.harnesses.transcript import render_session
-from oracle_lab.io import write_json
-from oracle_lab.paths import RunPaths
+from oracle_lab.io import read_json, write_json
+from oracle_lab.paths import JudgePaths, RunPaths
 
 HARNESSES = {"claude": claude, "codex": codex, "opencode": opencode}
 
@@ -51,6 +51,37 @@ def provenance(request: AgentTurnRequest) -> dict:
     }
 
 
+def save_raw_answer(paths: JudgePaths, raw: Path) -> str:
+    """Copy an LLM judge's final answer to `raw`, empty when it wrote none, and return it."""
+    text = paths.final.read_text(errors="replace") if paths.final.is_file() else ""
+    raw.write_text(text)
+    return text
+
+
+def record_turn_error(
+    paths: JudgePaths, raw: Path, request: AgentTurnRequest, error: Exception
+) -> None:
+    """Note an LLM judge turn that raised, without touching an answer already saved.
+
+    The error is added to the turn's `result.json`, or to a new one with provenance
+    when the turn never wrote one. Whatever the model wrote is kept as `raw`.
+    """
+    if paths.result.is_file():
+        saved = read_json(paths.result)
+    else:
+        saved = {
+            "status": "failed",
+            "duration_seconds": 0,
+            "usage": None,
+            "errors": [],
+            **provenance(request),
+        }
+    saved["errors"] = [*saved["errors"], {"message": str(error)}]
+    write_json(paths.result, saved)
+    if not raw.exists():
+        save_raw_answer(paths, raw)
+
+
 def turn_request(
     config: RunConfig | ClassificationConfig,
     harness: HarnessConfig,
@@ -80,5 +111,5 @@ def generate(sandbox: Sandbox, config: RunConfig, paths: RunPaths) -> dict:
             paths.generation,
         ),
     )
-    render_session(paths)
+    render_session(paths, HARNESSES[config.agent.harness].render_event)
     return result

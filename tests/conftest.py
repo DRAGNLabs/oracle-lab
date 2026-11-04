@@ -1,6 +1,6 @@
 import pytest
 
-import oracle_lab.spend as spend
+import oracle_lab.harnesses.spend as spend
 
 
 @pytest.fixture(autouse=True)

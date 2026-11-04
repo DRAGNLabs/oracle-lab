@@ -13,28 +13,33 @@ from fixtures import (
 )
 from fixtures import completed_judgment as fixture_completed_judgment
 
+from oracle_lab.contracts.base import write_result
+from oracle_lab.contracts.run import MATRIX_CELLS
 from oracle_lab.io import write_json
 from oracle_lab.paths import AttemptPaths, OutputPaths, RunPaths
 from oracle_lab.report import report
-from oracle_lab.results import MATRIX_CELLS, write_result
 
 
 @pytest.mark.parametrize(
     ("scope", "target", "expected_scope"),
     [
         ("repository", None, "target: whole repository"),
-        ("localized", localized_target(), "target: `package/core.py`: `Client.send`;"),
+        (
+            "localized",
+            localized_target(),
+            "target: `package/core.py`: `Client.send` (fix scope: function);",
+        ),
         (
             "localized",
             localized_target(
-                level="class",
                 files=[
-                    {"path": "a.py", "names": ["A"], "lines": 3},
-                    {"path": "b.py", "names": ["B", "C"], "lines": 9},
+                    {"path": "a.py", "functions": [], "classes": ["A"], "lines": 3},
+                    {"path": "b.py", "functions": [], "classes": ["B", "C"], "lines": 9},
                 ],
                 text="- `a.py`: class `A`\n- `b.py`: classes `B`, `C`",
+                scope="module",
             ),
-            "target: `a.py`: class `A`; `b.py`: classes `B`, `C`;",
+            "target: `a.py`: class `A`; `b.py`: classes `B`, `C` (fix scope: module);",
         ),
     ],
 )

@@ -13,9 +13,9 @@ from fixtures import (
     upstream_repository,
 )
 
-from oracle_lab.classification.contracts import CLASSIFICATION_LABELS
+from oracle_lab.contracts.classification import CLASSIFICATION_LABELS
 from oracle_lab.io import write_json
-from oracle_lab.web.session import ReviewSession
+from oracle_lab.review.web.session import ReviewSession
 
 ATTEMPT = "classifications/owner__project-1/attempt-1"
 RATINGS = judgment_ratings(attempt_detail="disagree")
@@ -48,6 +48,10 @@ def test_the_listing_groups_tasks_by_problem_with_classification_first(session):
     assert set(listing["rating_definitions"]) == {"agree", "disagree"}
     assert "- **Disagree:** You would give a different answer" in listing["how_to_review"]
     assert "${" not in listing["how_to_review"]
+    labels = json.loads(json.dumps(listing["labels"]))  # as the page receives them
+    assert labels["actions"]["probe_code"] == "Probe code"
+    assert "source" not in labels["flagged_categories"]
+    assert labels["cells"]["fail_on_both"] == "Fail on both"
     [problem] = listing["problems"]
     assert (problem["instance_id"], problem["title"]) == ("owner__project-1", "Broken behavior.")
     assert [(task["id"], task["stage"]) for task in problem["tasks"]] == [
@@ -101,6 +105,7 @@ def test_a_judgment_overview_has_the_questions_answers_and_core_evidence(session
     assert "issue" not in overview
     assert overview["run"]["harness"] == "claude"
     assert overview["test_target"] is None
+    assert overview["fix_scope"] is None
     assert overview["outcomes"]["matrix"]["fail_on_buggy_pass_on_golden"] == 1
     assert overview["submission"]["files"] == ["oracle_tests/test_generated.py"]
     assert "evidence/agent-session.log" in overview["evidence"]
@@ -112,7 +117,7 @@ def test_a_classification_overview_has_its_questions_and_evidence(session):
     assert overview["views"] == ["buggy"]
     assert len(overview["questions"]) == len(CLASSIFICATION_LABELS)
     assert overview["questions"][0]["label"] == "Task nature"
-    assert overview["evidence"] == ["instance.json", "rubric.md"]
+    assert overview["evidence"] == ["instance.json", "rubric.md", "target.json"]
     assert "outcomes" not in overview
 
 

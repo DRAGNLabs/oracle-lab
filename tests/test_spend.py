@@ -4,7 +4,7 @@ import urllib.error
 
 import pytest
 
-import oracle_lab.spend as spend
+import oracle_lab.harnesses.spend as spend
 from oracle_lab.config import HarnessConfig
 from oracle_lab.io import read_json
 

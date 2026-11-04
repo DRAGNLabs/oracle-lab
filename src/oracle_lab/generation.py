@@ -8,26 +8,25 @@ rather than silently dropped.
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from pathlib import Path, PurePosixPath
 
 from docker import DockerClient
 
 from oracle_lab.config import RunConfig, repo_path
+from oracle_lab.container.repository import Repository
 from oracle_lab.container.sandbox import Profile, Sandbox, open_sandbox
+from oracle_lab.contracts.base import write_result
+from oracle_lab.contracts.run import (
+    InstanceRecord,
+    SubmissionFile,
+    SubmissionManifest,
+    files_digest,
+)
 from oracle_lab.harnesses import generate
 from oracle_lab.harnesses.retry import with_retries
 from oracle_lab.io import archive_files, digest, read_json
 from oracle_lab.paths import RunPaths
-from oracle_lab.repository import Repository
-from oracle_lab.results import (
-    InstanceRecord,
-    SubmissionFile,
-    SubmissionManifest,
-    read_submission_manifest,
-    write_result,
-)
 
 
 def generate_submission(
@@ -70,7 +69,12 @@ def changed_files(before: dict, after: dict, generated_dir: str) -> tuple[list[s
     for name in sorted(before.keys() | after.keys()):
         if before.get(name) == after.get(name):
             continue
-        path = PurePosixPath(repo_path(name))
+        try:
+            path = PurePosixPath(repo_path(name))
+        except ValueError:
+            # A name no repository path may have, such as `-v`, is never a submission.
+            forbidden.append(name)
+            continue
         entry = after.get(name)
         # New regular files only; symlinks cannot cause host-side reads or replacement of code.
         if root in path.parents and name not in before and entry and entry["kind"] == "file":
@@ -104,11 +108,11 @@ def capture(
     log = paths.generation / "capture.log"
     after = snapshot(sandbox, paths.generation / "after.json", log)
     allowed, forbidden = changed_files(before, after, config.task.generated_dir)
-    generated = paths.submission
+    submission = paths.submission
     # Keep the frozen bundle structurally complete even when the agent creates no
     # tests. Downstream verification and diagnostics can then inspect an empty
     # directory instead of failing because the bundle root never existed.
-    (generated / "files").mkdir(parents=True, exist_ok=True)
+    (submission / "files").mkdir(parents=True, exist_ok=True)
     sandbox.run(
         [
             runtime.python,
@@ -129,7 +133,7 @@ def capture(
     )
     files: dict[str, SubmissionFile] = {}
     for name in allowed:
-        target = generated / "files" / name
+        target = submission / "files" / name
         sandbox.download(runtime.workdir + "/" + name, target)
         # Copy only regular files with the exact bytes measured in the final snapshot.
         if target.is_symlink() or digest(target.read_bytes()) != after[name]["sha256"]:
@@ -140,33 +144,7 @@ def capture(
         forbidden_changes=forbidden,
         compliant=not forbidden,
         empty=not files,
-        sha256=_files_digest(files),
+        sha256=files_digest(files),
     )
-    write_result(generated / "manifest.json", manifest)
-    return manifest
-
-
-def _files_digest(files: dict[str, SubmissionFile]) -> str:
-    plain = {name: entry.model_dump() for name, entry in files.items()}
-    return digest(json.dumps(plain, sort_keys=True).encode())
-
-
-def verify_bundle(paths: RunPaths) -> SubmissionManifest:
-    """Validate the external bundle before transferring it to either code version."""
-    generated = paths.submission
-    manifest = read_submission_manifest(generated / "manifest.json")
-    if _files_digest(manifest.files) != manifest.sha256:
-        raise ValueError("Generated manifest checksum mismatch")
-    root = generated / "files"
-    entries = {
-        path.relative_to(root).as_posix()
-        for path in root.rglob("*")
-        if path.is_symlink() or not path.is_dir()
-    }
-    if entries != set(manifest.files):
-        raise ValueError("Generated bundle contains missing or unmanifested files")
-    for name, info in manifest.files.items():
-        path = root / repo_path(name)
-        if path.is_symlink() or not path.is_file() or digest(path.read_bytes()) != info.sha256:
-            raise ValueError(f"Generated artifact checksum mismatch: {name}")
+    write_result(submission / "manifest.json", manifest)
     return manifest

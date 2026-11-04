@@ -1,1 +1,1 @@
-"""Docker transport: sandboxes, file transfer, and image builds."""
+"""Docker transport, image builds, and the repository checkout inside a sandbox."""

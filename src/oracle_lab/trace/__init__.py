@@ -1,4 +1,4 @@
-"""A run's agent trace as typed, annotated events, for the review page's trace tab.
+"""A run's agent trace as typed, annotated events, for the judge and the review page.
 
 It reads saved runs and writes nothing. It annotates facts only (where the agent
 was, what it saw, what happened) and never labels an event as a failure mode.

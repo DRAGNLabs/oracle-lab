@@ -15,8 +15,8 @@ import pyarrow.parquet as pq
 from huggingface_hub import hf_hub_download
 
 from oracle_lab.config import RuntimeConfig, SourceConfig
+from oracle_lab.contracts.run import InstanceRecord, SourceProvenance
 from oracle_lab.io import digest
-from oracle_lab.results import InstanceRecord, SourceProvenance
 
 # Image naming/environment conventions are checked against this upstream revision.
 UPSTREAM_REVISION = "3947b299c121bb1f45f5094180c0f39fa0c599a0"
@@ -87,10 +87,6 @@ def runtime_for(record: dict) -> RuntimeConfig:
         pythonpath=layout.pythonpath,
         pytest_plugins=list(layout.pytest_plugins),
         pytest_version=OLDER_PYTEST_VERSIONS.get(record["instance_id"]),
-        # Official instance images already contain an installed checkout. Patches to
-        # Python sources are visible through that editable install; rerunning a generic
-        # pip build can require build-only dependencies absent from the final image.
-        rebuild=":",
     )
 
 
@@ -120,6 +116,16 @@ def load_record(config: SourceConfig) -> dict:
     return rows[0]
 
 
+def test_ids(record: dict, field: str) -> list[str]:
+    """A record's test ID field, such as FAIL_TO_PASS: a list, or a JSON-encoded one."""
+    value = record.get(field, [])
+    if isinstance(value, str):
+        value = json.loads(value)
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ValueError(f"{field} must be a list of test IDs")
+    return value
+
+
 def instance_from(record: dict, config: SourceConfig, upstream_revision: str) -> InstanceRecord:
     """Check a SWE-bench-format record and turn it into an instance."""
     for key in ["instance_id", "repo", "base_commit", "patch", "test_patch"]:
@@ -130,12 +136,7 @@ def instance_from(record: dict, config: SourceConfig, upstream_revision: str) ->
     if not re.fullmatch(r"[0-9a-f]{40}", record["base_commit"]):
         raise ValueError("base_commit must be immutable")
 
-    # The dataset carries FAIL_TO_PASS as either a list or a JSON-encoded string.
-    fail_to_pass = record.get("FAIL_TO_PASS", [])
-    if isinstance(fail_to_pass, str):
-        fail_to_pass = json.loads(fail_to_pass)
-    if not isinstance(fail_to_pass, list) or not all(isinstance(v, str) for v in fail_to_pass):
-        raise ValueError("FAIL_TO_PASS must be a list of test IDs")
+    fail_to_pass = test_ids(record, "FAIL_TO_PASS")
 
     return InstanceRecord(
         instance_id=record["instance_id"],

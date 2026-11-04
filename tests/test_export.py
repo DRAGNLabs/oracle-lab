@@ -16,23 +16,24 @@ from fixtures import (
     judgment_ratings,
     out_of_scope_classification,
     run_config,
+    run_status,
     traced_run,
 )
 
 from oracle_lab.cli import main
-from oracle_lab.export.contracts import TABLES
+from oracle_lab.contracts.export import TABLES
+from oracle_lab.contracts.judgment import FAILURE_MODES
 from oracle_lab.export.hub import upload_dataset
 from oracle_lab.export.tables import collect
 from oracle_lab.export.writer import export_dataset, schema
 from oracle_lab.io import read_json, write_json
-from oracle_lab.judge.contracts import FAILURE_MODES
 from oracle_lab.paths import OutputPaths, RunPaths
 from oracle_lab.review.store import save_review
 from oracle_lab.review.targets import ClassificationTarget, JudgmentTarget
 
 RUN_ID = "20260101T000000Z-aaaaaaaa"
 ATTEMPT = "owner__project-1/20260101T000000Z-bbbbbbbb"
-FINISHED = {"stage": "finished", "state": "completed", "updated_at": "2026-01-01T00:00:00+00:00"}
+FINISHED = run_status()
 
 
 def finished(paths: RunPaths) -> RunPaths:
@@ -101,7 +102,7 @@ def test_a_reviewed_run_fills_every_run_table(tmp_path):
 def test_a_run_that_stopped_early_keeps_its_unwritten_columns_null(tmp_path):
     paths = RunPaths.create(OutputPaths(tmp_path).runs / RUN_ID)
     paths.config.write_text(yaml.safe_dump(run_config().model_dump(mode="json")))
-    write_json(paths.status, {"stage": "build", "state": "failed", "error": "no image"})
+    write_json(paths.status, run_status(stage="build", state="failed", error="no image"))
 
     collected = collect(tmp_path)
 

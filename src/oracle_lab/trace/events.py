@@ -1,16 +1,23 @@
-"""What the page shows for one run: typed, annotated events and test file histories.
+"""What the judge and the page see of one run: typed, annotated events and test file
+histories.
 
-These are built on request and never persisted, so they are plain dataclasses
-rather than artifact contracts.
+The judge workspace saves a run's trace as `judge/trace.json`; `read_run_trace`
+validates it on the way back in. Each class rejects fields it does not declare.
 """
 
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
+from pathlib import Path
+
+from pydantic import ConfigDict, TypeAdapter, with_config
 
 from oracle_lab.harnesses.steps import EditFile, WriteFile
+from oracle_lab.io import read_json
 from oracle_lab.trace.shell import PatchFile
+
+_SAVED = with_config(ConfigDict(extra="forbid"))
 
 
 class ActionType(StrEnum):
@@ -36,12 +43,43 @@ class FileCategory(StrEnum):
     OUTSIDE = "outside"  # outside the repository root
 
 
+# What the judge's trace summary and the review page call each action and file category.
+ACTION_LABELS = {
+    ActionType.READ: "Read",
+    ActionType.SEARCH: "Search",
+    ActionType.EDIT_TEST: "Edit test",
+    ActionType.EDIT_SOURCE: "Edit source",
+    ActionType.RUN_TESTS: "Run tests",
+    ActionType.PROBE_CODE: "Probe code",
+    ActionType.RUN_OTHER: "Run other",
+    ActionType.REASONING: "Reasoning",
+    ActionType.MESSAGE: "Message",
+    ActionType.FAILED_CALL: "Failed call",
+}
+CATEGORY_LABELS = {
+    FileCategory.SOURCE: "source",
+    FileCategory.TEST: "existing test",
+    FileCategory.GENERATED_TEST: "generated test",
+    FileCategory.DOCS: "docs",
+    FileCategory.CHANGELOG: "changelog",
+    FileCategory.CONFIG: "config",
+    FileCategory.OUTSIDE: "outside repo",
+}
+# Categories worth naming on an event: everything but plain source and generated tests.
+FLAGGED_CATEGORIES = tuple(
+    category
+    for category in FileCategory
+    if category not in {FileCategory.SOURCE, FileCategory.GENERATED_TEST}
+)
+
+
 class DefectOverlap(StrEnum):
     LINES = "lines"  # overlaps a patched hunk's buggy-side lines
     FILE = "file"  # in a patched file, but not on its patched lines
     NONE = "none"
 
 
+@_SAVED
 @dataclass
 class Touch:
     """One file an event read, searched, or changed."""
@@ -53,6 +91,7 @@ class Touch:
     overlap: DefectOverlap
 
 
+@_SAVED
 @dataclass
 class PytestSummary:
     """Counts by outcome word (`passed`, `failed`, ...) and the ids pytest printed as FAILED."""
@@ -61,6 +100,7 @@ class PytestSummary:
     failed: list[str]
 
 
+@_SAVED
 @dataclass
 class Event:
     """One row of the timeline.
@@ -89,6 +129,7 @@ class Event:
     change: WriteFile | EditFile | PatchFile | None = None
 
 
+@_SAVED
 @dataclass
 class FileVersion:
     """One version of a generated test file and what happened since the previous one."""
@@ -111,6 +152,7 @@ class FileVersion:
     skip_marks_added: list[str] = field(default_factory=list)  # added skip/xfail lines
 
 
+@_SAVED
 @dataclass
 class GeneratedFile:
     path: str
@@ -120,6 +162,7 @@ class GeneratedFile:
     failed_then_absent: list[str] = field(default_factory=list)
 
 
+@_SAVED
 @dataclass
 class DefectSummary:
     first_touch: int | None  # step of the first LINES overlap
@@ -130,6 +173,7 @@ class DefectSummary:
     target_read: bool | None  # None for runs without a localized target
 
 
+@_SAVED
 @dataclass
 class RunTrace:
     reasoning: str  # "raw" or "summary"
@@ -144,3 +188,12 @@ class RunTrace:
         for event in data["events"]:
             del event["change"]
         return data
+
+
+_RUN_TRACE = TypeAdapter(RunTrace)
+
+
+def read_run_trace(path: Path) -> RunTrace:
+    """A saved `RunTrace.to_json()`, validated. Edit contents are not saved, so each
+    event's `change` is None."""
+    return _RUN_TRACE.validate_python(read_json(path))

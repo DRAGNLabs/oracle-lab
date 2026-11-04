@@ -8,8 +8,8 @@ from oracle_lab.trace.events import (
     Touch,
 )
 from oracle_lab.trace.facts import (
+    Checkout,
     PatchedRegions,
-    Repository,
     generated_files,
     grep_hits,
     parse_pytest,
@@ -32,19 +32,19 @@ diff --git a/pkg/mod.py b/pkg/mod.py
 
 
 def test_repository_relative_paths_and_categories():
-    repository = Repository("/testbed", "oracle_tests")
+    checkout = Checkout("/testbed", "oracle_tests")
 
-    assert repository.relative("/testbed/pkg/mod.py") == "pkg/mod.py"
-    assert repository.relative("./pkg/mod.py") == "pkg/mod.py"
-    assert repository.relative("/tmp/probe.py") is None
-    assert repository.category("/testbed/oracle_tests/test_a.py") is FileCategory.GENERATED_TEST
-    assert repository.category("tests/test_mod.py") is FileCategory.TEST
-    assert repository.category("CHANGES.rst") is FileCategory.CHANGELOG
-    assert repository.category("changelog/123.bugfix.rst") is FileCategory.CHANGELOG
-    assert repository.category("docs/usage.rst") is FileCategory.DOCS
-    assert repository.category("pyproject.toml") is FileCategory.CONFIG
-    assert repository.category("pkg/mod.py") is FileCategory.SOURCE
-    assert repository.category("/opt/conda/lib/site.py") is FileCategory.OUTSIDE
+    assert checkout.relative("/testbed/pkg/mod.py") == "pkg/mod.py"
+    assert checkout.relative("./pkg/mod.py") == "pkg/mod.py"
+    assert checkout.relative("/tmp/probe.py") is None
+    assert checkout.category("/testbed/oracle_tests/test_a.py") is FileCategory.GENERATED_TEST
+    assert checkout.category("tests/test_mod.py") is FileCategory.TEST
+    assert checkout.category("CHANGES.rst") is FileCategory.CHANGELOG
+    assert checkout.category("changelog/123.bugfix.rst") is FileCategory.CHANGELOG
+    assert checkout.category("docs/usage.rst") is FileCategory.DOCS
+    assert checkout.category("pyproject.toml") is FileCategory.CONFIG
+    assert checkout.category("pkg/mod.py") is FileCategory.SOURCE
+    assert checkout.category("/opt/conda/lib/site.py") is FileCategory.OUTSIDE
 
 
 def test_patched_regions_overlap_and_shown_lines():

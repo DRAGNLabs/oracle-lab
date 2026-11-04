@@ -22,6 +22,14 @@ available at `/oracle-classification/instance.json`. Its top-level fields are:
 - `source`: the dataset, its revision, and its split.
 - `original_record`: the dataset's own record, unchanged.
 
+`/oracle-classification/target.json` is an automated check of the golden repair.
+`files` names the existing functions and classes it changes, per file. `scope` says where the repair's changes live, found by comparing the buggy and
+repaired syntax trees: `function` (only inside existing functions), `class` (a
+class attribute, base, or decorator changes), or `module` (code outside any
+function or class changes). Comments, docstrings, imports, and new definitions do
+not count.
+It is evidence, not an answer: classify the task by reading the code yourself.
+
 The fields of `original_record` depend on `source.kind`. Both supported datasets
 share these:
 

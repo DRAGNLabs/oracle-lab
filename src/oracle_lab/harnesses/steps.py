@@ -78,16 +78,22 @@ class Step:
     timestamp: str | None = None
 
 
-def numbered_events(path: Path) -> list[tuple[int, dict]]:
-    """A trace's JSON object events with their 1-based line numbers. Other lines are skipped."""
-    events = []
+def read_trace(path: Path) -> tuple[list[tuple[int, dict]], int]:
+    """A JSON Lines trace's object events with their 1-based line numbers, and how many
+    non-blank lines were not JSON objects. A missing trace has neither."""
+    events, malformed = [], 0
     if not path.exists():
-        return events
+        return events, malformed
     for number, line in enumerate(path.read_text(errors="replace").splitlines(), start=1):
+        if not line.strip():
+            continue
         try:
             event = json.loads(line)
         except json.JSONDecodeError:
+            malformed += 1
             continue
         if isinstance(event, dict):
             events.append((number, event))
-    return events
+        else:
+            malformed += 1
+    return events, malformed

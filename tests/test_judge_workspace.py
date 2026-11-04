@@ -6,12 +6,13 @@ import yaml
 from fixtures import RUN_CONFIG, detecting_result, instance_record, run_config, write_submission
 
 from oracle_lab.config import JudgeConfig
+from oracle_lab.container.paths import JUDGE_ROOT
 from oracle_lab.container.sandbox import CommandResult
-from oracle_lab.generation import verify_bundle
+from oracle_lab.contracts.base import write_result
+from oracle_lab.contracts.run import read_evaluation_result, verify_bundle
 from oracle_lab.io import read_json, write_json
-from oracle_lab.judge.workspace import JUDGE_ROOT, build_judge_workspace
+from oracle_lab.judge.generation.workspace import build_judge_workspace
 from oracle_lab.paths import RunPaths
-from oracle_lab.results import read_evaluation_result, write_result
 
 SAMPLE = RUN_CONFIG
 # One reasoning step, in the Claude format the sample config's harness reads.
@@ -116,14 +117,13 @@ def test_workspace_exposes_complete_hashed_bundle_and_identical_tests(tmp_path):
     sandbox = fake_sandbox(files)
 
     spec = build_judge_workspace(
-        sandbox, config, paths, "example/runtime", instance, evaluation, verify_bundle(paths)
+        sandbox, config, paths, "example/runtime", instance, verify_bundle(paths)
     )
 
     assert spec.workspace_method == "git_worktree"
     assert spec.prepared_image.image_id == "sha256:" + "1" * 64
     destinations = {artifact.destination for artifact in spec.artifacts}
     assert JUDGE_ROOT + "/instance/issue.md" in destinations
-    assert JUDGE_ROOT + "/instructions.md" in destinations
     assert JUDGE_ROOT + "/evidence/agent-session.log" in destinations
     assert JUDGE_ROOT + "/evidence/paired-results.json" in destinations
     assert JUDGE_ROOT + "/buggy/oracle_tests/test_generated.py" in destinations
@@ -133,14 +133,6 @@ def test_workspace_exposes_complete_hashed_bundle_and_identical_tests(tmp_path):
     assert read_json(paths.judge.bundle_manifest)["artifacts"] == [
         artifact.model_dump(mode="json") for artifact in spec.artifacts
     ]
-    instructions = sandbox.uploaded[JUDGE_ROOT + "/instructions.md"].decode()
-    assert "## Reading order" in instructions
-    assert "`evidence/agent-session.log`" in instructions
-    assert "package/core.py" in instructions
-    assert "tests/test_core.py::test_fixed" in instructions
-    assert "fail_on_buggy_pass_on_golden" in instructions
-    assert "`evidence/buggy-tests.json` and `evidence/golden-tests.json`" in instructions
-    assert "| `oracle_tests/test_generated.py::test_generated` | `fail` | `pass` |" in instructions
     summary = sandbox.uploaded[JUDGE_ROOT + "/evidence/agent-trace.md"].decode()
     assert "- 0 · Reasoning · Reading" in summary
     assert read_json(paths.judge.trace)["events"][0]["text"] == "Reading"
@@ -153,7 +145,7 @@ def test_without_a_built_trace_the_judge_reads_the_raw_trace(tmp_path):
     sandbox = fake_sandbox(files)
 
     spec = build_judge_workspace(
-        sandbox, config, paths, "example/runtime", instance, evaluation, verify_bundle(paths)
+        sandbox, config, paths, "example/runtime", instance, verify_bundle(paths)
     )
 
     destinations = {artifact.destination for artifact in spec.artifacts}
@@ -167,7 +159,7 @@ def test_workspace_falls_back_to_explicit_repository_copies(tmp_path):
     sandbox = fake_sandbox(files, worktrees=False)
 
     spec = build_judge_workspace(
-        sandbox, config, paths, "example/runtime", instance, evaluation, verify_bundle(paths)
+        sandbox, config, paths, "example/runtime", instance, verify_bundle(paths)
     )
 
     assert spec.workspace_method == "directory_copy"
@@ -183,7 +175,6 @@ def test_workspace_reconstruction_manifest_is_deterministic(tmp_path):
         paths,
         "example/runtime",
         instance,
-        evaluation,
         verify_bundle(paths),
     )
     second = build_judge_workspace(
@@ -192,7 +183,6 @@ def test_workspace_reconstruction_manifest_is_deterministic(tmp_path):
         paths,
         "example/runtime",
         instance,
-        evaluation,
         verify_bundle(paths),
     )
 
@@ -210,6 +200,5 @@ def test_workspace_reports_missing_evaluation_evidence(tmp_path):
             paths,
             "example/runtime",
             instance,
-            evaluation,
             verify_bundle(paths),
         )

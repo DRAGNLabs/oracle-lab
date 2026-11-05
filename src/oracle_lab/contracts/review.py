@@ -7,10 +7,9 @@ import re
 from collections.abc import Collection
 from typing import Annotated, Literal, get_args
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from oracle_lab.contracts.base import Sha256, StrictModel
-from oracle_lab.contracts.judgment import TraceSteps
 
 # The two LLM judges a review can rate: the generated-test judge and the classifier.
 Stage = Literal["judge", "classification"]
@@ -34,23 +33,30 @@ def require_rater(rater: str) -> str:
     return rater
 
 
-class RaterFailureMode(StrictModel):
-    """A failure mode outside the start list that a rater saw and the judge missed."""
-
-    name: Annotated[str, Field(min_length=1, max_length=80)]
-    description: Annotated[str, Field(min_length=1, max_length=500)]
-    steps: TraceSteps
-
-
 class Review(StrictModel):
-    """One rating for each item the LLM judge answered, and the rater's own labels.
+    """One rating for each item the LLM judge answered, and why the rater disagreed.
 
     Items are the target's `rating_keys()`: submission or classification questions,
     and for a judgment `failure_modes.<key>` and `added_failure_modes.<index>`.
+    Every disagree rating carries a justification, and nothing else does.
     """
 
     ratings: dict[str, Rating]
-    other_failure_modes: list[RaterFailureMode] = Field(default_factory=list)
+    justifications: dict[str, Annotated[str, Field(min_length=1, max_length=2000)]] = Field(
+        default_factory=dict
+    )
+
+    @model_validator(mode="after")
+    def disagreements_are_justified(self) -> Review:
+        disagreed = {key for key, rating in self.ratings.items() if rating == "disagree"}
+        if set(self.justifications) != disagreed:
+            raise ValueError(
+                f"justifications must cover exactly the disagree ratings {sorted(disagreed)}, "
+                f"not {sorted(self.justifications)}"
+            )
+        if any(not text.strip() for text in self.justifications.values()):
+            raise ValueError("justifications must not be blank")
+        return self
 
 
 class ReviewProvenance(StrictModel):
@@ -119,8 +125,6 @@ class AgreementReport(StrictModel):
     stages: dict[Stage, StageAgreement]
     # Every failure mode a judge added, with its ratings, by target.
     added_labels: list[AddedLabelRatings]
-    # How many raters' own labels used each name, across every target.
-    rater_labels: dict[str, int]
     # Each target some raters did not review, and those raters.
     missing: dict[str, list[str]]
     # Each target that could not be reviewed, and why.

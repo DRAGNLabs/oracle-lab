@@ -12,7 +12,7 @@ from pathlib import Path
 from docker import DockerClient
 from docker.errors import DockerException
 
-from oracle_lab.config import RunConfig
+from oracle_lab.config import ProblemConfig, RunConfig
 from oracle_lab.container.lifecycle import preserve_failure
 from oracle_lab.container.repository import Repository
 from oracle_lab.container.sandbox import Profile, Sandbox, open_sandbox
@@ -36,7 +36,7 @@ from oracle_lab.paths import RunPaths
 
 
 def run_tests(
-    sandbox: Sandbox, config: RunConfig, targets: list[str], directory: Path
+    sandbox: Sandbox, config: ProblemConfig, targets: list[str], directory: Path
 ) -> VersionResult:
     """Run the tests in a container, then turn what came back into a result.
 
@@ -83,7 +83,7 @@ def run_tests(
 
 def run_reference(
     client: DockerClient,
-    config: RunConfig,
+    config: ProblemConfig,
     image: str,
     instance: InstanceRecord,
     paths: RunPaths,
@@ -105,7 +105,7 @@ def run_reference(
 
 def run_submission(
     client: DockerClient,
-    config: RunConfig,
+    config: ProblemConfig,
     image: str,
     instance: InstanceRecord,
     paths: RunPaths,
@@ -130,7 +130,7 @@ def run_submission(
 
 def run_version(
     client: DockerClient,
-    config: RunConfig,
+    config: ProblemConfig,
     image: str,
     instance: InstanceRecord,
     version: str,
@@ -158,7 +158,7 @@ def run_version(
 
 def check_reference(
     client: DockerClient,
-    config: RunConfig,
+    config: ProblemConfig,
     image: str,
     instance: InstanceRecord,
     paths: RunPaths,

@@ -168,8 +168,11 @@ correct outcome.
 
 Choose one label. If more than one fits, choose the first in this order.
 
-- `implicit`: the bug crashes, raises an uncaught exception, or hangs, so
-  triggering it is enough to detect it.
+- `implicit`: the bug fails in a way anyone who triggers it can see is wrong:
+  an accidental crash, such as an `AttributeError` or `IndexError` the code
+  never meant to raise, or a hang. An exception the code raises on purpose,
+  with its own check and message, does not count: it looks like intended
+  behavior, so a test still needs the correct behavior from elsewhere.
 - `specified`: the repository or a specification it follows states the correct
   behavior.
 - `derived`: nothing states the correct behavior, but it can be reasoned out from
@@ -187,7 +190,8 @@ Choose one label listed under your `oracle_kind`.
 
 For `implicit`:
 
-- `crash_or_exception`: the bug raises an uncaught exception or crashes.
+- `crash_or_exception`: the bug crashes with an exception the code never meant
+  to raise.
 - `hang_or_resource`: the bug hangs, times out, or exhausts a resource.
 
 For `specified`:

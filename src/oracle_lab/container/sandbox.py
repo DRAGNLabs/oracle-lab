@@ -14,7 +14,7 @@ from docker.errors import DockerException, NotFound
 from docker.models.containers import Container
 from requests.exceptions import RequestException
 
-from oracle_lab.config import ClassificationConfig, RunConfig, RuntimeConfig
+from oracle_lab.config import ResolvedConfig, RuntimeConfig
 from oracle_lab.container import files
 from oracle_lab.container.files import RedactedOutput
 from oracle_lab.container.lifecycle import execution_watchdog, preserve_failure
@@ -183,7 +183,7 @@ class Sandbox:
 def open_sandbox(
     client: DockerClient,
     image: str,
-    config: RunConfig | ClassificationConfig,
+    config: ResolvedConfig,
     profile: Profile,
     log: Path,
 ) -> Iterator[Sandbox]:
@@ -204,7 +204,7 @@ def open_sandbox(
 def create_sandbox_container(
     client: DockerClient,
     image: str,
-    config: RunConfig | ClassificationConfig,
+    config: ResolvedConfig,
     profile: Profile,
 ) -> Container:
     """Create a stopped container with the benchmark's standard isolation limits."""

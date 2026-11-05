@@ -1,8 +1,9 @@
-"""The single-instance pipeline: resolve, localize, build, check reference, generate, evaluate, judge.
+"""The single-instance pipeline: resolve, check the classification, localize, build,
+check reference, generate, evaluate, judge.
 
 Every stage records itself in `status.json` before it starts, so an interrupted or
 failed run names the stage it stopped in rather than leaving a silent directory.
-`prepare` holds the stages before generation, which `preflight` also runs.
+`prepare` holds the stages before generation; `resolve` is shared with preflight.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ import yaml
 from docker import DockerClient
 
 from oracle_lab.config import (
+    ProblemConfig,
     RunConfig,
     render_prompt,
     validate_prompt_scope,
@@ -21,6 +23,7 @@ from oracle_lab.config import (
 from oracle_lab.container.images import prepare_image, require_saved_image
 from oracle_lab.container.sandbox import docker_client
 from oracle_lab.contracts.base import write_result
+from oracle_lab.contracts.classification import require_usable_classification
 from oracle_lab.contracts.judgment import (
     SkippedJudgment,
     mark_judgments_stale,
@@ -40,7 +43,7 @@ from oracle_lab.harnesses.spend import measure_spend
 from oracle_lab.instance import resolve_source, write_private_instance_artifacts
 from oracle_lab.io import read_json, write_json
 from oracle_lab.judge.generation.run import judge_stage
-from oracle_lab.localization import load_target, localize
+from oracle_lab.localization import load_target
 from oracle_lab.paths import OutputPaths, RunPaths
 from oracle_lab.report import report
 
@@ -117,32 +120,37 @@ def prepare(
     paths: RunPaths,
     stages: Stages,
     prompt_template: str,
-    *,
-    preflight: bool = False,
 ) -> tuple[InstanceRecord, str]:
     """Run every stage before generation, and return the instance and image.
 
-    A localized run tells the agent which code to test: the code the golden
-    repair changes. Preflight finds it in the image, once per problem; a run
-    copies what preflight found, before spending time on a build.
+    The problem must already be set up: its preflight found the target, and its
+    classification cleared it for a run. A localized run tells the agent which
+    code to test, and copies that target before spending time on a build.
     """
-    localized = config.task.scope == "localized"
+    output = OutputPaths(Path(config.output))
     stages.start("resolve")
-    instance = _resolve(config, paths)
+    # Point the config at the run's own copies, so a rerun uses the files this run
+    # used. The prompt itself is written after localization.
+    config.task.prompt = str(paths.prompt)
+    if config.judge:
+        paths.judge.rubric.write_bytes(Path(config.judge.rubric).read_bytes())
+        # Absolute, because reloading a config joins its paths to the run directory.
+        config.judge.rubric = str(paths.judge.rubric.resolve())
+    instance = resolve(config, paths)
+
+    # A problem the classifier rejected is never run.
+    stages.start("classification")
+    require_usable_classification(output.classifications, instance)
 
     target = None
-    if localized and not preflight:
+    if config.task.scope == "localized":
         stages.start("localize")
-        target = load_target(OutputPaths(Path(config.output)), instance, paths)
+        target = load_target(output, instance, paths)
 
     stages.start("build")
     image = prepare_image(client, config, paths.build)
     write_json(paths.runtime, {"image": image})
-
-    if localized and preflight:
-        stages.start("localize")
-        target = localize(client, config, image, instance, paths)
-    paths.prompt.write_text(render_prompt(prompt_template, config, target.text if target else None))
+    paths.prompt.write_text(render_prompt(prompt_template, config, target and target.text))
 
     # A pair that cannot distinguish its own revisions cannot score an
     # agent, so prove it before spending a generation call.
@@ -151,18 +159,10 @@ def prepare(
     return instance, image
 
 
-def _resolve(config: RunConfig, paths: RunPaths) -> InstanceRecord:
-    """Look up the instance, then freeze everything later stages read into the run."""
+def resolve(config: ProblemConfig, paths: RunPaths) -> InstanceRecord:
+    """Look up the instance, then freeze everything later stages read into the directory."""
     instance, config.runtime = resolve_source(config.source)
     validate_resolved_config(config)
-
-    # Point the config at the run's own copies, so a rerun uses the files this run
-    # used. The prompt itself is written after localization.
-    config.task.prompt = str(paths.prompt)
-    if config.judge:
-        paths.judge.rubric.write_bytes(Path(config.judge.rubric).read_bytes())
-        # Absolute, because reloading a config joins its paths to the run directory.
-        config.judge.rubric = str(paths.judge.rubric.resolve())
 
     # `evaluate` and `judge` read this saved config, not the user's.
     paths.config.write_text(yaml.safe_dump(config.model_dump(), sort_keys=False))

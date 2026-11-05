@@ -50,8 +50,8 @@ mkdir runs classifications
 Produce them as usual in `oracle-lab`:
 
 ```sh
+uv run oracle-lab setup <problems>.yaml
 uv run oracle-lab batch <batch>.yaml
-uv run oracle-lab classify <classification-config>.yaml
 ```
 
 Copy each run and attempt to review into the data repository, keeping the
@@ -63,15 +63,9 @@ cp -r output/runs/<run-id> ../oracle-lab-data/runs/
 cp -r output/classifications/<instance-id>/<attempt> ../oracle-lab-data/classifications/<instance-id>/
 ```
 
-Only a completed judgment or classification can be reviewed. Check the set
-before publishing it; the listing names anything that cannot be reviewed and
-why:
-
-```sh
-uv run oracle-lab review ../oracle-lab-data --rater check --no-browser
-```
-
-Stop it with Ctrl+C, then commit and push `main`:
+Only a completed judgment or classification can be reviewed; the review page
+lists anything else under "Can't be reviewed", with the reason. Commit and push
+`main`:
 
 ```sh
 cd ../oracle-lab-data
@@ -121,6 +115,9 @@ Do not push the `agreement` branch, and never merge it or a rater branch into
 `main`. To refresh it later, delete it and repeat these steps.
 
 ## For raters
+
+Send raters the [rater guide](rater-guide.md): just their commands, each with a
+comment. The steps below are the same, with more detail.
 
 ### Set up once
 

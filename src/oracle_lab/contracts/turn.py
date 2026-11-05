@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 from typing import Annotated, Generic, Literal, TypeVar
 
 from pydantic import AfterValidator, Field
@@ -67,27 +66,65 @@ def turn_failure(result: dict, who: str) -> UnsuccessfulTurn | None:
     return failed_turn(reason, timed_out=result["status"] == "timeout")
 
 
-# A fenced block on its own lines, anywhere in the answer.
-_FENCED_JSON = re.compile(
-    r"^```(?:json)?[ \t]*\r?\n(?P<body>.*?)\r?\n```[ \t]*$", re.DOTALL | re.MULTILINE
-)
-
-
 def parse_json_object(raw: str) -> dict:
-    """The one JSON object a model answered with: bare, or inside one Markdown fence
-    that ends the answer. Prose before the fence is ignored; the raw answer keeps it."""
-    candidate = raw
-    if not raw.lstrip().startswith(("{", "[")):
-        fences = list(_FENCED_JSON.finditer(raw))
-        if len(fences) != 1 or raw[fences[0].end() :].strip():
-            raise ValueError(
-                "Expected exactly one JSON object in one Markdown fence that ends the answer"
-            )
-        candidate = fences[0].group("body")
-    value = json.loads(candidate)
-    if not isinstance(value, dict):
-        raise ValueError("Model output must be a JSON object")
-    return value
+    """The JSON object a model answered with: the largest complete top-level object
+    in its answer, the last one on a tie.
+
+    Prose before or after it, and a Markdown fence around it, are ignored; the raw
+    answer keeps them. When no object parses, the first parse error is raised.
+    """
+    found: list[tuple[int, dict]] = []
+    first_error: json.JSONDecodeError | None = None
+    start = raw.find("{")
+    while start >= 0:
+        try:
+            value, end = _decode_escaping_stray_quotes(raw, start)
+        except json.JSONDecodeError as error:
+            first_error = first_error or error
+            start = raw.find("{", start + 1)
+            continue
+        found.append((end - start, value))
+        start = raw.find("{", end)
+    if found:
+        return max(reversed(found), key=lambda item: item[0])[1]
+    if first_error:
+        raise first_error
+    raise ValueError("Model output must contain a JSON object")
+
+
+def _decode_escaping_stray_quotes(text: str, start: int, attempts: int = 10) -> tuple[dict, int]:
+    """Decode the JSON object at `start`, and return it with the index just past it.
+
+    A `"` a model left unescaped inside a string ends the string early, and the
+    decoder then stops at the text after it, expecting a comma. Escaping the last
+    unescaped quote before that point and decoding again recovers the text. It
+    only adds backslashes, never removes text. Any other error, or one that
+    escaping does not fix, is raised as it was first found.
+    """
+    decoder = json.JSONDecoder()
+    added = 0
+    try:
+        value, end = decoder.raw_decode(text, start)
+        return value, end
+    except json.JSONDecodeError as exc:
+        first = error = exc
+    for _ in range(attempts):
+        if not error.msg.startswith("Expecting ',' delimiter"):
+            break
+        quote = text.rfind('"', start, error.pos)
+        while quote > start and text[quote - 1] == "\\":
+            quote = text.rfind('"', start, quote - 1)
+        if quote <= start:
+            break
+        text = text[:quote] + "\\" + text[quote:]
+        added += 1
+        try:
+            value, end = decoder.raw_decode(text, start)
+            # Every added backslash sits inside the object, before its end.
+            return value, end - added
+        except json.JSONDecodeError as next_error:
+            error = next_error
+    raise first
 
 
 def last_error_message(errors: list) -> str | None:

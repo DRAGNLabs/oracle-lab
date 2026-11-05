@@ -78,16 +78,20 @@ The pipeline stages run in this order, and each is one module or package that
 
 Supporting these:
 
-- `src/oracle_lab/cli.py`: the command interface: `run`, `preflight`, `batch`,
-  `evaluate`, `judge`, `classify`, `review`, `agreement`, `export`, and `report`.
+- `src/oracle_lab/cli.py`: the command interface: `setup`, `run`, `batch`,
+  `evaluate`, `judge`, `report`, `review`, `agreement`, and `export`.
 - `src/oracle_lab/run.py`: the stage sequence and run status.
-- `src/oracle_lab/preflight.py`: `preflight`, which runs the stages before
-  generation plus an environment check, without calling a model.
+- `src/oracle_lab/setup.py`: `setup`, which preflights and then classifies every
+  problem in a setup file, skipping the steps a problem has already passed. A
+  run requires both: `run.py` refuses a problem whose classification did not
+  clear it.
+- `src/oracle_lab/preflight.py`: one problem's preflight: resolve, build,
+  localize, the reference check, and an environment check, without calling a
+  model.
 - `src/oracle_lab/batch/`: sequential batch execution and its summary.
-- `src/oracle_lab/judge/classification/`: standalone task classification, run
-  with `classify` outside the run stages. Its `workspace.py` and `run.py`
-  mirror `judge/generation/`. Reports read the newest matching
-  attempt.
+- `src/oracle_lab/judge/classification/`: task classification, run by `setup`
+  outside the run stages. Its `workspace.py` and `run.py` mirror
+  `judge/generation/`. Reports read the newest matching attempt.
 - `src/oracle_lab/review/`: human review of the LLM judges, one problem (task
   instance) at a time.
   - `targets.py`: `JudgmentTarget` and `ClassificationTarget`, which hold

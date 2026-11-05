@@ -24,7 +24,6 @@ from oracle_lab.contracts.export import (
     FailureModeRow,
     GeneratedTestRow,
     JudgmentRow,
-    RaterFailureModeRow,
     ReviewRow,
     RunRow,
     SkippedTarget,
@@ -230,8 +229,7 @@ def attempt_rows(paths: AttemptPaths) -> list[ArtifactModel]:
 
 
 def review_rows(target: ReviewTarget) -> list[ArtifactModel]:
-    """Every rater's current review of the target: one row per rated item, and one
-    per failure mode a rater added."""
+    """Every rater's current review of the target: one row per rated item."""
     rows: list[ArtifactModel] = []
     for rater, review in read_all_reviews(target).items():
         provenance = read_provenance(target, rater)
@@ -246,17 +244,12 @@ def review_rows(target: ReviewTarget) -> list[ArtifactModel]:
                 **identity,
                 item=item,
                 rating=rating,
+                justification=review.justifications.get(item),
                 reviewed_output_sha256=provenance.reviewed_output_sha256,
                 judge_model=provenance.judge_model,
                 stage_rubric_sha256=provenance.stage_rubric_sha256,
             )
             for item, rating in review.ratings.items()
-        ]
-        rows += [
-            RaterFailureModeRow(
-                **identity, name=mode.name, description=mode.description, steps=mode.steps
-            )
-            for mode in review.other_failure_modes
         ]
     return rows
 

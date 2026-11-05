@@ -61,8 +61,9 @@ REPOSITORY_LAYOUTS = {
 
 # Instances whose image cannot run the default pytest.
 OLDER_PYTEST_VERSIONS = {
-    # This image uses Python 3.6.
+    # These images use Python 3.6.
     "scikit-learn__scikit-learn-14710": "6.2.5",
+    "scikit-learn__scikit-learn-15100": "6.2.5",
 }
 
 

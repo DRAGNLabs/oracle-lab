@@ -11,7 +11,13 @@ import pytest
 import yaml
 from fixtures import DOCKERFILES, HELPERS, judgment_labels, write_submission
 
-from oracle_lab.config import JudgeConfig, load_config
+from oracle_lab.config import (
+    JudgeConfig,
+    RunConfig,
+    RuntimeConfig,
+    ToolchainConfig,
+    load_config,
+)
 from oracle_lab.container.images import build_image
 from oracle_lab.container.paths import JUDGE_ROOT
 from oracle_lab.container.sandbox import Profile, open_sandbox
@@ -35,6 +41,18 @@ from oracle_lab.run import reevaluate
 pytestmark = pytest.mark.docker
 
 
+SMOKE_CONFIG = Path(__file__).parents[1] / "configs/smoke.yaml"
+
+
+def smoke_config(saved: RunPaths) -> RunConfig:
+    """The smoke run config, with the runtime a saved preflight or run resolved."""
+    config = load_config(SMOKE_CONFIG)
+    resolved = yaml.safe_load(saved.config.read_text())
+    config.runtime = RuntimeConfig.model_validate(resolved["runtime"])
+    config.toolchain = ToolchainConfig.model_validate(resolved["toolchain"])
+    return config
+
+
 def test_local_sdk_build_exec_and_copy(tmp_path):
     """Opt-in image/API smoke check using only a previously prepared runtime."""
     saved = os.environ.get("ORACLE_LAB_SMOKE_RUN")
@@ -42,7 +60,7 @@ def test_local_sdk_build_exec_and_copy(tmp_path):
         pytest.skip("Set ORACLE_LAB_SMOKE_RUN to use a local prepared runtime")
     saved = Path(saved).resolve()
     saved_paths = RunPaths(saved)
-    config = load_config(saved_paths.config, resolved=True)
+    config = smoke_config(saved_paths)
     parent = read_json(saved_paths.runtime)["image"]
     context = tmp_path / "context"
     context.mkdir()
@@ -107,7 +125,7 @@ def test_reconstruct_privileged_judge_workspace(tmp_path, request):
         pytest.skip("Set ORACLE_LAB_SMOKE_RUN to use a completed saved run")
     saved = Path(saved).resolve()
     saved_paths = RunPaths(saved)
-    config = load_config(saved_paths.config, resolved=True)
+    config = smoke_config(saved_paths)
     config.judge = JudgeConfig(
         rubric=str(Path(__file__).parents[1] / "prompts/judge/generated-test-evaluation-rubric.md"),
         harness="claude",
@@ -236,7 +254,7 @@ def test_real_requests_pair_and_artifact_copy(tmp_path, visibility, monkeypatch,
         pytest.skip("Set ORACLE_LAB_SMOKE_RUN to a run with a prepared Requests smoke image")
     saved = Path(saved).resolve()
     saved_paths = RunPaths(saved)
-    config = load_config(saved_paths.config, resolved=True)
+    config = smoke_config(saved_paths)
     config.task.existing_tests = visibility
     instance = read_instance_record(saved_paths.instance)
     assert instance.instance_id == "psf__requests-1142"
@@ -281,7 +299,7 @@ def test_localize_reads_the_saved_image_and_reproduces_the_saved_target(tmp_path
     saved_paths = RunPaths(Path(saved).resolve())
     if not saved_paths.target.is_file():
         pytest.skip("The saved run is not localized")
-    config = load_config(saved_paths.config, resolved=True)
+    config = smoke_config(saved_paths)
     instance = read_instance_record(saved_paths.instance)
     image = read_json(saved_paths.runtime)["image"]
     client = docker.from_env()
@@ -313,7 +331,7 @@ def test_runtime_build_removes_or_refuses_a_task_record(tmp_path, planted, build
     if not saved:
         pytest.skip("Set ORACLE_LAB_SMOKE_RUN to use a local prepared runtime")
     saved_paths = RunPaths(Path(saved).resolve())
-    platform = load_config(saved_paths.config, resolved=True).require_runtime().platform
+    platform = smoke_config(saved_paths).require_runtime().platform
     context = tmp_path / "context"
     context.mkdir()
     (context / "record.Dockerfile").write_text(

@@ -1,0 +1,19 @@
+# The validation problems. Set them up with:
+#   uv run oracle-lab setup configs/problems/validation.yaml
+classifier:
+  harness: codex
+  provider: openrouter
+  model: google/gemini-4-argon
+  limit:
+    kind: wall_seconds
+    value: 300
+
+rubric: ../../prompts/judge/task-classification-rubric.md
+
+output: ../../output
+
+problems:
+  - instance: pytest-dev__pytest-10051
+  - instance: scikit-learn__scikit-learn-15100
+  - instance: wtforms__wtforms-809
+    kind: swerebench_v2

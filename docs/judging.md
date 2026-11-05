@@ -43,9 +43,8 @@ themselves. Each answer gets one rating:
 A question the judge answered `null` is not rated. A judgment is rated on up to
 4 submission answers, every start-list failure-mode decision (present or
 absent), and each failure mode the judge added; an in-scope classification on 8
-answers, and an out-of-scope one on 1. A rater may also add failure modes the
-judge missed that are outside the start list, each with a name, a description,
-and the trace steps. Only a
+answers, and an out-of-scope one on 1. Every disagree needs a written
+justification. Only a
 completed judgment or classification can be reviewed; a failed, skipped, or
 stale one is listed with the reason it cannot be.
 
@@ -74,10 +73,11 @@ ratings not saved yet, and filters by stage, harness, and unfinished tasks. Each
 task opens its rating page, titled Problem Classification or Generation
 Judgment.
 
-A rating page has three columns: the questions to rate, tabs with what the judge
-rated, and a sidebar with reference (the problem, the stage rubric, and for a
-judgment the trace legend and the selected trace event). Drag the divider to
-resize the sidebar. It shows the rater what the judge had:
+A rating page has three columns: a sidebar on the left with reference (the
+problem, the stage rubric, and for a judgment the trace legend and the selected
+trace event), tabs in the middle with what the judge rated, and the questions to
+rate on the right. Drag either divider to resize its column. It shows the rater
+what the judge had:
 
 - the judge's answers and justifications beside two rating buttons, and after
   saving, a link to the next unreviewed task;
@@ -92,8 +92,8 @@ resize the sidebar. It shows the rater what the judge had:
   which events touch the patched lines, never failure-mode labels. A legend
   explains every color and tag, and every tag describes itself on hover;
 - the repository views the judge read, with a file finder: buggy and golden for
-  a judgment, with a side-by-side view of the repair, and the buggy checkout
-  only for a classification;
+  a judgment, and the buggy checkout only for a classification. Lines the repair
+  changes are marked, and a side-by-side view shows the repair;
 - the judge's evidence files, such as the agent session log or the task record;
 - the stage rubric.
 

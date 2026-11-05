@@ -1,0 +1,27 @@
+source:
+  instance: scikit-learn__scikit-learn-15100
+
+agent:
+  harness: opencode
+  provider: openrouter
+  model: deepseek/deepseek-v4-pro-0813
+  multi_agent: false
+  limit:
+    kind: wall_seconds
+    value: 900
+
+judge:
+  rubric: ../../prompts/judge/generated-test-evaluation-rubric.md
+  harness: codex
+  provider: openrouter
+  model: google/gemini-4-argon
+  limit:
+    kind: wall_seconds
+    value: 300
+
+task:
+  prompt: ../../prompts/agent/localized-tests.md
+  scope: localized
+  existing_tests: hide_all
+
+output: ../../output

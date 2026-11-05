@@ -107,8 +107,19 @@ def test_parser_accepts_one_json_markdown_fence():
 @pytest.mark.parametrize(
     "raw",
     [
-        "before " + json.dumps(labels()),
-        "```json\n" + json.dumps(labels()) + "\n```after",
+        "I will now output the final JSON object." + json.dumps(labels()),
+        json.dumps(labels()) + "\nThat is my answer.",
+        "Here it is:\n```json\n" + json.dumps(labels()) + "\n```\nDone.",
+    ],
+    ids=["prose-before", "prose-after", "fenced-with-prose"],
+)
+def test_parser_ignores_prose_around_the_object(raw):
+    assert parse_judgment(raw).status == "completed"
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
         "{not json}",
         json.dumps([]),
         json.dumps({**labels(), "tests_issue": "yes"}),

@@ -15,6 +15,7 @@ from fixtures import (
     judged_run,
     judgment_ratings,
     out_of_scope_classification,
+    review_of,
     run_config,
     run_status,
     traced_run,
@@ -43,15 +44,13 @@ def finished(paths: RunPaths) -> RunPaths:
 
 def reviewed_run(root: Path) -> RunPaths:
     """A finished, traced run whose judgment found one start-list mode and added one,
-    reviewed by one rater who added a mode of their own."""
+    reviewed by one rater who disagreed with the added one."""
     paths = finished(traced_run(OutputPaths(root).runs / RUN_ID))
     judgment = completed_judgment(
         failure_modes=failure_modes(never_saw_bug=[1]), added_failure_modes=[added_failure_mode()]
     )
     write_json(paths.judge.judgment, judgment)
-    ratings = judgment_ratings(added_failure_modes__0="disagree")
-    other = {"name": "Probed only", "description": "It probed and stopped.", "steps": [2]}
-    review = {"ratings": ratings, "other_failure_modes": [other]}
+    review = review_of(judgment_ratings(added_failure_modes__0="disagree"))
     save_review(JudgmentTarget.load(paths.root), "alice", json.dumps(review))
     return paths
 
@@ -90,9 +89,11 @@ def test_a_reviewed_run_fills_every_run_table(tmp_path):
     reviews = {row["item"]: row for row in rows(collected, "reviews")}
     assert set(reviews) <= set(modes) | {"tests_issue", "attempt_detail", "cheating"}
     assert reviews["added_failure_modes.0"]["rating"] == "disagree"
+    assert reviews["added_failure_modes.0"]["justification"] == (
+        "The added_failure_modes.0 answer is wrong."
+    )
+    assert reviews["tests_issue"]["justification"] is None
     assert reviews["tests_issue"]["target_id"] == RUN_ID
-    (added,) = rows(collected, "rater_failure_modes")
-    assert (added["rater"], added["name"], added["steps"]) == ("alice", "Probed only", [2])
 
     steps = rows(collected, "trace_steps")
     assert steps and all(row["run_id"] == RUN_ID for row in steps)

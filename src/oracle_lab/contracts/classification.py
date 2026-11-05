@@ -178,6 +178,25 @@ def read_saved_classification(path: Path) -> SavedClassification:
     return SavedClassification.model_validate(read_json(path))
 
 
+def require_usable_classification(classifications: Path, instance: InstanceRecord) -> None:
+    """Refuse a problem whose newest classification does not clear it for a run.
+
+    The problem must be classified first, in scope, with benchmark quality `usable`.
+    """
+    classification, _ = latest_classification(classifications, instance)
+    problem = f"{instance.instance_id} is not cleared for a run"
+    status = classification["status"]
+    if status == "missing":
+        raise ValueError(f"{problem}: run `oracle-lab setup` on it first")
+    if status != "completed":
+        raise ValueError(f"{problem}: its newest classification is {status}")
+    if classification["task_nature"]["answer"] == "out_of_scope":
+        raise ValueError(f"{problem}: the classifier found it out of scope")
+    quality = classification["benchmark_quality"]["answer"]
+    if quality != "usable":
+        raise ValueError(f"{problem}: the classifier rated its benchmark quality {quality}")
+
+
 def latest_classification(
     classifications: Path, instance: InstanceRecord
 ) -> tuple[dict, AttemptPaths | None]:

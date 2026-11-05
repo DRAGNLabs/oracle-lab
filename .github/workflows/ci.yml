@@ -48,7 +48,7 @@ jobs:
       # Builds the harness and runtime images for the smoke instance, then runs the
       # reference and environment checks in real containers. Calls no model.
       - name: Preflight
-        run: uv run oracle-lab preflight configs/smoke.yaml
+        run: uv run oracle-lab setup configs/problems/smoke.yaml --preflight-only
       - name: Find preflight directory
         run: echo "ORACLE_LAB_SMOKE_RUN=$(ls -d "$PWD"/output/preflight/* | tail -n 1)" >> "$GITHUB_ENV"
       # The judge-workspace test needs a completed agent run, which needs a model.

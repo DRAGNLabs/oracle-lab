@@ -6,13 +6,13 @@ modules, and distinct from the judge's privileged evidence workspace.
 
 from pathlib import Path
 
-from oracle_lab.config import RunConfig
+from oracle_lab.config import ProblemConfig
 from oracle_lab.container.sandbox import Sandbox
 from oracle_lab.io import write_json
 
 
 class Repository:
-    def __init__(self, sandbox: Sandbox, config: RunConfig) -> None:
+    def __init__(self, sandbox: Sandbox, config: ProblemConfig) -> None:
         self.sandbox = sandbox
         self.config = config
         self.runtime = config.require_runtime()

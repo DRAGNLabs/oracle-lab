@@ -290,9 +290,10 @@ Oracle Lab fills them in and saves the exact text sent as `prompt.txt`. Write
 - **Default:** `repository`
 
 `localized` points the agent at the existing code the golden repair changes.
-`oracle-lab preflight` finds that code once per problem, and every localized run
-and task classification of the problem copies the result, so a problem must pass
-preflight first. After the image build, preflight's `localize` stage:
+Preflight, the first step of [`oracle-lab setup`](#setup-files), finds that
+code once per problem, and every localized run and task classification of the
+problem copies the result, so a problem must pass preflight first. After the image build,
+preflight's `localize` stage:
 
 1. reads each changed production Python file from the image;
 2. applies the golden patch to it;
@@ -324,7 +325,8 @@ The prompt gets the target through `${test_target}`, for example:
 Patch contents, changed lines, reference tests, and expected behavior stay
 private.
 
-`repository` gives the agent no location and skips the `localize` stage. It
+`repository` gives the agent no location, and the run skips the `localize`
+stage. It
 suits small projects, where tests for the whole repository make sense.
 
 The scope and the prompt must agree. A `localized` run's prompt must contain
@@ -377,8 +379,8 @@ container starts.
 - **Required**
 
 The output root, relative to the config file. Each command writes into its own
-directory there: `run` into `runs/`, `preflight` into `preflight/`, `batch` into
-`batches/`, and `classify` into `classifications/`. The sample configs use the
+directory there: `run` into `runs/`, `batch` into `batches/`, and `setup` into
+`preflight/` and `classifications/`. The sample configs use the
 repository's `output/`. See [results](results.md) for the layout.
 
 ## Resolved-only sections
@@ -403,38 +405,56 @@ The resolved file also spells out every default. `oracle-lab evaluate` reads
 it. Edit the small input file for new runs. Treat the resolved file as a record
 of the run, not as input.
 
-## Standalone task classification
+## Setup files
 
-Task classification has its own YAML format, because it labels a problem once
-rather than running an agent on it. Run it with:
+`oracle-lab setup` reads its own YAML format: the problems to prepare for runs,
+and the classifier that labels them.
 
 ```sh
-uv run oracle-lab classify configs/classification/example.yaml
+uv run oracle-lab setup configs/problems/validation.yaml
+```
+
+```yaml
+classifier:
+  harness: codex
+  provider: openrouter
+  model: google/gemini-4-argon
+rubric: ../../prompts/judge/task-classification-rubric.md
+output: ../../output
+problems:
+  - instance: pytest-dev__pytest-10051
+  - instance: wtforms__wtforms-809
+    kind: swerebench_v2
 ```
 
 Its top-level fields:
 
-- `source`: as above.
+- `problems`: one entry per problem, each with the same fields as
+  [`source`](#source). Each problem is listed once.
 - `classifier`: the same harness, provider, `auth`, model, and limit settings
   as `judge`. `multi_agent` is always `false`.
 - `rubric`: the path to the task-classification rubric.
-- `limits`: setup time and container memory and CPU. `evaluation_seconds` is
-  unused.
-- `output`: the output root, as for runs. Attempts are saved in its
-  `classifications/`.
+- `limits`: optional, as above, for both preflight and classification.
+- `output`: the output root, as for runs. Preflights are saved in its
+  `preflight/`, and classification attempts in its `classifications/`.
 
-[`configs/classification/example.yaml`](../configs/classification/example.yaml)
-is a complete example. Paths are relative to the YAML file. As for runs, Oracle
-Lab generates `runtime` and `toolchain` and saves them with the attempt; they
-are not accepted as input.
+Paths are relative to the YAML file. Preflight checks generated tests with the
+default `task.generated_dir` and `task.existing_tests`. As for runs, Oracle Lab
+generates `runtime` and `toolchain` and saves them with each preflight and
+attempt; they are not accepted as input.
 
 ## Sample configurations
 
 - [`configs/smoke.yaml`](../configs/smoke.yaml): Claude Code generation and
   judging with Haiku through OpenRouter. Both stages have five-minute limits.
-- [`configs/validation/batch.yaml`](../configs/validation/batch.yaml): one
-  localized task from SWE-bench Verified (`pytest-dev__pytest-10051`) and one
-  from SWE-rebench V2 (`wtforms__wtforms-809`), each run with Claude Opus
-  5.5/Claude Code, GPT-6 Sol/Codex, and DeepSeek V4 Pro/OpenCode, all routed
-  through OpenRouter. Generation has a 15-minute limit; a Gemini 3.8 Flash judge
-  runs under Codex.
+- [`configs/validation/`](../configs/validation/): three localized tasks, two
+  from SWE-bench Verified (`pytest-dev__pytest-10051`,
+  `scikit-learn__scikit-learn-15100`) and one from SWE-rebench V2
+  (`wtforms__wtforms-809`), each configured for Claude Opus 5.5/Claude Code,
+  GPT-6 Sol/Codex, and DeepSeek V4 Pro/OpenCode, all routed through OpenRouter.
+  Generation has a 15-minute limit; a Gemini 4 Argon judge runs under Codex.
+  `batch.yaml` runs one task per harness: pytest with Claude Code, wtforms with
+  Codex, and scikit-learn with OpenCode.
+- [`configs/problems/`](../configs/problems/): setup files. `validation.yaml`
+  holds the three validation problems, classified by Gemini 4 Argon under Codex;
+  `smoke.yaml` holds the smoke problem, classified by Haiku under Claude Code.

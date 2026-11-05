@@ -567,30 +567,63 @@ def test_apply_patch_rebuilds_what_git_diffed(tmp_path, context):
 # Loading the target preflight found.
 
 
-def test_a_run_copies_the_newest_passed_preflight_of_its_problem(tmp_path):
+def test_a_run_copies_its_problems_preflight(tmp_path):
     instance = instance_record()
-    older = passed_preflight(tmp_path, instance, scope="function")
-    # IDs order by start time; one created in the same second would tie by chance.
-    older.root.rename(older.root.with_name("20200101T000000Z-00000000"))
-    newest = passed_preflight(tmp_path, instance, scope="class")
+    preflight = passed_preflight(tmp_path, instance, scope="class")
     paths = RunPaths.create(tmp_path / "run")
 
     target = load_target(OutputPaths(tmp_path), instance, paths)
 
+    assert preflight.root == tmp_path / "preflight/owner__project-1"
     assert target.scope == "class"
-    assert paths.target.read_bytes() == newest.target.read_bytes()
+    assert paths.target.read_bytes() == preflight.target.read_bytes()
     assert paths.target_log.read_text() == "localize log\n"
-    assert paths.target_source.read_text() == f"preflight/{newest.root.name}\n"
+    assert paths.target_source.read_text() == "preflight/owner__project-1\n"
 
 
-def test_only_a_passed_preflight_of_the_same_record_is_used(tmp_path):
+def test_a_preflight_replaces_the_problems_previous_one(tmp_path):
     instance = instance_record()
-    failed = passed_preflight(tmp_path, instance)
-    write_json(failed.status, {"stage": "reference", "state": "failed", "updated_at": "now"})
-    passed_preflight(tmp_path, instance_record(instance_id="other__project-2"))
-    passed_preflight(tmp_path, instance_record(base_commit="b" * 40))
-    no_target = passed_preflight(tmp_path, instance)
-    no_target.target.unlink()
+    first = passed_preflight(tmp_path, instance, scope="function")
+    (first.root / "leftover.txt").write_text("from the first preflight\n")
+
+    second = passed_preflight(tmp_path, instance, scope="class")
+
+    assert second.root == first.root
+    assert not (second.root / "leftover.txt").exists()
+    target = load_target(OutputPaths(tmp_path), instance, RunPaths.create(tmp_path / "run"))
+    assert target.scope == "class"
+
+
+def _failed(paths: RunPaths) -> None:
+    write_json(paths.status, {"stage": "reference", "state": "failed", "updated_at": "now"})
+
+
+@pytest.mark.parametrize(
+    "saved, spoil",
+    [
+        (instance_record(), _failed),
+        (instance_record(), lambda paths: paths.target.unlink()),
+        (instance_record(base_commit="b" * 40), None),
+        (instance_record(instance_id="other__project-2"), None),
+    ],
+    ids=["failed", "no-target", "other-commit", "other-problem"],
+)
+def test_only_a_passed_preflight_of_the_same_record_is_used(tmp_path, saved, spoil):
+    preflight = passed_preflight(tmp_path, saved)
+    if spoil:
+        spoil(preflight)
 
     with pytest.raises(ValueError, match="No passed preflight has a target for owner__project-1"):
-        load_target(OutputPaths(tmp_path), instance, RunPaths.create(tmp_path / "run"))
+        load_target(OutputPaths(tmp_path), instance_record(), RunPaths.create(tmp_path / "run"))
+
+
+def test_a_preflight_directory_holds_only_what_preflight_writes(tmp_path):
+    paths = OutputPaths(tmp_path).new_preflight("owner__project-1")
+
+    assert sorted(child.name for child in paths.root.iterdir()) == [
+        "environment-check",
+        "ground-truth",
+        "image-build",
+        "inputs",
+        "reference-check",
+    ]

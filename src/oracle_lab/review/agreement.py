@@ -68,7 +68,7 @@ def compute_agreement(paths: Sequence[Path]) -> AgreementReport:
         ]
         if in_stage:
             stages[kind.stage] = _stage(in_stage)
-    added_labels, rater_labels = _added_labels(targets, reviews)
+    added_labels = _added_labels(targets, reviews)
 
     # Every rater is expected to review every target.
     missing = {}
@@ -83,7 +83,6 @@ def compute_agreement(paths: Sequence[Path]) -> AgreementReport:
         raters=raters,
         stages=stages,
         added_labels=added_labels,
-        rater_labels=rater_labels,
         missing=missing,
         unreviewable=unreviewable,
     )
@@ -91,9 +90,8 @@ def compute_agreement(paths: Sequence[Path]) -> AgreementReport:
 
 def _added_labels(
     targets: Sequence[ReviewTarget], reviews: dict[Path, dict[str, Review]]
-) -> tuple[list[AddedLabelRatings], dict[str, int]]:
-    """Every judge-added failure mode with its ratings, and the raters' own labels
-    counted by name."""
+) -> list[AddedLabelRatings]:
+    """Every judge-added failure mode with its ratings."""
     added = []
     for target in targets:
         for key in target.rating_keys():
@@ -110,13 +108,7 @@ def _added_labels(
                         ratings={rating: counts[rating] for rating in RATINGS},
                     )
                 )
-    names = Counter(
-        label.name
-        for by_rater in reviews.values()
-        for review in by_rater.values()
-        for label in review.other_failure_modes
-    )
-    return added, dict(sorted(names.items()))
+    return added
 
 
 def krippendorff_alpha(
@@ -210,9 +202,6 @@ def render_agreement(report: AgreementReport) -> str:
             f"| `{item.target}` | {item.name} | {item.ratings['agree']} | {item.ratings['disagree']} |"
             for item in report.added_labels
         ]
-    if report.rater_labels:
-        lines += ["", "## Failure modes raters added", "", "| Label | Times |", "|---|---:|"]
-        lines += [f"| {name} | {count} |" for name, count in report.rater_labels.items()]
     lines += ["", "## Missing reviews", ""]
     if not report.raters:
         lines.append("No reviews yet.")

@@ -188,7 +188,7 @@ async function showFile() {
   if (!holder || !browser.path) return;
   const entry = (state.trees[browser.view] || []).find((file) => file.path === browser.path);
   const repairDiff = state.repair.filter((d) => d.newPath === browser.path || d.oldPath === browser.path);
-  const canCompare = repairDiff.length > 0 && target.views.includes("golden");
+  const canCompare = repairDiff.length > 0;
   holder.innerHTML = `
     <div class="file-head">
       <h2>${esc(browser.path)}</h2>
@@ -206,11 +206,24 @@ async function showFile() {
   }
   try {
     body.innerHTML = fileHtml(await api("/api/file", { id: target.id, view: browser.view, path: browser.path }), browser.path);
+    markRepair(body, repairDiff, browser.view);
     const row = browser.line && body.querySelector(`[data-line="${browser.line}"]`);
     row?.classList.add("target");
     row?.scrollIntoView({ block: "center" });
   } catch (error) {
     // The file may not exist in this version, such as a file the repair creates.
     body.innerHTML = `<p class="message error">${esc(error.message)}</p>`;
+  }
+}
+
+// The lines the repair changes: removed lines in the buggy file, added ones in the golden.
+function markRepair(body, repairDiff, view) {
+  const [type, number, kind] = view === "golden" ? ["add", "newNo", "repaired-add"] : ["del", "oldNo", "repaired-del"];
+  for (const file of repairDiff) {
+    for (const hunk of file.hunks) {
+      for (const line of hunk.lines) {
+        if (line.type === type) body.querySelector(`[data-line="${line[number]}"]`)?.classList.add(kind);
+      }
+    }
   }
 }

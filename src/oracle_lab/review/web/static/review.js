@@ -1,6 +1,7 @@
-// One target's rating page: the question rail, the middle tabs with what the judge
-// rated, and a resizable sidebar with reference: the problem, the stage rubric, and,
-// for a judgment, the trace legend and the selected trace event.
+// One target's rating page: a resizable sidebar on the left with reference (the
+// problem, the stage rubric, and, for a judgment, the trace legend and the selected
+// trace event), the middle tabs with what the judge rated, and the question rail on
+// the right. Both side columns are resizable.
 
 import { openEvidence, renderEvidence, startEvidence } from "./evidence.js";
 import { openFile, openTest, renderFiles, startBrowser } from "./files.js";
@@ -14,7 +15,6 @@ import { showTests } from "./tests.js";
 import { loadTrace, openStep, renderEvent, renderTrace } from "./trace.js";
 
 const app = document.getElementById("app");
-const SIDEBAR_WIDTH = "oracle-review:sidebar-width";
 
 // The middle tabs hold what the judge rated for this target.
 const RENDER_TAB = {
@@ -63,7 +63,17 @@ export async function openTarget(id) {
   const tabBar = (tabs, attribute) => tabs.map(([key, name]) => `
     <button type="button" role="tab" ${attribute}="${key}">${name}</button>`).join("");
   app.innerHTML = `
-    <div class="review" style="--sidebar: ${sidebarWidth()}px">
+    <div class="review" style="--sidebar: ${savedWidth("sidebar")}px; --rail: ${savedWidth("rail")}px">
+      <aside class="sidebar">
+        <nav class="tabs" role="tablist" aria-label="Reference">${tabBar(SIDE_TABS[target.stage], "data-side-tab")}</nav>
+        <div class="panel" id="side-panel" role="tabpanel"></div>
+      </aside>
+      <div class="divider" data-resize="sidebar" role="separator" aria-orientation="vertical" aria-label="Resize the reference sidebar"></div>
+      <section class="main">
+        <nav class="tabs" role="tablist" aria-label="What the judge rated">${tabBar(MIDDLE_TABS[target.stage], "data-tab")}</nav>
+        <div class="panel" id="panel" role="tabpanel"></div>
+      </section>
+      <div class="divider" data-resize="rail" role="separator" aria-orientation="vertical" aria-label="Resize the questions"></div>
       <aside class="rail" aria-label="Questions to rate">
         <div class="rail-head">
           <a href="#/">All problems</a>
@@ -73,15 +83,6 @@ export async function openTarget(id) {
         </div>
         <ol class="questions" id="questions"></ol>
         <div class="rail-foot" id="rail-foot"></div>
-      </aside>
-      <section class="main">
-        <nav class="tabs" role="tablist" aria-label="What the judge rated">${tabBar(MIDDLE_TABS[target.stage], "data-tab")}</nav>
-        <div class="panel" id="panel" role="tabpanel"></div>
-      </section>
-      <div class="divider" id="divider" role="separator" aria-orientation="vertical" aria-label="Resize the sidebar"></div>
-      <aside class="sidebar">
-        <nav class="tabs" role="tablist" aria-label="Reference">${tabBar(SIDE_TABS[target.stage], "data-side-tab")}</nav>
-        <div class="panel" id="side-panel" role="tabpanel"></div>
       </aside>
     </div>`;
 
@@ -94,7 +95,7 @@ export async function openTarget(id) {
     if (button) showSideTab(button.dataset.sideTab);
   });
   app.querySelector(".review").addEventListener("click", followLink);
-  startDivider(app.querySelector(".review"));
+  startDividers(app.querySelector(".review"));
   startRail(target);
   showTab(MIDDLE_TABS[target.stage][0][0]);
   showSideTab("problem");
@@ -124,37 +125,48 @@ export function showSideTab(tab) {
   RENDER_SIDE[tab](panel);
 }
 
-// The sidebar's width follows the divider while it is dragged, and is remembered.
-function sidebarWidth() {
+// Each side column's width follows its divider while it is dragged, and is remembered.
+// The reference sidebar sits at the left edge, the question rail at the right.
+const COLUMNS = {
+  sidebar: { key: "oracle-review:sidebar-width", initial: 480, min: 300, max: 900, fromLeft: true },
+  rail: { key: "oracle-review:rail-width", initial: 340, min: 260, max: 700, fromLeft: false },
+};
+
+function savedWidth(column) {
+  const { key, initial } = COLUMNS[column];
   try {
-    return Number(localStorage.getItem(SIDEBAR_WIDTH)) || 480;
+    return Number(localStorage.getItem(key)) || initial;
   } catch {
-    return 480;
+    return initial;
   }
 }
 
-function startDivider(layout) {
-  const divider = layout.querySelector("#divider");
-  divider.addEventListener("pointerdown", (start) => {
-    start.preventDefault();
-    divider.setPointerCapture(start.pointerId);
-    layout.classList.add("resizing");
-    const move = (event) => {
-      const width = Math.min(Math.max(layout.getBoundingClientRect().right - event.clientX, 300), 900);
-      layout.style.setProperty("--sidebar", `${width}px`);
-    };
-    const stop = () => {
-      divider.removeEventListener("pointermove", move);
-      layout.classList.remove("resizing");
-      try {
-        localStorage.setItem(SIDEBAR_WIDTH, String(parseInt(layout.style.getPropertyValue("--sidebar"), 10)));
-      } catch {
-        // The width resets next time.
-      }
-    };
-    divider.addEventListener("pointermove", move);
-    divider.addEventListener("pointerup", stop, { once: true });
-  });
+function startDividers(layout) {
+  for (const divider of layout.querySelectorAll("[data-resize]")) {
+    const column = divider.dataset.resize;
+    const { key, min, max, fromLeft } = COLUMNS[column];
+    divider.addEventListener("pointerdown", (start) => {
+      start.preventDefault();
+      divider.setPointerCapture(start.pointerId);
+      layout.classList.add("resizing");
+      const move = (event) => {
+        const box = layout.getBoundingClientRect();
+        const width = fromLeft ? event.clientX - box.left : box.right - event.clientX;
+        layout.style.setProperty(`--${column}`, `${Math.min(Math.max(width, min), max)}px`);
+      };
+      const stop = () => {
+        divider.removeEventListener("pointermove", move);
+        layout.classList.remove("resizing");
+        try {
+          localStorage.setItem(key, String(parseInt(layout.style.getPropertyValue(`--${column}`), 10)));
+        } catch {
+          // The width resets next time.
+        }
+      };
+      divider.addEventListener("pointermove", move);
+      divider.addEventListener("pointerup", stop, { once: true });
+    });
+  }
 }
 
 // Links anywhere on the page open the file, test, evidence, or trace step they name.

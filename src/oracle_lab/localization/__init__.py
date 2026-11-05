@@ -17,7 +17,7 @@ from pathlib import Path, PurePosixPath
 
 from docker import DockerClient
 
-from oracle_lab.config import ClassificationConfig, RunConfig
+from oracle_lab.config import ProblemConfig
 from oracle_lab.container.sandbox import Profile, open_sandbox
 from oracle_lab.contracts.base import write_result
 from oracle_lab.contracts.run import (
@@ -29,7 +29,7 @@ from oracle_lab.contracts.run import (
 )
 from oracle_lab.localization.patches import FileDiff, apply_patch, parse_patch
 from oracle_lab.localization.target import choose_target, compare
-from oracle_lab.paths import InstancePaths, OutputPaths, RunPaths
+from oracle_lab.paths import InstancePaths, OutputPaths
 
 
 def is_test_path(path: PurePosixPath) -> bool:
@@ -61,7 +61,7 @@ def read_source(data: bytes) -> str:
 
 def localize(
     client: DockerClient,
-    config: RunConfig | ClassificationConfig,
+    config: ProblemConfig,
     image: str,
     instance: InstanceRecord,
     paths: InstancePaths,
@@ -92,28 +92,27 @@ def localize(
 def load_target(
     output: OutputPaths, instance: InstanceRecord, paths: InstancePaths
 ) -> LocalizedTarget:
-    """Copy the target the newest passed preflight of this problem found.
+    """Copy the target this problem's preflight found.
 
     The preflight must have passed and resolved the same record: the same instance
     ID, base commit, and record checksum. Without one, the problem cannot be run or
     classified until it passes preflight.
     """
-    for preflight in reversed(output.saved_preflights()):
-        if _localized(preflight, instance):
-            shutil.copyfile(preflight.target, paths.target)
-            shutil.copyfile(preflight.target_log, paths.target_log)
-            paths.target_source.write_text(
-                preflight.root.relative_to(output.root).as_posix() + "\n"
-            )
-            return read_localized_target(paths.target)
-    raise ValueError(
-        f"No passed preflight has a target for {instance.instance_id}: "
-        "run `oracle-lab preflight` with a localized config first"
-    )
+    if not preflight_passed(output, instance):
+        raise ValueError(
+            f"No passed preflight has a target for {instance.instance_id}: "
+            "run `oracle-lab setup` on it first"
+        )
+    preflight = output.preflight_for(instance.instance_id)
+    shutil.copyfile(preflight.target, paths.target)
+    shutil.copyfile(preflight.target_log, paths.target_log)
+    paths.target_source.write_text(preflight.root.relative_to(output.root).as_posix() + "\n")
+    return read_localized_target(paths.target)
 
 
-def _localized(preflight: RunPaths, instance: InstanceRecord) -> bool:
-    """Whether this preflight passed and localized the same record."""
+def preflight_passed(output: OutputPaths, instance: InstanceRecord) -> bool:
+    """Whether this problem's preflight passed, found a target, and resolved the same record."""
+    preflight = output.preflight_for(instance.instance_id)
     if not (
         preflight.status.is_file() and preflight.instance.is_file() and preflight.target.is_file()
     ):

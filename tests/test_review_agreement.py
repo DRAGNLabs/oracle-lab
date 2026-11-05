@@ -7,6 +7,7 @@ from fixtures import (
     completed_judgment,
     judged_run,
     judgment_ratings,
+    review_of,
 )
 
 from oracle_lab.contracts.review import AgreementReport
@@ -38,16 +39,8 @@ def test_alpha_is_undefined_without_variation_or_pairs():
     assert krippendorff_alpha([["agree"], ["disagree"]], RATINGS) is None
 
 
-def review(root, rater, ratings, other=()):
-    write_json(
-        root / rater / "review.json",
-        {
-            "ratings": ratings,
-            "other_failure_modes": [
-                {"name": name, "description": "Seen.", "steps": [1]} for name in other
-            ],
-        },
-    )
+def review(root, rater, ratings):
+    write_json(root / rater / "review.json", review_of(ratings))
 
 
 @pytest.fixture
@@ -61,14 +54,9 @@ def data(tmp_path):
     run_b = judged_run(tmp_path / "runs/run-b").judge.reviews
     judged_run(tmp_path / "runs/run-c", {"status": "failed", "error": "Crashed."})
     attempt = classified_attempt(tmp_path / "classifications/owner__project-1/attempt-1")
+    review(run_a, "alice", judgment_ratings(added_failure_modes__0="agree"))
     review(
-        run_a, "alice", judgment_ratings(added_failure_modes__0="agree"), other=["Gave up early"]
-    )
-    review(
-        run_a,
-        "bob",
-        judgment_ratings(tests_issue="disagree", added_failure_modes__0="disagree"),
-        other=["Gave up early"],
+        run_a, "bob", judgment_ratings(tests_issue="disagree", added_failure_modes__0="disagree")
     )
     review(run_b, "alice", judgment_ratings(failure_modes__never_saw_bug="disagree"))
     review(run_b, "bob", judgment_ratings())
@@ -108,7 +96,6 @@ def test_each_start_label_is_a_question_and_added_labels_are_pooled(data):
     )
     [added] = report.added_labels
     assert (added.name, added.ratings) == ("Tested only defaults", {"agree": 1, "disagree": 1})
-    assert report.rater_labels == {"Gave up early": 2}
 
 
 def test_one_rater_gives_judge_quality_but_no_agreement(data):
@@ -139,7 +126,6 @@ def test_agreement_is_saved_as_json_and_markdown(data, tmp_path):
     assert "## Generation judgments" in text
     assert "| Do the generated tests attempt to test the issue? | 2 | 3 | 1 | 75% |" in text
     assert "| Tested only defaults | 1 | 1 |" in text
-    assert "| Gave up early | 2 |" in text
     assert "## Missing reviews" in text and "| bob |" in text
 
 

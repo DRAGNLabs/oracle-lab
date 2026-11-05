@@ -7,17 +7,16 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from oracle_lab.batch import run_batch
-from oracle_lab.config import RunConfig, load_classification_config, load_config
+from oracle_lab.config import RunConfig, load_config
 from oracle_lab.export import export
 from oracle_lab.io import read_json
-from oracle_lab.judge.classification.run import classify
 from oracle_lab.judge.generation.run import judge
 from oracle_lab.paths import RunPaths
-from oracle_lab.preflight import preflight_all
 from oracle_lab.report import report
 from oracle_lab.review.agreement import agreement
 from oracle_lab.review.web.server import serve
 from oracle_lab.run import reevaluate, run
+from oracle_lab.setup import setup
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -39,15 +38,19 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
+    # Preflight and classify every problem in a setup file. Rerun to pick up where it left off.
+    setup_parser = sub.add_parser("setup", help="Preflight and classify the problems in a file")
+    setup_parser.add_argument("path", type=Path, help="Setup YAML listing the problems")
+    setup_parser.add_argument(
+        "--reclassify", action="store_true", help="Classify problems already classified"
+    )
+    setup_parser.add_argument(
+        "--preflight-only", action="store_true", help="Stop after preflight; no model calls"
+    )
+
     # Generate tests for one instance, then evaluate them.
     run_parser = sub.add_parser("run", help="Run one configured instance")
     run_parser.add_argument("config", type=Path)
-
-    # Check instances before any paid run: build, reference pair, environment.
-    preflight_parser = sub.add_parser(
-        "preflight", help="Check configured instances without calling a model"
-    )
-    preflight_parser.add_argument("configs", type=Path, nargs="+")
 
     # Run every job in a batch YAML, or pick up where a batch directory left off.
     batch_parser = sub.add_parser("batch", help="Run or resume an explicit batch")
@@ -65,10 +68,6 @@ def _build_parser() -> argparse.ArgumentParser:
     # LLM judge pass over a finished run.
     judge_parser = sub.add_parser("judge", help="Judge generated tests from a saved run")
     judge_parser.add_argument("run_dir", type=Path)
-
-    # Classify one SWE-bench problem independently of the generation pipeline.
-    classify_parser = sub.add_parser("classify", help="Classify one SWE-bench problem")
-    classify_parser.add_argument("config", type=Path)
 
     # Render an existing run directory. Reads only.
     report_parser = sub.add_parser("report", help="Render saved results without executing code")
@@ -113,11 +112,12 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def _dispatch(args: argparse.Namespace) -> int:
     # Only these use a credential, so only these read secrets from .env.
-    if args.command in {"run", "batch", "judge", "classify", "export"}:
+    if args.command in {"setup", "run", "batch", "judge", "export"}:
         load_dotenv(Path.cwd() / ".env", override=False, interpolate=False)
 
-    if args.command == "preflight":
-        return 0 if preflight_all(args.configs) else 1
+    if args.command == "setup":
+        done = setup(args.path, reclassify=args.reclassify, preflight_only=args.preflight_only)
+        return 0 if done else 1
     if args.command == "review":
         return serve(args.path, args.rater, port=args.port, open_browser=not args.no_browser)
     if args.command == "run":
@@ -131,8 +131,6 @@ def _dispatch(args: argparse.Namespace) -> int:
         config, paths = _load_saved_run(args.run_dir)
         judge(config, paths)
         output = report(paths)
-    elif args.command == "classify":
-        output = classify(load_classification_config(args.config))
     elif args.command == "agreement":
         output = agreement(args.paths, args.output)
     elif args.command == "export":

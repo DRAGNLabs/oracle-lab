@@ -11,8 +11,8 @@ from oracle_lab.config import (
     SOURCE_DATASETS,
     HarnessConfig,
     RuntimeConfig,
-    load_classification_config,
     load_config,
+    load_setup_config,
     validate_prompt_scope,
     validate_resolved_config,
 )
@@ -70,12 +70,12 @@ CONFIGS = Path(__file__).parents[1] / "configs"
     "path", sorted(CONFIGS.rglob("*.yaml")), ids=lambda path: str(path.relative_to(CONFIGS))
 )
 def test_every_sample_config_loads(path):
-    """Each sample is a run, classification, or batch config that validates as written."""
+    """Each sample is a run, setup, or batch config that validates as written."""
     raw = yaml.safe_load(path.read_text())
     if "jobs" in raw:
         load_batch_config(path)
-    elif "classifier" in raw:
-        load_classification_config(path)
+    elif "problems" in raw:
+        load_setup_config(path)
     else:
         load_config(path)
 
@@ -275,16 +275,42 @@ def test_generated_directory_is_checked_against_resolved_source_roots():
         validate_resolved_config(config)
 
 
-def test_classification_config_is_independent_and_resolves_paths():
-    path = Path(__file__).parents[1] / "configs/classification/example.yaml"
+def test_a_setup_file_resolves_its_paths_and_builds_each_problems_configs():
+    path = Path(__file__).parents[1] / "configs/problems/validation.yaml"
 
-    config = load_classification_config(path)
+    config = load_setup_config(path)
 
-    assert config.source.dataset == "verified"
+    assert [problem.instance for problem in config.problems] == [
+        "pytest-dev__pytest-10051",
+        "scikit-learn__scikit-learn-15100",
+        "wtforms__wtforms-809",
+    ]
+    assert config.problems[2].dataset == "swerebench_v2"
     assert config.classifier.multi_agent is False
     assert config.rubric.endswith("/prompts/judge/task-classification-rubric.md")
     assert config.output == str(path.parents[2] / "output")
-    assert config.runtime is None
+    problem = config.problem(config.problems[0])
+    assert (problem.task.generated_dir, problem.task.existing_tests) == ("oracle_tests", "hide_all")
+    classification = config.classification(config.problems[0])
+    assert (classification.rubric, classification.output) == (config.rubric, config.output)
+
+
+def test_a_setup_file_lists_each_problem_once(tmp_path):
+    path = tmp_path / "problems.yaml"
+    problem = {"instance": "owner__project-1"}
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "classifier": {"model": "m"},
+                "rubric": "rubric.md",
+                "output": "output",
+                "problems": [problem, problem],
+            }
+        )
+    )
+
+    with pytest.raises(ValueError, match="listed more than once"):
+        load_setup_config(path)
 
 
 def test_each_swebench_dataset_resolves_its_own_pinned_revision(tmp_path):

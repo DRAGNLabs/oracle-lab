@@ -1,8 +1,8 @@
 // The question rail: each answer and failure-mode decision the judge gave, the
-// rater's agree or disagree, the rater's own failure-mode labels, saving, and Next
-// task once everything is saved. Sections: Submission (or the classification's
-// questions), Failure modes (present labels as cards, absent as one-line rows), and
-// Your other labels.
+// rater's agree or disagree and why for each disagree, saving, and Next task once
+// everything is saved. Sections: Submission (or the classification's questions)
+// and Failure modes (present labels as cards, absent as one-line rows, then the
+// judge's own labels).
 
 import { nextTask } from "./listing.js";
 import { esc, linkify } from "./render.js";
@@ -17,23 +17,28 @@ const SECTION_ORDER = { submission: 0, failure_modes: 1, added_failure_modes: 2 
 // Start rating the open target from where the rater left off.
 export function startRail(target) {
   target.questions.sort((a, b) => rank(a) - rank(b));
-  const saved = target.review || { ratings: {}, other_failure_modes: [] };
+  const saved = target.review || { ratings: {}, justifications: {} };
   const draft = readDraft(target);
   state.ratings = draft?.ratings || { ...saved.ratings };
-  state.otherLabels = draft?.other_failure_modes || [...saved.other_failure_modes];
+  state.justifications = draft?.justifications || { ...saved.justifications };
   state.selected = Math.max(0, target.questions.findIndex((q) => !state.ratings[q.key]));
   const rail = document.getElementById("questions");
   rail.addEventListener("click", (event) => {
-    if (event.target.closest("[data-open-step]")) return; // a step link, followed by the page
-    const remove = event.target.closest("[data-remove-label]");
-    if (remove) return removeLabel(Number(remove.dataset.removeLabel));
+    if (event.target.closest("[data-open-step], textarea")) return; // followed by the page, or typing
     const card = event.target.closest(".question");
     if (!card) return;
     const button = event.target.closest("[data-rating]");
     if (button) rate(Number(card.dataset.index), button.dataset.rating);
     else select(Number(card.dataset.index));
   });
-  rail.addEventListener("submit", addLabel);
+  // Typing updates the review without redrawing the rail, so the box keeps focus.
+  rail.addEventListener("input", (event) => {
+    const box = event.target.closest("textarea[data-why]");
+    if (!box) return;
+    state.justifications[box.dataset.why] = box.value;
+    writeDraft();
+    renderFoot();
+  });
   renderQuestions();
   renderFoot();
 }
@@ -50,13 +55,18 @@ export function select(index) {
   document.querySelector(".question.selected")?.scrollIntoView({ block: "nearest" });
 }
 
-// Rate one item. From the keyboard, move on to the next unrated item.
+// Rate one item. A disagree asks why; from the keyboard, an agree moves on to the
+// next unrated item.
 export function rate(index, rating, { advance = false } = {}) {
   const questions = state.target.questions;
-  state.ratings[questions[index].key] = rating;
+  const key = questions[index].key;
+  state.ratings[key] = rating;
+  if (rating === "disagree") state.justifications[key] ??= "";
+  else delete state.justifications[key];
   writeDraft();
   const unrated = questions.findIndex((q, i) => i > index && !state.ratings[q.key]);
-  select(advance && unrated !== -1 ? unrated : index);
+  select(advance && rating === "agree" && unrated !== -1 ? unrated : index);
+  if (rating === "disagree") document.querySelector(`textarea[data-why="${key}"]`)?.focus();
   renderFoot();
 }
 
@@ -76,19 +86,20 @@ function renderQuestions() {
         <p>The judge decided each start-list label. Agree or disagree with each decision.</p></li>
       ${present || `<li class="rail-note">The judge found none of the start-list labels.</li>`}
       ${absent ? `<li class="rail-subhead">Absent</li>${absent}` : ""}
-      ${added ? `<li class="rail-subhead">The judge's own labels</li>${added}` : ""}
-      ${renderOtherLabels()}` : ""}`;
+      ${added ? `<li class="rail-subhead">The judge's own labels</li>${added}` : ""}` : ""}`;
 }
 
 // One item: a full card for a question, a present failure mode, or a judge-added
-// one; a one-line row for an absent start label.
+// one; a one-line row for an absent start label. A disagree adds the reason box.
 function itemHtml(item, index) {
   const rating = state.ratings[item.key];
   const classes = `question ${index === state.selected ? "selected" : ""} ${rating ? `rated-${rating}` : ""}`;
+  const why = rating === "disagree" ? whyBox(item.key) : "";
   if (item.section === "failure_modes" && item.answer === "absent") {
     return `
       <li class="${classes} compact" data-index="${index}">
-        <span class="compact-label">${esc(item.label)}</span>${rateButtons(rating, true)}
+        <div class="compact-row"><span class="compact-label">${esc(item.label)}</span>${rateButtons(rating, true)}</div>
+        ${why}
       </li>`;
   }
   const answers = Array.isArray(item.answer) ? item.answer : [item.answer];
@@ -104,7 +115,15 @@ function itemHtml(item, index) {
       </div>
       <p class="justification">${linkify(item.justification)}</p>
       ${rateButtons(rating)}
+      ${why}
     </li>`;
+}
+
+function whyBox(key) {
+  return `
+    <label class="why">Why you disagree (required)
+      <textarea data-why="${esc(key)}" rows="3" maxlength="2000" placeholder="What the right answer is, and why">${esc(state.justifications[key] || "")}</textarea>
+    </label>`;
 }
 
 function rateButtons(rating, compact = false) {
@@ -124,51 +143,14 @@ function stepLinks(steps) {
   return `step${steps.length > 1 ? "s" : ""} ${links.join(", ")}`;
 }
 
-// "Your other labels": the rater's own failure modes, and the form that adds one.
-function renderOtherLabels() {
-  const labels = state.otherLabels.map((label, index) => `
-    <li class="other-label">
-      <div><b>${esc(label.name)}</b> · ${stepLinks(label.steps)}</div>
-      <p>${esc(label.description)}</p>
-      <button type="button" class="link-like" data-remove-label="${index}">Remove</button>
-    </li>`).join("");
-  return `
-    <li class="rail-section"><h2>Your other labels</h2>
-      <p>Optional. Failure modes you see that none of the start-list labels describes.</p></li>
-    ${labels}
-    <li class="other-label-form">
-      <form id="other-label-form">
-        <input name="name" placeholder="Name, such as Tested only defaults" maxlength="80" required>
-        <textarea name="description" placeholder="What the agent did, in one sentence" maxlength="500" rows="2" required></textarea>
-        <input name="steps" placeholder="Steps, such as 12, 14" pattern="\\s*\\d+(\\s*,\\s*\\d+)*\\s*" required>
-        <button type="submit" class="link-button">Add label</button>
-      </form>
-    </li>`;
-}
-
-function addLabel(event) {
-  event.preventDefault();
-  const form = event.target;
-  state.otherLabels.push({
-    name: form.name.value.trim(),
-    description: form.description.value.trim(),
-    steps: form.steps.value.split(",").map((step) => Number(step.trim())),
-  });
-  writeDraft();
-  renderQuestions();
-  renderFoot();
-}
-
-function removeLabel(index) {
-  state.otherLabels.splice(index, 1);
-  writeDraft();
-  renderQuestions();
-  renderFoot();
-}
-
-// The review as it would be saved.
+// The review as it would be saved: a justification for each disagree, trimmed.
 function currentReview() {
-  return { ratings: state.ratings, other_failure_modes: state.otherLabels };
+  const justifications = Object.fromEntries(
+    Object.entries(state.ratings)
+      .filter(([, rating]) => rating === "disagree")
+      .map(([key]) => [key, (state.justifications[key] || "").trim()]),
+  );
+  return { ratings: state.ratings, justifications };
 }
 
 // Progress, the save button, and after saving, the way to the next task.
@@ -176,10 +158,12 @@ function renderFoot({ justSaved = false, error = "" } = {}) {
   const { target, ratings } = state;
   const total = target.questions.length;
   const rated = target.questions.filter((q) => ratings[q.key]).length;
-  const complete = rated === total;
+  const unexplained = Object.values(currentReview().justifications).filter((text) => !text).length;
+  const complete = rated === total && !unexplained;
   const saved = Boolean(target.review) && sameReview(currentReview(), target.review);
 
   let status = `${rated} of ${total} rated`;
+  if (rated === total && unexplained) status = `${unexplained} disagree${unexplained === 1 ? "" : "s"} still need${unexplained === 1 ? "s" : ""} a reason`;
   if (saved) status = "Saved";
   else if (complete) status = target.review ? "Changed, not saved yet" : "All rated, not saved yet";
 
@@ -221,11 +205,11 @@ async function saveReview() {
 }
 
 function sameReview(a, b) {
-  const left = a?.ratings || {};
-  const right = b?.ratings || {};
-  const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
-  return [...keys].every((key) => left[key] === right[key])
-    && JSON.stringify(a?.other_failure_modes || []) === JSON.stringify(b?.other_failure_modes || []);
+  const same = (x, y) => {
+    const keys = new Set([...Object.keys(x || {}), ...Object.keys(y || {})]);
+    return [...keys].every((key) => (x || {})[key] === (y || {})[key]);
+  };
+  return same(a?.ratings, b?.ratings) && same(a?.justifications, b?.justifications);
 }
 
 // ---------- Drafts: an unsaved review lives in this browser until saved ----------
@@ -254,8 +238,12 @@ export function draftRatings(id, keys) {
 function readDraft(target) {
   const draft = loadDraft(target.id);
   if (!draft) return null;
-  const labels = Array.isArray(draft.other_failure_modes) ? draft.other_failure_modes : [];
-  return { ratings: draftRatings(target.id, target.questions.map((q) => q.key)), other_failure_modes: labels };
+  const ratings = draftRatings(target.id, target.questions.map((q) => q.key));
+  const justifications = typeof draft.justifications === "object" && draft.justifications ? draft.justifications : {};
+  return {
+    ratings,
+    justifications: Object.fromEntries(Object.keys(ratings).filter((key) => ratings[key] === "disagree").map((key) => [key, String(justifications[key] || "")])),
+  };
 }
 
 function writeDraft() {

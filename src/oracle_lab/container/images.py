@@ -10,7 +10,7 @@ from docker import DockerClient
 from docker.errors import ImageNotFound
 from docker.models.images import Image
 
-from oracle_lab.config import HARNESS_VERSIONS, ClassificationConfig, RunConfig
+from oracle_lab.config import HARNESS_VERSIONS, ResolvedConfig
 from oracle_lab.container.lifecycle import setup_deadline
 from oracle_lab.container.paths import ORACLE_HOME
 from oracle_lab.container.sandbox import ORACLE_USER
@@ -119,9 +119,7 @@ def prepare_contexts(build: Path) -> tuple[Path, Path]:
     return harness_context, runtime_context
 
 
-def runtime_arguments(
-    config: RunConfig | ClassificationConfig, source: Image, harnesses: Image
-) -> dict[str, str]:
+def runtime_arguments(config: ResolvedConfig, source: Image, harnesses: Image) -> dict[str, str]:
     runtime = config.require_runtime()
     return {
         "HARNESS_IMAGE": image_id(harnesses),
@@ -135,7 +133,7 @@ def runtime_arguments(
 
 def prepare_image(
     client: DockerClient,
-    config: RunConfig | ClassificationConfig,
+    config: ResolvedConfig,
     build: Path,
 ) -> str:
     """Build the one image every stage of the run uses, and return its ID.

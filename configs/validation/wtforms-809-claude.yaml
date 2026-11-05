@@ -15,7 +15,7 @@ judge:
   rubric: ../../prompts/judge/generated-test-evaluation-rubric.md
   harness: codex
   provider: openrouter
-  model: google/gemini-3.8-flash
+  model: google/gemini-4-argon
   limit:
     kind: wall_seconds
     value: 300

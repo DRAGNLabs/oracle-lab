@@ -29,7 +29,7 @@ from oracle_lab.trace.events import (
     read_run_trace,
 )
 
-HOW_TO_REVIEW = Path(__file__).resolve().parent / "templates/how-to-review.md"
+TEMPLATES = Path(__file__).resolve().parent / "templates"
 
 # The task record's readable texts beside the issue, by dataset field, in page order.
 RECORD_TEXTS = {
@@ -242,13 +242,19 @@ def _judgment_details(target: JudgmentTarget) -> dict:
     }
 
 
-def how_to_review() -> str:
-    """The reviewer's instructions as Markdown, with each rating's definition filled in."""
+def how_to_review() -> dict[str, str]:
+    """Each stage's reviewer instructions as Markdown, with each rating's definition
+    filled in."""
     ratings = "\n".join(
-        f"- **{rating.capitalize()}:** {definition}"
+        f"   - **{rating.capitalize()}:** {definition}"
         for rating, definition in RATING_DEFINITIONS.items()
     )
-    return Template(HOW_TO_REVIEW.read_text()).substitute(ratings=ratings)
+    return {
+        stage: Template((TEMPLATES / f"how-to-review-{stage}.md").read_text()).substitute(
+            ratings=ratings
+        )
+        for stage in ("classification", "judge")
+    }
 
 
 def _rating_items(target: ReviewTarget, answers: dict) -> list[dict]:

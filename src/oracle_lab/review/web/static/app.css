@@ -157,7 +157,7 @@ main { flex: 1; min-height: 0; }
 
 .review {
   display: grid;
-  grid-template-columns: var(--rail) minmax(0, 1fr) 6px var(--sidebar, 480px);
+  grid-template-columns: var(--sidebar, 480px) 6px minmax(0, 1fr) 6px var(--rail);
   height: 100%;
 }
 
@@ -165,7 +165,6 @@ main { flex: 1; min-height: 0; }
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border-right: 1px solid var(--line);
   background: var(--surface);
 }
 .rail-head { padding: 16px 20px 12px; border-bottom: 1px solid var(--line); }
@@ -252,17 +251,16 @@ main { flex: 1; min-height: 0; }
 .rail-section p, .rail-note { font-size: 13px; color: var(--muted); margin: 4px 0 0; }
 .rail-note { list-style: none; margin: 0 4px 10px; }
 .rail-subhead { list-style: none; font-size: 13px; font-weight: 600; color: var(--muted); margin: 12px 4px 6px; }
-.question.compact { display: flex; align-items: center; gap: 8px; padding: 6px 10px; }
+.question.compact { padding: 6px 10px; }
+.question.compact .compact-row { display: flex; align-items: center; gap: 8px; }
 .question.compact .compact-label { flex: 1; font-size: 14px; }
 .rate-compact { grid-template-columns: repeat(2, auto); gap: 4px; }
 .rate-compact button { padding: 2px 8px; font-size: 13px; }
 .definition { margin: -4px 0 8px; font-size: 13px; color: var(--muted); }
-.other-label { list-style: none; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 8px 12px; margin-bottom: 8px; font-size: 14px; }
-.other-label p { margin: 4px 0; }
-.other-label-form { list-style: none; }
-.other-label-form form { display: grid; gap: 6px; }
-.other-label-form input, .other-label-form textarea { font: inherit; font-size: 14px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
-.other-label-form button { justify-self: start; }
+/* Why the rater disagreed: required for every disagree rating. */
+.why { display: grid; gap: 4px; margin-top: 8px; font-size: 13px; color: var(--muted); }
+.why textarea { font: inherit; font-size: 14px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); resize: vertical; }
+.why textarea:placeholder-shown { border-color: var(--incorrect); }
 .save-status { margin: 0 0 8px; color: var(--muted); font-size: 14px; }
 .save-status.saved { color: var(--correct); font-weight: 600; }
 .save-error { margin: 8px 0 0; color: var(--incorrect); font-size: 14px; }
@@ -369,7 +367,7 @@ main { flex: 1; min-height: 0; }
   overflow: auto;
   tab-size: 4;
 }
-.code .row { display: flex; min-width: max-content; }
+.code .row { display: flex; }
 .code .num {
   position: sticky;
   left: 0;
@@ -382,7 +380,10 @@ main { flex: 1; min-height: 0; }
   user-select: none;
   opacity: 0.8;
 }
-.code .text { white-space: pre; padding-right: 16px; }
+/* Long lines wrap, so nothing is cut off at the panel's edge. */
+.code .text { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; padding-right: 16px; }
+.code .row.repaired-del, .code .row.repaired-del .num { background: var(--removed); }
+.code .row.repaired-add, .code .row.repaired-add .num { background: var(--added); }
 .code .row.target, .code .row.target .num { background: var(--accent-soft); }
 .code .hljs { background: none; padding: 0; }
 
@@ -516,7 +517,7 @@ dialog h2 { margin: 0 0 12px; font-size: 18px; }
 @media (max-width: 900px) {
   .review { grid-template-columns: 1fr; height: auto; }
   .divider { display: none; }
-  .rail { border-right: 0; border-bottom: 1px solid var(--line); }
+  .rail { border-top: 1px solid var(--line); }
   .questions { overflow: visible; }
   .files, .evidence { grid-template-columns: 1fr; height: auto; }
   .target-row { grid-template-columns: 1fr; gap: 2px; }

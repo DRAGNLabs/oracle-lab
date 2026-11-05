@@ -3,7 +3,7 @@
 import json
 
 import pytest
-from fixtures import classified_attempt, judged_run, judgment_ratings
+from fixtures import classified_attempt, judged_run, judgment_ratings, review_of
 
 from oracle_lab.io import digest, read_json, write_json
 from oracle_lab.review.store import read_review, save_review
@@ -13,7 +13,7 @@ RATINGS = judgment_ratings(attempt_detail="disagree")
 
 
 def submitted(**changes) -> str:
-    return json.dumps({"ratings": {**RATINGS, **changes}})
+    return json.dumps(review_of({**RATINGS, **changes}))
 
 
 def test_a_review_is_saved_with_its_provenance(tmp_path):
@@ -22,7 +22,7 @@ def test_a_review_is_saved_with_its_provenance(tmp_path):
     save_review(target, "rater-1", submitted())
 
     directory = tmp_path / "judge/reviews/rater-1"
-    assert read_json(directory / "review.json") == {"ratings": RATINGS, "other_failure_modes": []}
+    assert read_json(directory / "review.json") == review_of(RATINGS)
     assert read_json(directory / "provenance.json") == {
         "stage": "judge",
         "rater": "rater-1",
@@ -71,7 +71,7 @@ def test_an_incomplete_review_is_refused_and_nothing_is_written(tmp_path):
 
 def test_a_rater_reads_only_their_own_review(tmp_path):
     target = JudgmentTarget.load(judged_run(tmp_path).root)
-    write_json(tmp_path / "judge/reviews/other/review.json", {"ratings": RATINGS})
+    write_json(tmp_path / "judge/reviews/other/review.json", review_of(RATINGS))
 
     assert read_review(target, "rater-1") is None
     assert read_review(target, "other").ratings == RATINGS

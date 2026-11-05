@@ -201,15 +201,20 @@ class ClassifierConfig(HarnessConfig):
     multi_agent: Literal[False] = False  # pyright: ignore[reportIncompatibleVariableOverride]
 
 
-class TaskConfig(ConfigModel):
-    prompt: str
-    scope: Literal["localized", "repository"] = "repository"
+class TestSettings(ConfigModel):
+    """Where generated tests go, and whether the repository's own tests stay visible."""
+
     existing_tests: Literal["keep", "hide_all"] = "hide_all"
     generated_dir: RepositoryPath = "oracle_tests"
 
     @property
     def hides_existing_tests(self) -> bool:
         return self.existing_tests == "hide_all"
+
+
+class TaskConfig(TestSettings):
+    prompt: str
+    scope: Literal["localized", "repository"] = "repository"
 
 
 class LimitsConfig(ConfigModel):
@@ -263,11 +268,17 @@ class ResolvedConfig(ConfigModel):
         return self.runtime
 
 
-class RunConfig(ResolvedConfig):
+class ProblemConfig(ResolvedConfig):
+    """What preflight checks: one problem, and how generated tests will run on it."""
+
+    task: TestSettings = Field(default_factory=TestSettings)
+
+
+class RunConfig(ProblemConfig):
     # Subagents are permitted here; the judge and classifier forbid them.
     agent: HarnessConfig
     judge: JudgeConfig | None = None
-    task: TaskConfig
+    task: TaskConfig  # pyright: ignore[reportIncompatibleVariableOverride]
 
     def require_judge(self) -> JudgeConfig:
         if self.judge is None:
@@ -276,13 +287,43 @@ class RunConfig(ResolvedConfig):
 
 
 class ClassificationConfig(ResolvedConfig):
-    """Standalone settings for classifying one SWE-bench problem."""
+    """Settings for classifying one problem, built from a setup file."""
 
     classifier: ClassifierConfig
     rubric: NonBlank
 
 
-def validate_resolved_config(config: RunConfig) -> None:
+class SetupConfig(ConfigModel):
+    """A setup file: the problems to preflight and classify, and the classifier."""
+
+    problems: Annotated[list[SourceConfig], Field(min_length=1)]
+    classifier: ClassifierConfig
+    rubric: NonBlank
+    limits: LimitsConfig = Field(default_factory=LimitsConfig)
+    output: str
+
+    @model_validator(mode="after")
+    def unique_problems(self) -> SetupConfig:
+        ids = [problem.instance for problem in self.problems]
+        repeated = sorted({i for i in ids if ids.count(i) > 1})
+        if repeated:
+            raise ValueError(f"Problems are listed more than once: {repeated}")
+        return self
+
+    def problem(self, source: SourceConfig) -> ProblemConfig:
+        return ProblemConfig(source=source, limits=self.limits, output=self.output)
+
+    def classification(self, source: SourceConfig) -> ClassificationConfig:
+        return ClassificationConfig(
+            source=source,
+            limits=self.limits,
+            output=self.output,
+            classifier=self.classifier,
+            rubric=self.rubric,
+        )
+
+
+def validate_resolved_config(config: ProblemConfig) -> None:
     """Make sure the agent's test directory is not inside the repo's source code.
 
     If it were, the agent could edit production code and have it counted as a test.
@@ -362,8 +403,17 @@ def load_config(path: Path, *, resolved: bool = False) -> RunConfig:
     return config
 
 
-def load_classification_config(path: Path, *, resolved: bool = False) -> ClassificationConfig:
-    """Parse standalone classification settings and resolve their host paths."""
-    config, resolve = _load(ClassificationConfig, path, resolved)
+def load_setup_config(path: Path) -> SetupConfig:
+    """Parse a setup file and resolve its host paths, relative to the file."""
+    config = SetupConfig.model_validate(_read_settings(path, resolved=False))
+    base = path.resolve().parent
+
+    def resolve(value: str) -> str:
+        return str((base / value).resolve())
+
+    config.output = resolve(config.output)
     config.rubric = resolve(config.rubric)
+    for problem in config.problems:
+        if problem.record:
+            problem.record = resolve(problem.record)
     return config

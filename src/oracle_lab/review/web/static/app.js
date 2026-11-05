@@ -78,9 +78,10 @@ function showTip(event) {
   tooltip.style.top = `${below ? box.bottom + 6 : box.top - tooltip.offsetHeight - 6}px`;
 }
 
-// The reviewer's instructions, from `review/web/templates/how-to-review.md`.
+// The stage's reviewer instructions, from `review/web/templates/how-to-review-<stage>.md`.
 function showHelp() {
-  document.getElementById("help-body").innerHTML = markdown(state.listing?.how_to_review || "");
+  const text = state.listing?.how_to_review[state.target?.stage] || "";
+  document.getElementById("help-body").innerHTML = markdown(text);
   const dialog = document.getElementById("help");
   if (!dialog.open) dialog.showModal();
 }

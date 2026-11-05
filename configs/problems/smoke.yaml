@@ -1,6 +1,5 @@
-source:
-  instance: psf__requests-1142
-
+# The smoke problem. Set it up with:
+#   uv run oracle-lab setup configs/problems/smoke.yaml
 classifier:
   harness: claude
   provider: openrouter
@@ -12,9 +11,7 @@ classifier:
 
 rubric: ../../prompts/judge/task-classification-rubric.md
 
-limits:
-  setup_seconds: 1800
-  memory: 4g
-  cpus: 2
-
 output: ../../output
+
+problems:
+  - instance: psf__requests-1142

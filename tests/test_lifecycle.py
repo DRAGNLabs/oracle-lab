@@ -1,4 +1,5 @@
 import json
+import shutil
 from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import Mock
@@ -7,18 +8,21 @@ import pytest
 import yaml
 from fixtures import (
     RUN_CONFIG,
+    classified_attempt,
     completed_judgment,
     context_of,
     evaluation_result,
+    in_scope_classification,
     instance_record,
     localized_target,
+    out_of_scope_classification,
     submission_manifest,
 )
 
 import oracle_lab.judge.generation.run as judge_module
 import oracle_lab.preflight as preflight_module
 import oracle_lab.run as run_module
-from oracle_lab.config import JudgeConfig, RuntimeConfig, load_config
+from oracle_lab.config import JudgeConfig, ProblemConfig, RuntimeConfig, load_config
 from oracle_lab.contracts.base import write_result
 from oracle_lab.contracts.run import EvaluationResult, LocalizedTarget, SubmissionManifest
 from oracle_lab.evaluation import archive_previous_evaluation
@@ -98,7 +102,16 @@ def configured_pipeline(tmp_path, with_judge):
         reference_test_patch="diff --git a/test_a.py b/test_a.py\n",
         reference_test_ids=["test_a.py::test_a"],
     )
+    classify(config, instance)
     return config, runtime, instance
+
+
+def classify(config, instance, result=None) -> None:
+    """Save the problem's newest classification, usable unless `result` says otherwise."""
+    attempts = OutputPaths(Path(config.output)).classifications / instance.instance_id
+    for attempt in attempts.glob("*"):
+        attempt.rename(attempt.with_name("20200101T000000Z-00000000"))
+    classified_attempt(attempts / "20260101T000000Z-00000000", result, instance)
 
 
 def install_pipeline_fakes(monkeypatch, runtime, instance, judge_effect=None):
@@ -111,7 +124,6 @@ def install_pipeline_fakes(monkeypatch, runtime, instance, judge_effect=None):
     monkeypatch.setattr(run_module, "docker_client", client_context)
     monkeypatch.setattr(run_module, "prepare_image", lambda *args: "example/runtime")
     target = LocalizedTarget.model_validate(localized_target())
-    monkeypatch.setattr(run_module, "localize", Mock(return_value=target))
     monkeypatch.setattr(run_module, "load_target", Mock(return_value=target))
     monkeypatch.setattr(run_module, "check_reference", Mock())
     manifest = SubmissionManifest.model_validate(submission_manifest())
@@ -207,9 +219,7 @@ def test_run_fills_the_agent_prompt_environment(tmp_path, monkeypatch):
     )
 
 
-def test_a_localized_run_loads_its_target_before_the_build_and_never_localizes(
-    tmp_path, monkeypatch
-):
+def test_a_localized_run_loads_its_target_before_the_build(tmp_path, monkeypatch):
     config, runtime, instance = configured_pipeline(tmp_path, False)
     config.task.scope = "localized"
     Path(config.task.prompt).write_text("Test ${test_target}")
@@ -231,18 +241,61 @@ def test_a_localized_run_loads_its_target_before_the_build_and_never_localizes(
     run_module.run(config)
 
     assert order == ["localize", "build", "reference"]
-    run_module.localize.assert_not_called()
 
 
-def test_a_repository_run_never_localizes(tmp_path, monkeypatch):
+def test_a_repository_run_loads_no_target(tmp_path, monkeypatch):
     config, runtime, instance = configured_pipeline(tmp_path, False)
     install_pipeline_fakes(monkeypatch, runtime, instance)
 
     run_dir = run_module.run(config)
 
-    run_module.localize.assert_not_called()
     run_module.load_target.assert_not_called()
     assert RunPaths(run_dir).prompt.read_text() == "Generate tests"
+
+
+@pytest.mark.parametrize(
+    "result, reason",
+    [
+        (None, "run `oracle-lab setup` on it first"),
+        ({"status": "failed", "error": "The harness crashed."}, "newest classification is failed"),
+        ({"status": "completed", **out_of_scope_classification()}, "found it out of scope"),
+        (
+            {
+                "status": "completed",
+                **in_scope_classification(benchmark_quality="unfair_without_issue"),
+            },
+            "rated its benchmark quality unfair_without_issue",
+        ),
+    ],
+    ids=["unclassified", "failed", "out-of-scope", "not-usable"],
+)
+def test_a_problem_the_classifier_did_not_clear_is_never_run(tmp_path, monkeypatch, result, reason):
+    config, runtime, instance = configured_pipeline(tmp_path, False)
+    attempts = OutputPaths(Path(config.output)).classifications / instance.instance_id
+    if result is None:
+        shutil.rmtree(attempts)
+    else:
+        classify(config, instance, result)
+    install_pipeline_fakes(monkeypatch, runtime, instance)
+    build = Mock()
+    monkeypatch.setattr(run_module, "prepare_image", build)
+
+    with pytest.raises(ValueError, match=reason):
+        run_module.run(config)
+
+    build.assert_not_called()
+    (run_dir,) = OutputPaths(Path(config.output)).runs.iterdir()
+    final = read_json(run_dir / "status.json")
+    assert (final["stage"], final["state"]) == ("classification", "failed")
+
+
+def test_the_newest_classification_decides_even_when_an_older_one_cleared_it(tmp_path, monkeypatch):
+    config, runtime, instance = configured_pipeline(tmp_path, False)
+    classify(config, instance, {"status": "completed", **out_of_scope_classification()})
+    install_pipeline_fakes(monkeypatch, runtime, instance)
+
+    with pytest.raises(ValueError, match="out of scope"):
+        run_module.run(config)
 
 
 def test_a_localize_failure_stops_the_run_at_that_stage(tmp_path, monkeypatch):
@@ -291,7 +344,7 @@ def test_run_refuses_a_localized_scope_whose_prompt_hides_the_target(tmp_path, m
 
     with pytest.raises(ValueError, match="test_target"):
         run_module.run(config)
-    assert not Path(config.output).exists()
+    assert not OutputPaths(Path(config.output)).runs.exists()
 
 
 def test_saved_config_points_at_the_run_s_own_rubric_copy(tmp_path, monkeypatch):
@@ -440,47 +493,47 @@ def test_reevaluation_marks_existing_judgment_stale_without_calling_a_model(tmp_
     judge_call.assert_not_called()
 
 
-def test_a_localized_preflight_localizes_after_the_build(tmp_path, monkeypatch):
-    config, runtime, instance = configured_pipeline(tmp_path, False)
-    config.task.scope = "localized"
-    Path(config.task.prompt).write_text("Test ${test_target}")
-    install_pipeline_fakes(monkeypatch, runtime, instance)
+def preflight_fakes(monkeypatch, tmp_path, order: list[str]):
+    """A problem config and every preflight check faked, each recording itself in `order`."""
+    _, runtime, instance = configured_pipeline(tmp_path, False)
+    config = ProblemConfig(source=load_config(SAMPLE).source, output=str(tmp_path / "output"))
+    target = LocalizedTarget.model_validate(localized_target())
+
+    def step(name, value=None):
+        return Mock(side_effect=lambda *args: order.append(name) or value)
+
+    monkeypatch.setattr(run_module, "resolve_source", lambda source: (instance, runtime))
     monkeypatch.setattr(preflight_module, "docker_client", context_of(Mock()))
-    monkeypatch.setattr(preflight_module, "check_environment", Mock())
+    monkeypatch.setattr(preflight_module, "prepare_image", step("build", "example/runtime"))
+    monkeypatch.setattr(preflight_module, "localize", step("localize", target))
+    monkeypatch.setattr(preflight_module, "check_reference", step("reference"))
+    monkeypatch.setattr(preflight_module, "check_environment", step("environment"))
+    return config
 
-    preflight_module.preflight(config)
 
-    run_module.localize.assert_called_once()
-    run_module.load_target.assert_not_called()
+def test_preflight_runs_every_check_without_a_model(tmp_path, monkeypatch):
+    order = []
+    config = preflight_fakes(monkeypatch, tmp_path, order)
 
+    root = preflight_module.preflight(config)
 
-def test_preflight_checks_the_environment_without_credentials_or_generation(tmp_path, monkeypatch):
-    config, runtime, instance = configured_pipeline(tmp_path, True)
-    install_pipeline_fakes(monkeypatch, runtime, instance)
-    monkeypatch.setattr(run_module, "require_credentials", Mock(side_effect=AssertionError))
-    monkeypatch.setattr(preflight_module, "docker_client", context_of(Mock()))
-    monkeypatch.setattr(preflight_module, "check_environment", Mock())
-
-    run_dir = preflight_module.preflight(config)
-
-    assert run_dir.parent == OutputPaths(Path(config.output)).preflight
-    final = read_json(run_dir / "status.json")
+    assert order == ["build", "localize", "reference", "environment"]
+    assert root == OutputPaths(Path(config.output)).preflight / "psf__requests-1142"
+    final = read_json(root / "status.json")
     assert (final["stage"], final["state"]) == ("finished", "passed")
-    run_module.check_reference.assert_called_once()
-    preflight_module.check_environment.assert_called_once()
-    run_module.generate_submission.assert_not_called()
+    # A preflight writes no prompt and keeps no judge files.
+    assert not RunPaths(root).prompt.exists()
+    assert not (root / "judge").exists()
 
 
 def test_a_preflight_failure_records_the_stage_it_stopped_in(tmp_path, monkeypatch):
-    config, runtime, instance = configured_pipeline(tmp_path, False)
-    install_pipeline_fakes(monkeypatch, runtime, instance)
+    config = preflight_fakes(monkeypatch, tmp_path, [])
     failure = RuntimeError("Environment check test did not pass on both versions")
-    monkeypatch.setattr(preflight_module, "docker_client", context_of(Mock()))
     monkeypatch.setattr(preflight_module, "check_environment", Mock(side_effect=failure))
 
     with pytest.raises(RuntimeError, match="did not pass"):
         preflight_module.preflight(config)
 
-    (run_dir,) = OutputPaths(Path(config.output)).preflight.iterdir()
-    final = read_json(run_dir / "status.json")
+    (root,) = OutputPaths(Path(config.output)).preflight.iterdir()
+    final = read_json(root / "status.json")
     assert (final["stage"], final["state"]) == ("environment", "failed")

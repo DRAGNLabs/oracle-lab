@@ -1,9 +1,9 @@
-"""Check an instance end to end without an agent, before any paid run.
+"""Check one problem end to end without an agent or a model.
 
-Runs every stage a run runs before generation, then an environment check: one
-fixed test, run the way an agent's tests run. Calls no model and needs no
-credentials. The built image is cached, so a later `run` of the same
-configuration reuses it.
+Resolves the problem, builds its image, finds its localized target, runs the
+private reference pair, and then an environment check: one fixed test, run the
+way an agent's tests run. Needs no credentials. The built image is cached, so
+later runs of the problem reuse it.
 """
 
 from __future__ import annotations
@@ -12,20 +12,18 @@ from pathlib import Path
 
 from docker import DockerClient
 
-from oracle_lab.config import RunConfig, load_config, validate_prompt_scope
+from oracle_lab.config import ProblemConfig
+from oracle_lab.container.images import prepare_image
 from oracle_lab.container.repository import Repository
 from oracle_lab.container.sandbox import Profile, Sandbox, docker_client
 from oracle_lab.contracts.base import write_result
-from oracle_lab.contracts.run import (
-    InstanceRecord,
-    VersionResult,
-    read_localized_target,
-    write_status,
-)
-from oracle_lab.evaluation import run_version
+from oracle_lab.contracts.run import InstanceRecord, VersionResult, write_status
+from oracle_lab.evaluation import check_reference, run_version
 from oracle_lab.evaluation.outcomes import pair_results
+from oracle_lab.io import write_json
+from oracle_lab.localization import localize
 from oracle_lab.paths import OutputPaths, RunPaths
-from oracle_lab.run import Stages, prepare
+from oracle_lab.run import Stages, resolve
 
 # Stands in for an agent's submission. It cannot fail, so any failure comes from
 # the environment.
@@ -37,56 +35,44 @@ def test_generated_tests_can_run():
 '''
 
 
-def preflight(config: RunConfig) -> Path:
-    """Check one instance, and return its directory under `<output>/preflight/`."""
-    prompt_template = Path(config.task.prompt).read_text()
-    validate_prompt_scope(prompt_template, config.task.scope)
-    paths = OutputPaths(Path(config.output)).new_preflight()
-    run_dir = paths.root
+def preflight(config: ProblemConfig) -> Path:
+    """Check one problem, and return its directory, `<output>/preflight/<instance-id>/`.
 
-    stages = Stages(run_dir)
+    A rerun replaces the directory: only the latest preflight of a problem counts.
+    """
+    paths = OutputPaths(Path(config.output)).new_preflight(config.source.instance)
+    stages = Stages(paths.root)
     try:
         with docker_client() as client:
-            instance, image = prepare(
-                client, config, paths, stages, prompt_template, preflight=True
-            )
+            stages.start("resolve")
+            instance = resolve(config, paths)
+
+            stages.start("build")
+            image = prepare_image(client, config, paths.build)
+            write_json(paths.runtime, {"image": image})
+
+            # Task classification and localized runs copy the target from here.
+            stages.start("localize")
+            localize(client, config, image, instance, paths)
+
+            stages.start("reference")
+            check_reference(client, config, image, instance, paths)
+
             stages.start("environment")
             check_environment(client, config, image, instance, paths)
-        write_status(run_dir, "finished", "passed")
+        write_status(paths.root, "finished", "passed")
     except KeyboardInterrupt:
-        write_status(run_dir, stages.current, "interrupted")
+        write_status(paths.root, stages.current, "interrupted")
         raise
     except Exception as exc:
-        write_status(run_dir, stages.current, "failed", error=str(exc))
+        write_status(paths.root, stages.current, "failed", error=str(exc))
         raise
-    return run_dir
-
-
-def preflight_all(configs: list[Path]) -> bool:
-    """Check every config, even after a failure, list each outcome, and say if all passed."""
-    outcomes: list[tuple[str, Path, Path | Exception]] = []
-    for path in configs:
-        try:
-            outcomes.append(("passed", path, preflight(load_config(path))))
-        except KeyboardInterrupt:
-            raise
-        except Exception as exc:
-            outcomes.append(("failed", path, exc))
-    for state, path, detail in outcomes:
-        print(f"{state}  {path}  {detail}{_scope_note(detail)}")
-    return all(state == "passed" for state, _, _ in outcomes)
-
-
-def _scope_note(detail: Path | Exception) -> str:
-    """A localized preflight's fix scope, which says how much of the fix its target names."""
-    if isinstance(detail, Exception) or not RunPaths(detail).target.is_file():
-        return ""
-    return f"  fix scope: {read_localized_target(RunPaths(detail).target).scope}"
+    return paths.root
 
 
 def check_environment(
     client: DockerClient,
-    config: RunConfig,
+    config: ProblemConfig,
     image: str,
     instance: InstanceRecord,
     paths: RunPaths,

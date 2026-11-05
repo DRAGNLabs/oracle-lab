@@ -9,6 +9,7 @@ from fixtures import (
     instance_record,
     judgment_ratings,
     out_of_scope_classification,
+    review_of,
     review_set,
     upstream_repository,
 )
@@ -46,8 +47,10 @@ def test_the_listing_groups_tasks_by_problem_with_classification_first(session):
     listing = session.listing()
 
     assert set(listing["rating_definitions"]) == {"agree", "disagree"}
-    assert "- **Disagree:** You would give a different answer" in listing["how_to_review"]
-    assert "${" not in listing["how_to_review"]
+    assert set(listing["how_to_review"]) == {"classification", "judge"}
+    for text in listing["how_to_review"].values():
+        assert "- **Disagree:** You would give a different answer" in text
+        assert "${" not in text
     labels = json.loads(json.dumps(listing["labels"]))  # as the page receives them
     assert labels["actions"]["probe_code"] == "Probe code"
     assert "source" not in labels["flagged_categories"]
@@ -141,13 +144,10 @@ def test_an_out_of_scope_classification_is_reviewed_on_one_question(data, open_s
     session = open_session()
 
     (question,) = session.overview(attempt)["questions"]
-    session.submit(attempt, json.dumps({"ratings": {"task_nature": "disagree"}}))
+    session.submit(attempt, json.dumps(review_of({"task_nature": "disagree"})))
 
     assert question["answer"] == "out_of_scope"
-    assert session.overview(attempt)["review"] == {
-        "ratings": {"task_nature": "disagree"},
-        "other_failure_modes": [],
-    }
+    assert session.overview(attempt)["review"] == review_of({"task_nature": "disagree"})
     assert (data / attempt / "judge/reviews/rater-1/provenance.json").is_file()
 
 
@@ -171,14 +171,14 @@ def test_a_classification_has_no_golden_view(session):
 
 
 def test_another_raters_review_is_never_shown(data, session):
-    write_json(data / REVIEWED_RUN / "judge/reviews/other/review.json", {"ratings": RATINGS})
+    write_json(data / REVIEWED_RUN / "judge/reviews/other/review.json", review_of(RATINGS))
 
     assert session.listing()["problems"][0]["tasks"][1]["reviewed"] is False
     assert session.overview(REVIEWED_RUN)["review"] is None
 
 
 def test_a_submitted_review_shows_as_reviewed(session):
-    session.submit(REVIEWED_RUN, json.dumps({"ratings": RATINGS}))
+    session.submit(REVIEWED_RUN, json.dumps(review_of(RATINGS)))
 
     assert session.listing()["problems"][0]["tasks"][1]["reviewed"] is True
     assert session.overview(REVIEWED_RUN)["review"]["ratings"] == RATINGS

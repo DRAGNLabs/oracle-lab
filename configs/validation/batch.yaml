@@ -1,12 +1,11 @@
 name: validation
 
+# One problem from each repository, one per harness. The other configs in this
+# folder cover the remaining problem and harness pairs.
 jobs:
   - config: pytest-10051-claude.yaml
-  - config: pytest-10051-codex.yaml
-  - config: pytest-10051-opencode.yaml
-  - config: wtforms-809-claude.yaml
   - config: wtforms-809-codex.yaml
-  - config: wtforms-809-opencode.yaml
+  - config: sklearn-15100-opencode.yaml
 
 execution:
   continue_on_error: true

@@ -187,6 +187,12 @@ def judgment_ratings(**changes: str) -> dict[str, str]:
     return ratings
 
 
+def review_of(ratings: dict[str, str]) -> dict:
+    """A review with these ratings, and a reason for each disagree."""
+    reasons = {key: f"The {key} answer is wrong." for key, r in ratings.items() if r == "disagree"}
+    return {"ratings": ratings, "justifications": reasons}
+
+
 def completed_judgment(**changes) -> dict:
     """A valid normalized judgment."""
     return {"status": "completed", **judgment_labels(**changes)}
@@ -426,8 +432,9 @@ def traced_run(root: Path) -> RunPaths:
 
 def passed_preflight(output: Path, instance: InstanceRecord | None = None, **target) -> RunPaths:
     """A preflight that passed and localized `instance`, as `load_target` finds it."""
-    paths = OutputPaths(output).new_preflight()
-    write_result(paths.instance, instance or instance_record())
+    instance = instance or instance_record()
+    paths = OutputPaths(output).new_preflight(instance.instance_id)
+    write_result(paths.instance, instance)
     write_json(paths.target, localized_target(**target))
     paths.target_log.write_text("localize log\n")
     write_json(paths.status, {"stage": "finished", "state": "passed", "updated_at": "now"})

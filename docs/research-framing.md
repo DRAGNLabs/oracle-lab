@@ -138,8 +138,9 @@ A test oracle is what tells a test the correct outcome. The kinds follow Barr et
 al., "The Oracle Problem in Software Testing: A Survey" (IEEE TSE, 2015), judged
 from the buggy repository alone:
 
-- **Implicit:** the bug crashes, raises an uncaught exception, or hangs.
-  Triggering it is enough; no expected value is needed.
+- **Implicit:** the bug crashes by accident or hangs. Triggering it is enough;
+  no expected value is needed. An exception the code raises on purpose, with
+  its own check and message, does not count: it looks like intended behavior.
 - **Specified:** the repository, or a specification it follows, states the
   correct behavior (docs, docstrings, types). Succeeding needs retrieval.
 - **Derived:** nothing states it, but it can be reasoned out from the code:

@@ -5,7 +5,7 @@ import json
 import threading
 
 import pytest
-from fixtures import REVIEWED_RUN, judgment_ratings, review_set, upstream_repository
+from fixtures import REVIEWED_RUN, judgment_ratings, review_of, review_set, upstream_repository
 
 from oracle_lab.review.web.server import ReviewServer
 from oracle_lab.review.web.session import ReviewSession
@@ -55,7 +55,7 @@ def test_the_page_and_api_are_served(port):
 
 
 def test_a_review_is_posted_as_json(port, data):
-    body = json.dumps({"ratings": RATINGS}).encode()
+    body = json.dumps(review_of(RATINGS)).encode()
 
     status, response = request(
         port,

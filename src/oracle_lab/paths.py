@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -39,11 +40,32 @@ class OutputPaths:
     def agreement(self) -> Path:
         return self.root / "agreement"
 
+    @property
+    def setup(self) -> Path:
+        """Each setup file's summary, named after the file."""
+        return self.root / "setup"
+
     def new_run(self) -> RunPaths:
         return RunPaths.create(_new_directory(self.runs))
 
-    def new_preflight(self) -> RunPaths:
-        return RunPaths.create(_new_directory(self.preflight))
+    def preflight_for(self, instance_id: str) -> RunPaths:
+        """A problem's one preflight directory, which each preflight replaces."""
+        return RunPaths(self.preflight / instance_id)
+
+    def new_preflight(self, instance_id: str) -> RunPaths:
+        """Replace the problem's preflight directory with one holding only what preflight writes."""
+        paths = self.preflight_for(instance_id)
+        if paths.root.exists():
+            shutil.rmtree(paths.root)
+        for directory in (
+            paths.inputs,
+            paths.build,
+            paths.reference,
+            paths.ground_truth,
+            paths.environment,
+        ):
+            directory.mkdir(parents=True)
+        return paths
 
     def new_batch(self) -> BatchPaths:
         return BatchPaths(_new_directory(self.batches))
@@ -57,10 +79,6 @@ class OutputPaths:
     def saved_runs(self) -> list[RunPaths]:
         """Every run directory under `runs/`, in ID order."""
         return [RunPaths(run) for run in _subdirectories(self.runs)]
-
-    def saved_preflights(self) -> list[RunPaths]:
-        """Every preflight directory under `preflight/`, in ID order."""
-        return [RunPaths(run) for run in _subdirectories(self.preflight)]
 
     def saved_attempts(self) -> list[AttemptPaths]:
         """Every classification attempt, by instance ID and then attempt ID."""

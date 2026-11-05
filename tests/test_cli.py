@@ -1,13 +1,9 @@
 import os
 
 import pytest
-from fixtures import RUN_CONFIG, localized_target
+from fixtures import RUN_CONFIG
 
-import oracle_lab.preflight as preflight_module
 from oracle_lab import cli
-from oracle_lab.contracts.base import write_result
-from oracle_lab.contracts.run import LocalizedTarget
-from oracle_lab.paths import RunPaths
 
 SAMPLE = RUN_CONFIG
 
@@ -93,48 +89,23 @@ def test_judge_loads_credentials_and_uses_saved_run(tmp_path, monkeypatch):
     assert cli.main(["judge", str(tmp_path)]) == 0
 
 
-def test_classify_loads_credentials_and_uses_its_own_config(tmp_path, monkeypatch):
+@pytest.mark.parametrize("done, code", [(True, 0), (False, 1)])
+def test_setup_loads_credentials_passes_its_flags_and_fails_until_done(
+    tmp_path, monkeypatch, done, code
+):
     monkeypatch.chdir(tmp_path)
-    (tmp_path / ".env").write_text("OPENAI_API_KEY=classifier-fixture\n")
-    attempt = tmp_path / "classifications" / "instance" / "attempt"
-    attempt.mkdir(parents=True)
-    (attempt / "status.json").write_text('{"state": "completed"}\n')
-    config = object()
-    monkeypatch.setattr(cli, "load_classification_config", lambda path: config)
-    monkeypatch.setattr(cli, "classify", lambda loaded: attempt if loaded is config else None)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    (tmp_path / ".env").write_text("OPENROUTER_API_KEY=classifier-fixture\n")
+    calls = []
 
-    assert cli.main(["classify", "classification.yaml"]) == 0
+    def setup(path, *, reclassify, preflight_only):
+        calls.append((path.name, reclassify, preflight_only, os.environ["OPENROUTER_API_KEY"]))
+        return done
 
+    monkeypatch.setattr(cli, "setup", setup)
 
-def test_preflight_checks_every_config_and_fails_if_any_fails(tmp_path, monkeypatch, capsys):
-    def unexpected_load(*args, **kwargs):
-        pytest.fail("Preflight must not load credentials")
-
-    def preflight(path):
-        if path.name == "bad.yaml":
-            raise RuntimeError("reference pair did not reproduce")
-        return tmp_path / path.stem
-
-    monkeypatch.setattr(cli, "load_dotenv", unexpected_load)
-    monkeypatch.setattr(preflight_module, "load_config", lambda path: path)
-    monkeypatch.setattr(preflight_module, "preflight", preflight)
-
-    assert cli.main(["preflight", "bad.yaml", "good.yaml"]) == 1
-    output = capsys.readouterr().out
-    assert "failed  bad.yaml  reference pair did not reproduce" in output
-    assert f"passed  good.yaml  {tmp_path / 'good'}" in output
-
-
-def test_preflight_names_a_localized_target_fix_scope(tmp_path, monkeypatch, capsys):
-    paths = RunPaths.create(tmp_path / "localized")
-    write_result(paths.target, LocalizedTarget.model_validate(localized_target(scope="class")))
-    monkeypatch.setattr(preflight_module, "load_config", lambda path: path)
-    monkeypatch.setattr(preflight_module, "preflight", lambda path: paths.root)
-
-    assert cli.main(["preflight", "localized.yaml"]) == 0
-    assert capsys.readouterr().out.endswith(
-        f"passed  localized.yaml  {paths.root}  fix scope: class\n"
-    )
+    assert cli.main(["setup", "problems.yaml", "--reclassify"]) == code
+    assert calls == [("problems.yaml", True, False, "classifier-fixture")]
 
 
 def test_review_serves_the_page_without_loading_credentials(tmp_path, monkeypatch):

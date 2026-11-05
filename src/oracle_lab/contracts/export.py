@@ -152,21 +152,10 @@ class ReviewRow(ArtifactModel):
     rater: str
     item: str
     rating: str
+    justification: str | None  # why the rater disagreed; null for agree
     reviewed_output_sha256: str
     judge_model: str
     stage_rubric_sha256: str
-
-
-class RaterFailureModeRow(ArtifactModel):
-    """A failure mode a rater added that the judge missed."""
-
-    stage: str
-    target_id: str
-    instance_id: str
-    rater: str
-    name: str
-    description: str
-    steps: list[int]
 
 
 TABLES: dict[str, type[ArtifactModel]] = {
@@ -177,7 +166,6 @@ TABLES: dict[str, type[ArtifactModel]] = {
     "trace_steps": TraceStepRow,
     "classifications": ClassificationRow,
     "reviews": ReviewRow,
-    "rater_failure_modes": RaterFailureModeRow,
 }
 
 

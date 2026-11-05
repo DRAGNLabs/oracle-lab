@@ -6,9 +6,10 @@ sample configs use `output/` in the repository root, which Git ignores:
 ```text
 output/
 ├── runs/<run-id>/                              # oracle-lab run
-├── preflight/<run-id>/                         # oracle-lab preflight
+├── preflight/<instance-id>/                    # oracle-lab setup
 ├── batches/<batch-id>/                         # oracle-lab batch
-├── classifications/<instance-id>/<attempt-id>/ # oracle-lab classify
+├── classifications/<instance-id>/<attempt-id>/ # oracle-lab setup
+├── setup/<setup file name>.md                  # oracle-lab setup summary
 └── agreement/<agreement-id>/                   # oracle-lab agreement (default)
 ```
 
@@ -109,14 +110,16 @@ are not retried; they end with their normal status.
 
 ## Preflight directories
 
-`oracle-lab preflight` checks an instance without calling a model. Each config
-gets a timestamped directory under `<output>/preflight/`, apart from real runs.
-It runs resolve, build, localize (localized configs only), and the reference
-check, then an environment check. Preflight is the only command that computes a
+`oracle-lab setup` first preflights each problem, without calling a model. Each
+problem has one directory, `<output>/preflight/<instance-id>/`, apart from real
+runs. A new preflight replaces it, so it always holds the problem's latest one.
+Setup skips a problem whose preflight passed for the same record (instance ID,
+base commit, and record checksum). Preflight runs resolve, build, localize, and
+the reference check, then an environment check. Preflight is the only command that computes a
 target; runs and classifications copy it from here:
 
 ```text
-<output>/preflight/<run-id>/
+<output>/preflight/<instance-id>/
 ├── status.json
 ├── inputs/
 ├── image-build/
@@ -128,9 +131,6 @@ target; runs and classifications copy it from here:
     ├── buggy/<execution artifacts>
     └── golden/<execution artifacts>
 ```
-
-The directory also holds the empty `generation/`, `submission/`, `evaluation/`,
-and `judge/` directories that every run directory starts with.
 
 The environment check puts one fixed test, which cannot fail, in the generated
 tests directory and runs it the way an agent's tests run: existing tests hidden,
@@ -174,7 +174,19 @@ preflight, as a localized run does, and puts it in the classifier's workspace.
 The classifier then sees the automated fix scope beside the task record. A
 problem without a passed preflight is not classified.
 
-Every `classify` call creates a new attempt. The classifier's files are never
+A run only proceeds when the problem's newest attempt completed, found the task
+in scope, and rated its benchmark quality `usable`. Otherwise the run stops at
+its `classification` stage, before the build, and says why. A failed newest
+attempt blocks too; it never falls back to an older one.
+
+Each `oracle-lab setup` run rewrites `<output>/setup/<setup file name>.md`: one
+row per problem in the file, with its preflight result (and the failed stage and
+error), fix scope, target, each classification answer, and whether it is cleared
+for runs. It reflects the current state, including problems skipped as done.
+
+Every classification `oracle-lab setup` runs creates a new attempt. Setup skips
+a problem whose newest attempt completed, unless given `--reclassify`, and
+retries one whose newest attempt did not. The classifier's files are never
 changed; human reviews are added beside them, in the same format as
 [`judge/reviews/`](#judgereviews). Their provenance names
 `judge/classification.json` as the reviewed output and the classifier's harness
@@ -316,14 +328,16 @@ The run's latest checkpoint: `stage`, `state`, `updated_at`, and an error if
 there was one. The stages, in order:
 
 1. `resolve`
-2. `localize` (localized runs only): copy the target the problem's preflight found
-3. `build`
-4. `reference`
-5. `generate`, which includes capturing the submission
-6. `evaluate`
-7. `judge` (when configured)
-8. `cost`, the wait for the spend reading in [`cost.json`](#costjson)
-9. `finished`
+2. `classification`: require the problem's newest
+   [classification](#classification-attempts) to clear it for a run
+3. `localize` (localized runs only): copy the target the problem's preflight found
+4. `build`
+5. `reference`
+6. `generate`, which includes capturing the submission
+7. `evaluate`
+8. `judge` (when configured)
+9. `cost`, the wait for the spend reading in [`cost.json`](#costjson)
+10. `finished`
 
 The final state is `completed` only when the agent and both evaluations
 completed and the submission was compliant. Otherwise it is
@@ -413,12 +427,13 @@ One directory per human rater, written by `oracle-lab review`. See
 [human review](judging.md#human-review). A classification attempt's
 `judge/reviews/` has the same format.
 
-- `review.json`: `{"ratings": {item: rating}, "other_failure_modes": [...]}`.
+- `review.json`: `{"ratings": {item: rating}, "justifications": {item: text}}`.
   Each rating is `agree` or `disagree`, for exactly the items the judge answered:
-  the submission questions, `failure_modes.<key>` for every start-list label, and
+  the submission or classification questions, and for a judgment
+  `failure_modes.<key>` for every start-list label and
   `added_failure_modes.<index>` for each label the judge added.
-  `other_failure_modes` holds the rater's own labels, each with `name`,
-  `description`, and `steps`; it is empty for a classification.
+  `justifications` holds the rater's reason for each `disagree`, and only those;
+  it may be left out when every rating is `agree`.
 - `provenance.json`: what the review was based on. `stage`, `rater`, the
   reviewed output's path (`judge/judgment.json` or `judge/classification.json`)
   and SHA-256, the judge's harness and model from `judge/agent/result.json`, and
@@ -491,11 +506,11 @@ checkout to `base_commit`, as the agent's workspace is, so it reads the same cod
 the agent sees.
 
 A localized run and a task classification copy `target.json` and `target.log`
-from the newest preflight in the same output root that passed for the same
-record (instance ID, base commit, and record checksum).
-`inputs/target-source.txt` names that preflight, such as
-`preflight/20261023T193937Z-9101b7e0`. Without one, the run or classification
-stops at `localize` and asks for a preflight.
+from the problem's preflight directory in the same output root. That preflight
+must have passed and resolved the same record (instance ID, base commit, and
+record checksum). `inputs/target-source.txt` names it, such as
+`preflight/pytest-dev__pytest-10051`. Otherwise the run or classification stops
+at `localize` and asks for a preflight.
 
 ## `image-build/`
 
@@ -779,8 +794,7 @@ the nearest stage log.
   `alpha`. Questions include `failure_modes.<key>` for each start-list label and
   one pooled `added_failure_modes`. A share or alpha that cannot be computed is
   `null`. `added_labels` lists every judge-added failure mode with its `target`,
-  `name`, and `ratings`; `rater_labels` counts the raters' own labels by name.
-  `missing` maps each target that some
+  `name`, and `ratings`. `missing` maps each target that some
   rater did not review to those raters; `unreviewable` maps each target that
   could not be reviewed to the reason.
 - `agreement.md`: the same results as tables, with a note on reading alpha.
@@ -818,9 +832,8 @@ Each table's columns are the fields of its row model in
 - `trace_steps`: the agent trace's events from `judge/trace.json`, numbered as
   the judge and raters cite them.
 - `classifications`: each attempt's labels and justifications, or its error.
-- `reviews`: one row per rater and rated item, with the hashes from its
-  provenance.
-- `rater_failure_modes`: the labels raters added.
+- `reviews`: one row per rater and rated item, with the rater's justification
+  for a disagree and the hashes from its provenance.
 
 A file that exists must validate. A run that stopped early still has a row, with
 the columns of files it never wrote left null. A run or attempt that cannot be

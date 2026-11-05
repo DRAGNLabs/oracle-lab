@@ -22,7 +22,7 @@ Run from the repository root:
 ```sh
 uv sync --extra dev
 
-uv run oracle-lab preflight configs/smoke.yaml
+uv run oracle-lab setup configs/problems/smoke.yaml
 uv run oracle-lab run configs/smoke.yaml
 ```
 
@@ -34,10 +34,10 @@ tests. It does not see the issue description or the fix. Oracle Lab then runs
 the same tests against the buggy version and the fixed (golden) version. It
 records the paired pass/fail outcomes.
 
-A separate `classify` command labels SWE-bench and SWE-rebench V2 problems. The labels
-cover defect mechanism, test setup, oracle availability, scope, and benchmark
-quality. A run's report shows the newest classification for its instance, if
-one exists.
+Before any run, `setup` checks each SWE-bench or SWE-rebench V2 problem and has
+an LLM classifier label it. The labels cover defect mechanism, test setup, oracle availability,
+scope, and benchmark quality. A problem the classifier rejects is not run. A
+run's report shows its problem's classification.
 
 80% of this repo is just coordinating containers and managing data in and out of them.
 
@@ -48,33 +48,59 @@ Every command is `uv run oracle-lab <command>`, run from the repository root.
 take a YAML file write into that file's `output` root, `output/` in the sample
 configs.
 
-A typical sequence: `preflight` each problem, then `run` or `batch`, then
-`classify` each problem, then human review.
+The sequence: `setup` the problems, then `run` or `batch`, then human review.
+Each step needs the one before it.
 
-### `preflight`
+### `setup`
 
-Checks one or more problems without calling a model. For each config it
-resolves the dataset record, builds the runtime image, finds the code the golden
-repair changes (the localized target) and its fix scope, runs the private
-reference test on the buggy and golden code, and runs one fixed test the way
-generated tests run.
+Prepares every problem in a setup file for runs. For each problem it runs two
+steps:
+
+1. **Preflight**, with no model call. It resolves the dataset record, builds the
+   runtime image, finds the code the golden repair changes (the localized target)
+   and its fix scope, runs the private reference test on the buggy and golden
+   code, and runs one fixed test the way generated tests run. It is saved in
+   `output/preflight/<instance-id>/`.
+2. **Classification**, with the LLM task classifier: task nature, defect
+   mechanism, oracle kind, benchmark quality, and more. Each attempt is saved in
+   `output/classifications/<instance-id>/<attempt-id>/`.
+
+A setup file lists the problems and the classifier;
+`configs/problems/validation.yaml` is an example.
 
 ```sh
-uv run oracle-lab preflight configs/smoke.yaml [more configs...]
+uv run oracle-lab setup configs/problems/validation.yaml
+
+# Classify every problem again, for example after a rubric change.
+uv run oracle-lab setup configs/problems/validation.yaml --reclassify
+
+# Preflight only, with no model calls.
+uv run oracle-lab setup configs/problems/validation.yaml --preflight-only
 ```
 
-Each config gets a directory in `output/preflight/`. It prints one line per
-config, with the fix scope, and exits non-zero if any failed.
+Rerun the same command after fixing whatever failed. A problem whose preflight
+passed is not preflighted again, and one with a completed classification is not
+classified again; everything else is retried. A failed preflight skips that
+problem's classification but not the other problems. It ends with one line per
+problem and exits non-zero until every problem is done. Each run also rewrites
+`output/setup/<setup file name>.md`, a table of every problem with its preflight
+result, fix scope, target, classification status, each classification answer, and verdict, linked to
+each problem's preflight and classification:
 
-Run it before anything else. A localized `run`, `batch` job, or `classify` loads
-its target from the newest passed preflight of the same problem, and stops if
-there is none.
+```text
+pytest-dev__pytest-10051  preflight: passed earlier  fix scope: function  classification: completed  -> cleared
+```
+
+Classification decides whether a problem is run at all. A `run` or `batch` job
+stops before the build unless the problem's newest classification completed,
+found the task in scope, and rated its benchmark quality `usable`. Setup marks
+those problems `cleared`, and the others `rejected` with the reason.
 
 ### `run`
 
-Runs one config end to end: build, private reference check, the agent writing
-tests in a buggy container, capture, evaluation on both versions, the LLM judge
-(if the config has a `judge` section), and the report.
+Runs one config end to end: the classification check, build, private reference
+check, the agent writing tests in a buggy container, capture, evaluation on both
+versions, the LLM judge (if the config has a `judge` section), and the report.
 
 ```sh
 uv run oracle-lab run configs/smoke.yaml
@@ -131,19 +157,6 @@ Rebuilds a run's `report.md` from its saved files. Runs no code.
 ```sh
 uv run oracle-lab report output/runs/<run-id>
 ```
-
-### `classify`
-
-Labels one problem with the LLM task classifier, separately from any run. It
-uses its own YAML format; `configs/classification/example.yaml` is an example.
-The problem needs a passed preflight.
-
-```sh
-uv run oracle-lab classify configs/classification/example.yaml
-```
-
-Each attempt is saved in `output/classifications/<instance-id>/<attempt-id>/`.
-A run's report shows the newest classification of its problem.
 
 ### `review`
 
@@ -221,8 +234,8 @@ git clone <data-repository-url> oracle-lab-data
 cd oracle-lab
 ```
 
-Produce the runs and classifications in `oracle-lab` as usual (`preflight`,
-`batch`, `classify`). Copy the ones to review into the data repository, keeping
+Produce the runs and classifications in `oracle-lab` as usual (`setup`, then
+`batch`). Copy the ones to review into the data repository, keeping
 the output layout:
 
 ```sh
@@ -231,14 +244,8 @@ cp -r output/runs/<run-id> ../oracle-lab-data/runs/
 cp -r output/classifications/<instance-id>/<attempt-id> ../oracle-lab-data/classifications/<instance-id>/
 ```
 
-Check the set. The listing names anything that cannot be reviewed, and why. Only
-a completed judgment or classification can be reviewed. Stop it with Ctrl+C.
-
-```sh
-uv run oracle-lab review ../oracle-lab-data --rater check --no-browser
-```
-
-Publish it:
+Only a completed judgment or classification can be reviewed; the review page
+lists anything else under "Can't be reviewed", with the reason. Publish it:
 
 ```sh
 cd ../oracle-lab-data
@@ -252,6 +259,9 @@ pull it. Do not rejudge a run raters have started on; add the new judgment as a
 new run instead.
 
 ### Raters
+
+Raters can follow the shorter [rater guide](docs/rater-guide.md), which has only
+their commands.
 
 You need Git with push access to GitHub, [uv](https://docs.astral.sh/uv/), and a
 web browser. You do not need Docker or an API key.

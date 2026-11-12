@@ -3,7 +3,7 @@
 classifier:
   harness: claude
   provider: openrouter
-  model: anthropic/claude-haiku-4.5@preset/oracle-anthropic-first
+  model: anthropic/claude-haiku-4.5
   auth: api_key
   limit:
     kind: wall_seconds

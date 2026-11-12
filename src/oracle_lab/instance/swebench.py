@@ -61,7 +61,12 @@ REPOSITORY_LAYOUTS = {
 
 # Instances whose image cannot run the default pytest.
 OLDER_PYTEST_VERSIONS = {
+    # Astropy 1.3's own pytest plugins need the pytest its image ships.
+    "astropy__astropy-7166": "3.3.1",
+    "astropy__astropy-7336": "3.3.1",
+    "astropy__astropy-7606": "3.3.1",
     # These images use Python 3.6.
+    "scikit-learn__scikit-learn-13135": "6.2.5",
     "scikit-learn__scikit-learn-14710": "6.2.5",
     "scikit-learn__scikit-learn-15100": "6.2.5",
 }

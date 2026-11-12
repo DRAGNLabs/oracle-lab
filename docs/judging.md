@@ -21,6 +21,9 @@ The command needs the configured judge credential and the saved runtime image.
 - Transient API failures are retried, as for any model turn.
 - A rerun first moves the whole previous attempt to
   `judge-history/<UTC timestamp>/`, then rebuilds the workspace.
+- `--time-limit SECONDS` replaces the saved judge time limit for that pass only.
+  The run's saved configuration is unchanged; `judge/agent/result.json` records
+  the limit the judge ran with.
 
 Besides the four submission questions, the judge decides whether each failure
 mode on a start list is present in the agent's trace, citing trace steps for each

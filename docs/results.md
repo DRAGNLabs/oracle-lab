@@ -864,6 +864,15 @@ but no result is `missing`. Invalid, failed, timed-out, and stale judgments are
 recorded as such. They never make a job with a completed evaluation count as
 unfinished on `--resume`.
 
+`--resume` reruns every unfinished job. It also reruns a finished job whose
+agent turn ended `failed`: a provider outage, exhausted credits, or a rejected
+request. A timeout, or a completed turn that wrote no tests, is a result and is
+not rerun. Before the rerun, the old run moves from `runs/` to the batch's
+`superseded/<run-id>/`, unchanged, and the job's `superseded_runs` lists where
+it went. Each resume reruns a job at most once. `summary.json` counts the
+replaced runs in `superseded_runs`, and their spend in `superseded_cost_usd`,
+apart from `total_cost_usd`.
+
 The Markdown job table shows each run ID as plain text beside the linked
 instance name. You can then find the run under `<output>/runs/<run-id>` without following
 a link. A job that failed before creating a run shows `—`.

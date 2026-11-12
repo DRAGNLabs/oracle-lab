@@ -125,6 +125,10 @@ uv run oracle-lab batch --resume output/batches/<batch-id>
 The batch summary is saved in `output/batches/<batch-id>/`. Each job is an
 ordinary run in `output/runs/`.
 
+A resume also reruns any job whose agent turn failed, such as from a provider
+outage or exhausted credits. The failed run moves to the batch's `superseded/`
+folder. A timeout is a result, so it is not rerun.
+
 ### `evaluate`
 
 Reruns a saved run's captured tests in fresh buggy and golden containers. No

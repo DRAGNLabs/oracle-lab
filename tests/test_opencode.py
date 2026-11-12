@@ -1,6 +1,7 @@
 import json
 
-from oracle_lab.harnesses.opencode import parse_trace
+from oracle_lab.config import HarnessConfig
+from oracle_lab.harnesses.opencode import opencode_config, parse_trace
 
 
 def test_parse_trace_accumulates_usage_and_final_text(tmp_path):
@@ -55,3 +56,30 @@ def test_parse_trace_treats_missing_final_event_as_incomplete(tmp_path):
     result = parse_trace(trace)
 
     assert not result["turn_completed"]
+
+
+def test_config_keeps_side_requests_on_the_configured_model():
+    harness = HarnessConfig(harness="opencode", model="vendor/model-a")
+
+    config = opencode_config(harness)
+
+    assert config["small_model"] == "openrouter/vendor/model-a"
+    assert "provider" not in config
+    assert "permission" not in config
+
+
+def test_config_pins_openrouter_hosts_without_fallback():
+    harness = HarnessConfig(
+        harness="opencode",
+        model="vendor/model-a",
+        multi_agent=False,
+        openrouter_providers=["host-one", "host-two"],
+    )
+
+    config = opencode_config(harness)
+
+    model_options = config["provider"]["openrouter"]["models"]["vendor/model-a"]["options"]
+    assert model_options == {
+        "provider": {"order": ["host-one", "host-two"], "allow_fallbacks": False}
+    }
+    assert config["permission"] == {"task": "deny"}

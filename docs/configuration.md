@@ -27,7 +27,8 @@ How a batch runs:
 - Every job configuration is validated and hashed before any job starts.
 - Jobs run one at a time. A failed job does not stop the others.
 - The aggregate JSON and Markdown are rewritten after every job.
-- `oracle-lab batch --resume <batch-directory>` continues an unfinished batch.
+- `oracle-lab batch --resume <batch-directory>` continues an unfinished batch, and
+  reruns any job whose agent turn failed. See `docs/results.md`.
 
 A run configuration has six top-level sections: `source`, `agent`, `judge`
 (optional), `task`, `limits`, and `output`. Only `source.instance`,
@@ -225,6 +226,25 @@ every harness. Files written before a timeout are still captured and evaluated.
 Whether the agent under test may use its harness's subagents. The judge never
 may, so `judge.multi_agent` accepts only `false`.
 
+### `agent.openrouter_providers`
+
+- **Type:** nonempty list of OpenRouter provider slugs, or null
+- **Default:** null
+- **Applies to:** OpenCode
+
+The OpenRouter hosts allowed to serve the model, tried in the listed order. No
+other host is used: if none of them can serve a request, the request fails. Use
+it when hosts differ, as they do for open-weight models served at different
+quantizations. The slug is the `tag` OpenRouter lists for the host, such as
+`deepseek`. Null lets OpenRouter choose.
+
+Claude Code and Codex cannot pass OpenRouter routing settings, so they reject
+this field.
+
+OpenCode sends some side requests, such as naming the session, to a separate
+small model by default. Oracle Lab sets that small model to `agent.model`, so
+every request uses the configured model and hosts.
+
 ### `agent.auth`
 
 - **Type:** `oauth` or `api_key`
@@ -233,6 +253,27 @@ may, so `judge.multi_agent` accepts only `false`.
 
 `oauth` reads `CLAUDE_CODE_OAUTH_TOKEN`. `api_key` reads `ANTHROPIC_API_KEY`.
 Codex picks its credential from the provider alone.
+
+### Reasoning effort
+
+There is no setting for it. Every harness runs with its own default, so a run
+measures the harness as it works out of the box. That default belongs to the
+pinned CLI version, and it is not saved with the run. These are the reasoning
+settings each pinned CLI sends with its requests, read from the request bodies
+on 2026-11-09:
+
+| Harness | Version | Sends | Effort used |
+|---|---|---|---|
+| Claude Code | 2.1.280 | `thinking: {type: adaptive}`, `output_config: {effort: high}`, `max_tokens: 64000` | High; the model decides how much to think on each step |
+| Codex | 0.153.4 | `reasoning: {summary: auto}`, no effort | The model provider's default |
+| OpenCode | 1.18.32 | Agent requests: no reasoning field. Side requests, such as naming the session: `reasoning: {effort: low}`, `temperature: 0.5` | The model provider's default for the agent's work |
+
+The same holds for `judge` and `classifier`, which use these CLIs too.
+
+Upgrading a CLI can change these defaults. To check them again without a model
+call, run the CLI in a runtime image with its base URL set to a local HTTP
+server that prints each request body. Claude Code needs the non-root `oracle`
+user, `HOME=/home/oracle`, and the prompt on stdin.
 
 ## `judge`
 

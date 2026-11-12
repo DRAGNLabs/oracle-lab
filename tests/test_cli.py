@@ -1,7 +1,7 @@
 import os
 
 import pytest
-from fixtures import RUN_CONFIG
+from fixtures import RUN_CONFIG, run_config
 
 from oracle_lab import cli
 
@@ -127,3 +127,17 @@ def test_agreement_prints_where_it_saved(tmp_path, monkeypatch, capsys):
     assert cli.main(["agreement", str(tmp_path), "--output", str(tmp_path / "out")]) == 0
     assert calls == [([tmp_path], tmp_path / "out")]
     assert capsys.readouterr().out.strip() == str(tmp_path)
+
+
+def test_judge_time_limit_overrides_only_this_pass(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "status.json").write_text('{"state": "completed"}\n')
+    saved = run_config()
+    monkeypatch.setattr(cli, "_load_saved_run", lambda path: (saved, cli.RunPaths(path)))
+    limits = []
+    monkeypatch.setattr(cli, "judge", lambda config, paths: limits.append(config.judge.limit.value))
+    monkeypatch.setattr(cli, "report", lambda paths: paths.report)
+
+    assert cli.main(["judge", str(tmp_path), "--time-limit", "900"]) == 0
+    assert limits == [900]
+    assert saved.judge.limit.value == 300

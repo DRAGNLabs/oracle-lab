@@ -7,7 +7,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from oracle_lab.batch import run_batch
-from oracle_lab.config import RunConfig, load_config
+from oracle_lab.config import RunConfig, WallTimeLimit, load_config
 from oracle_lab.export import export
 from oracle_lab.io import read_json
 from oracle_lab.judge.generation.run import judge
@@ -68,6 +68,12 @@ def _build_parser() -> argparse.ArgumentParser:
     # LLM judge pass over a finished run.
     judge_parser = sub.add_parser("judge", help="Judge generated tests from a saved run")
     judge_parser.add_argument("run_dir", type=Path)
+    judge_parser.add_argument(
+        "--time-limit",
+        type=float,
+        metavar="SECONDS",
+        help="Judge wall-time limit for this pass, instead of the run's saved one",
+    )
 
     # Render an existing run directory. Reads only.
     report_parser = sub.add_parser("report", help="Render saved results without executing code")
@@ -129,6 +135,8 @@ def _dispatch(args: argparse.Namespace) -> int:
         output = reevaluate(config, paths)
     elif args.command == "judge":
         config, paths = _load_saved_run(args.run_dir)
+        if args.time_limit is not None:
+            config = _with_judge_limit(config, args.time_limit)
         judge(config, paths)
         output = report(paths)
     elif args.command == "agreement":
@@ -147,6 +155,16 @@ def _dispatch(args: argparse.Namespace) -> int:
     # `run` and `batch` return the directory they created; the rest were given one.
     run_dir = Path(output if args.command in {"run", "batch", "classify"} else args.run_dir)
     return 2 if read_json(run_dir / "status.json")["state"] == "completed_with_errors" else 0
+
+
+def _with_judge_limit(config: RunConfig, seconds: float) -> RunConfig:
+    """The saved configuration with a different judge time limit.
+
+    The saved file stays as it was; the judge's result records the limit it ran with.
+    """
+    limit = WallTimeLimit(kind="wall_seconds", value=seconds)
+    judge_config = config.require_judge().model_copy(update={"limit": limit})
+    return config.model_copy(update={"judge": judge_config})
 
 
 def _load_saved_run(run_dir: Path) -> tuple[RunConfig, RunPaths]:

@@ -160,6 +160,9 @@ class HarnessConfig(ConfigModel):
     auth: Literal["oauth", "api_key"] = "oauth"
     limit: WallTimeLimit = Field(default_factory=default_limit)
     multi_agent: Annotated[bool, Field(strict=True)] = True
+    # The OpenRouter hosts allowed to serve the model, tried in this order, with
+    # no fallback to any other host. None lets OpenRouter choose.
+    openrouter_providers: Annotated[list[NonBlank], Field(min_length=1)] | None = None
 
     @property
     def timeout_seconds(self) -> float:
@@ -175,6 +178,9 @@ class HarnessConfig(ConfigModel):
                 "Use codex with openrouter/openai, claude with openrouter/anthropic, "
                 "or opencode with openrouter"
             )
+        if self.openrouter_providers is not None and self.harness != "opencode":
+            # Only OpenCode lets the request carry OpenRouter's routing settings.
+            raise ValueError("openrouter_providers is supported only by the opencode harness")
         return self
 
     @property

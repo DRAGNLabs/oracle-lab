@@ -8,7 +8,30 @@ import subprocess
 import sys
 from pathlib import Path
 
-IGNORED_DIRS = {".git", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"}
+# Tool caches an agent's own test runs write, not edits. `.hypothesis` is the
+# Hypothesis example database.
+IGNORED_DIRS = {
+    ".git",
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".hypothesis",
+}
+
+
+def ignored(parent: str, name: str) -> bool:
+    """Whether a directory is a tool cache rather than part of the repository.
+
+    pytest before 3.4 keeps its cache in `v/cache` under its cache directory, which
+    some repositories' settings resolve to the repository root itself.
+    """
+    return name in IGNORED_DIRS or (Path(parent).name == "v" and name == "cache")
+
+
+def coverage_data(filename: str) -> bool:
+    """coverage.py's data file, `.coverage`, or a parallel run's `.coverage.<suffix>`."""
+    return filename == ".coverage" or filename.startswith(".coverage.")
 
 
 def snapshot(root: Path) -> dict:
@@ -16,11 +39,11 @@ def snapshot(root: Path) -> dict:
     for directory, dirs, files in os.walk(root, followlinks=False):
         # Include symlink directories as entries without traversing their targets.
         links = [d for d in dirs if (Path(directory) / d).is_symlink()]
-        dirs[:] = [d for d in dirs if d not in IGNORED_DIRS and d not in links]
+        dirs[:] = [d for d in dirs if not ignored(directory, d) and d not in links]
         for filename in files + links:
             path = Path(directory) / filename
             relative = path.relative_to(root).as_posix()
-            if filename.endswith((".pyc", ".pyo")):
+            if filename.endswith((".pyc", ".pyo")) or coverage_data(filename):
                 continue
             mode = path.lstat().st_mode
             if path.is_symlink():

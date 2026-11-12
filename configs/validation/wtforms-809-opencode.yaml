@@ -7,6 +7,7 @@ agent:
   provider: openrouter
   model: deepseek/deepseek-v4-pro-0813
   multi_agent: false
+  openrouter_providers: [deepseek]
   limit:
     kind: wall_seconds
     value: 900

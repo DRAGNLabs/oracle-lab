@@ -1,0 +1,170 @@
+{
+  "note": "Selection record for study.yaml. Rejected problems were replaced by the first entries of each draw order; a later rejection takes the next unused entry. Rejected problems' results remain under output/.",
+  "rejected": [
+    {
+      "instance": "sphinx-doc__sphinx-10614",
+      "kind": "swebench",
+      "reason": "benchmark quality: reference test or repair misaligned (golden patch adds intersphinx handling the issue never mentions)"
+    },
+    {
+      "instance": "scikit-learn__scikit-learn-25232",
+      "kind": "swebench",
+      "reason": "out of scope: feature request (new fill_value parameter)"
+    },
+    {
+      "instance": "scikit-learn__scikit-learn-25747",
+      "kind": "swebench",
+      "reason": "benchmark quality: unfair without issue (buggy docstring and tests specify the old behavior)"
+    },
+    {
+      "instance": "scikit-learn__scikit-learn-25102",
+      "kind": "swebench",
+      "reason": "out of scope: feature request (preserve dtypes under set_output)"
+    },
+    {
+      "instance": "astropy__astropy-13398",
+      "kind": "swebench",
+      "reason": "out of scope: feature request (new ITRS to observed-frame transform)"
+    },
+    {
+      "instance": "pylint-dev__pylint-4970",
+      "kind": "swebench",
+      "reason": "benchmark quality: unfair without issue (min_lines=0 meaning not in code or docs)"
+    },
+    {
+      "instance": "psf__requests-1766",
+      "kind": "swebench",
+      "reason": "benchmark quality: unfair without issue (disputed RFC 2617 reading)"
+    },
+    {
+      "instance": "mwaskom__seaborn-3069",
+      "kind": "swebench",
+      "reason": "out of scope: feature request (Nominal scale axis conventions)"
+    },
+    {
+      "instance": "aio-libs__aiohttp-10971",
+      "kind": "swerebench_v2",
+      "reason": "benchmark quality: reference test or repair misaligned (patch bundles unrelated pull requests)"
+    },
+    {
+      "instance": "pvlib__pvlib-python-573",
+      "kind": "swerebench_v2",
+      "reason": "benchmark quality: reference test or repair misaligned (patch bundles an unrelated API change)"
+    },
+    {
+      "instance": "scikit-learn__scikit-learn-13496",
+      "kind": "swebench",
+      "reason": "out of scope: feature request (expose warm_start on IsolationForest)"
+    },
+    {
+      "instance": "pypa__setuptools_scm-681",
+      "kind": "swerebench_v2",
+      "reason": "preflight: reference test errors at setup on the buggy code (its fixture calls has_command(args=...), which the golden patch adds), so no fail/pass pair"
+    },
+    {
+      "instance": "conda__conda-6131",
+      "kind": "swerebench_v2",
+      "reason": "benchmark quality: unfair without issue (buggy code documents the opposite timestamp convention)"
+    }
+  ],
+  "replacement_draw": {
+    "seed": 2197373611748016610,
+    "eligibility": {
+      "swebench": "SWE-bench Verified repos with a layout (all but django and sympy); golden patch modifies an existing non-test .py file under the source root.",
+      "swerebench_v2": "Python; every pr_categories label ends in _bug; no truncated FAIL_TO_PASS IDs; pytest test command.",
+      "excluded": "the 50 original study problems and the 4 development problems"
+    },
+    "pool_sizes": {
+      "swebench": 164,
+      "swerebench_v2": 3771
+    },
+    "swebench_order": [
+      "pytest-dev__pytest-5631",
+      "pytest-dev__pytest-7571",
+      "matplotlib__matplotlib-26466",
+      "matplotlib__matplotlib-24627",
+      "scikit-learn__scikit-learn-13496",
+      "matplotlib__matplotlib-24570",
+      "sphinx-doc__sphinx-8269",
+      "scikit-learn__scikit-learn-13135",
+      "astropy__astropy-7336",
+      "astropy__astropy-14182",
+      "scikit-learn__scikit-learn-11578",
+      "sphinx-doc__sphinx-7910",
+      "pytest-dev__pytest-5787",
+      "pydata__xarray-3151",
+      "matplotlib__matplotlib-24970",
+      "pydata__xarray-6721",
+      "matplotlib__matplotlib-20676",
+      "astropy__astropy-13453",
+      "pydata__xarray-7233",
+      "scikit-learn__scikit-learn-13124",
+      "sphinx-doc__sphinx-9673",
+      "sphinx-doc__sphinx-10673",
+      "sphinx-doc__sphinx-8721",
+      "astropy__astropy-8707",
+      "scikit-learn__scikit-learn-13779",
+      "astropy__astropy-12907",
+      "matplotlib__matplotlib-20826",
+      "pylint-dev__pylint-4661",
+      "astropy__astropy-8872",
+      "scikit-learn__scikit-learn-11310",
+      "matplotlib__matplotlib-25311",
+      "sphinx-doc__sphinx-9367",
+      "sphinx-doc__sphinx-10435",
+      "sphinx-doc__sphinx-8551",
+      "pytest-dev__pytest-5840",
+      "pytest-dev__pytest-7324",
+      "pydata__xarray-4094",
+      "pydata__xarray-6992",
+      "pydata__xarray-6744",
+      "scikit-learn__scikit-learn-25931"
+    ],
+    "swerebench_v2_order": [
+      "pypa__setuptools_scm-681",
+      "modin-project__modin-6769",
+      "conda__conda-6131",
+      "aio-libs__aiohttp-7713",
+      "celery__celery-8982",
+      "enthought__traits-1624",
+      "litestar-org__polyfactory-422",
+      "astropy__ccdproc-867",
+      "axelrod-python__axelrod-767",
+      "pallets__click-1990",
+      "pandas-dev__pandas-58970",
+      "rhayes777__pyautofit-1053",
+      "wntrblm__nox-932",
+      "mikedh__trimesh-2312",
+      "stfc__psyclone-1894",
+      "theacodes__nox-393",
+      "opencybersecurityalliance__stix-shifter-1191",
+      "pandas-dev__pandas-61288",
+      "pyomo__pyomo-2849",
+      "kinto__kinto-http.py-188",
+      "mie-lab__trackintel-311",
+      "getmoto__moto-8609",
+      "drivendataorg__cloudpathlib-433",
+      "unidata__siphon-855",
+      "neurodatawithoutborders__pynwb-1491",
+      "pipxproject__pipx-674",
+      "getmoto__moto-7728",
+      "researchobject__ro-crate-py-102",
+      "mpmath__mpmath-870",
+      "jupyter__jupyter_client-1060",
+      "aio-libs__aiohttp-9071",
+      "mpmath__mpmath-881",
+      "litestar-org__polyfactory-315",
+      "python-semver__python-semver-254",
+      "keras-team__keras-19799",
+      "python-attrs__attrs-430",
+      "mirumee__ariadne-codegen-159",
+      "tatuylonen__wiktextract-1213",
+      "aio-libs__aiohttp-10564",
+      "getmoto__moto-5835"
+    ],
+    "used": {
+      "swebench": 9,
+      "swerebench_v2": 4
+    }
+  }
+}

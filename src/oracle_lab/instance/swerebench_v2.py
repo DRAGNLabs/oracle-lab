@@ -14,6 +14,37 @@ from oracle_lab.contracts.run import InstanceRecord
 from oracle_lab.instance.swebench import RepositoryLayout, instance_from, load_record
 
 REPOSITORY_LAYOUTS = {
+    "aio-libs/aiohttp": RepositoryLayout("aiohttp", "aiohttp", ("tests",)),
+    "aws-cloudformation/cfn-lint": RepositoryLayout("src/cfnlint", "cfnlint", ("test",)),
+    "cloudpipe/cloudpickle": RepositoryLayout("cloudpickle", "cloudpickle", ("tests",)),
+    "conda/conda": RepositoryLayout("conda", "conda", ("tests",)),
+    "copier-org/copier": RepositoryLayout("copier", "copier", ("tests",)),
+    "getmoto/moto": RepositoryLayout("moto", "moto", ("tests",)),
+    "HypothesisWorks/hypothesis": RepositoryLayout(
+        "hypothesis-python/src/hypothesis", "hypothesis", ("hypothesis-python/tests",)
+    ),
+    # Older revisions keep the tests inside the package.
+    "jelmer/dulwich": RepositoryLayout("dulwich", "dulwich", ("tests", "dulwich/tests")),
+    "kayak/pypika": RepositoryLayout("pypika", "pypika", ("pypika/tests",)),
+    "modin-project/modin": RepositoryLayout("modin", "modin", ("modin/**/test", "modin/**/tests")),
+    "mpmath/mpmath": RepositoryLayout("mpmath", "mpmath", ("mpmath/tests",)),
+    "narwhals-dev/narwhals": RepositoryLayout("narwhals", "narwhals", ("tests",)),
+    "neogeny/TatSu": RepositoryLayout("tatsu", "tatsu", ("test",)),
+    "networkx/networkx": RepositoryLayout("networkx", "networkx", ("networkx/**/tests",)),
+    "pallets/click": RepositoryLayout("src/click", "click", ("tests",)),
+    "pallets/jinja": RepositoryLayout("src/jinja2", "jinja2", ("tests",)),
+    "pallets/werkzeug": RepositoryLayout("src/werkzeug", "werkzeug", ("tests",)),
+    "py-pdf/PyPDF2": RepositoryLayout("PyPDF2", "PyPDF2", ("tests",)),
+    "PyCQA/pyflakes": RepositoryLayout("pyflakes", "pyflakes", ("pyflakes/test",)),
+    "pypa/packaging": RepositoryLayout("src/packaging", "packaging", ("tests",)),
+    "pypa/setuptools_scm": RepositoryLayout("src/setuptools_scm", "setuptools_scm", ("testing",)),
+    "python-attrs/attrs": RepositoryLayout("src/attr", "attr", ("tests",)),
+    "python-babel/babel": RepositoryLayout("babel", "babel", ("tests",)),
+    "Python-Markdown/markdown": RepositoryLayout("markdown", "markdown", ("tests",)),
+    # Older revisions name the test directory `test`.
+    "pvlib/pvlib-python": RepositoryLayout("pvlib", "pvlib", ("pvlib/tests", "pvlib/test")),
+    "stac-utils/pystac": RepositoryLayout("pystac", "pystac", ("tests",)),
+    "Textualize/rich": RepositoryLayout("rich", "rich", ("tests",)),
     "wtforms/wtforms": RepositoryLayout("src/wtforms", "wtforms", ("tests",)),
 }
 

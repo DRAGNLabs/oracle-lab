@@ -207,6 +207,36 @@ def test_opencode_rejects_non_openrouter_provider(tmp_path):
         load_config(path)
 
 
+def test_opencode_accepts_openrouter_providers(tmp_path):
+    raw = yaml.safe_load(SAMPLE.read_text())
+    raw["agent"].update(harness="opencode", openrouter_providers=["deepseek"])
+    raw["agent"]["limit"] = {"kind": "wall_seconds", "value": 30}
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump(raw))
+
+    assert load_config(path).agent.openrouter_providers == ["deepseek"]
+
+
+@pytest.mark.parametrize(
+    "changes,error",
+    [
+        ({"harness": "codex"}, "only by the opencode harness"),
+        ({"harness": "claude", "provider": "openrouter"}, "only by the opencode harness"),
+        ({"harness": "opencode", "openrouter_providers": []}, "at least 1 item"),
+        ({"harness": "opencode", "openrouter_providers": [" "]}, "openrouter_providers"),
+    ],
+)
+def test_openrouter_providers_rejects_unsupported_settings(tmp_path, changes, error):
+    raw = yaml.safe_load(SAMPLE.read_text())
+    raw["agent"].update({"openrouter_providers": ["deepseek"], **changes})
+    raw["agent"]["limit"] = {"kind": "wall_seconds", "value": 30}
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump(raw))
+
+    with pytest.raises(ValueError, match=error):
+        load_config(path)
+
+
 @pytest.mark.parametrize("section", ["agent", "judge"])
 def test_harness_version_is_not_selectable_per_run(tmp_path, section):
     """One locked toolchain installs every CLI, so a run cannot pin its own."""

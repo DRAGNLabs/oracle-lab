@@ -7,6 +7,7 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 
+from oracle_lab.config import HarnessConfig
 from oracle_lab.container.paths import ORACLE_HOME
 from oracle_lab.container.sandbox import Sandbox
 from oracle_lab.contracts.run import Usage
@@ -159,6 +160,25 @@ def _usage(steps: list[dict]) -> dict | None:
     ).model_dump()
 
 
+def opencode_config(harness: HarnessConfig) -> dict:
+    """OpenCode settings that keep every request on the configured model and hosts.
+
+    OpenCode sends side requests, such as naming the session, to a separate small
+    model unless told otherwise; `small_model` keeps them on the configured model.
+    Routing goes in the model's options, which OpenCode merges into each request.
+    """
+    model = f"openrouter/{harness.model}"
+    config: dict = {"small_model": model}
+    if not harness.multi_agent:
+        config["permission"] = {"task": "deny"}
+    if harness.openrouter_providers:
+        routing = {"order": harness.openrouter_providers, "allow_fallbacks": False}
+        config["provider"] = {
+            "openrouter": {"models": {harness.model: {"options": {"provider": routing}}}}
+        }
+    return config
+
+
 def run_turn(sandbox: Sandbox, request: AgentTurnRequest) -> dict:
     """Run OpenCode with caller-supplied prompt, workspace, and artifacts."""
     harness = request.harness
@@ -181,11 +201,8 @@ def run_turn(sandbox: Sandbox, request: AgentTurnRequest) -> dict:
         "XDG_CONFIG_HOME": ORACLE_HOME + "/.config",
         "XDG_DATA_HOME": ORACLE_HOME + "/.local/share",
         "OPENCODE_DISABLE_AUTOUPDATE": "true",
+        "OPENCODE_CONFIG_CONTENT": json.dumps(opencode_config(harness), separators=(",", ":")),
     }
-    if not harness.multi_agent:
-        environment["OPENCODE_CONFIG_CONTENT"] = json.dumps(
-            {"permission": {"task": "deny"}}, separators=(",", ":")
-        )
 
     outcome = run_agent_turn(
         sandbox,

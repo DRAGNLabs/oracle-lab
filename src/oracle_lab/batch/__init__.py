@@ -12,7 +12,7 @@ from pydantic import Field, model_validator
 from oracle_lab.batch.summary import write_summary
 from oracle_lab.config import ConfigModel, NonBlank, RunConfig, load_config
 from oracle_lab.container.lifecycle import preserve_failure
-from oracle_lab.contracts.run import read_status
+from oracle_lab.contracts.run import read_evaluation_result, read_status
 from oracle_lab.io import digest, read_json, write_json
 from oracle_lab.paths import BatchPaths, OutputPaths, RunPaths
 from oracle_lab.run import run
@@ -81,6 +81,7 @@ def _new_batch(path: Path) -> tuple[BatchPaths, BatchConfig, list[dict]]:
             "state": "pending",
             "run_dir": None,
             "error": None,
+            "superseded_runs": [],
         }
         for index, job_path in enumerate(paths, start=1)
     ]
@@ -104,19 +105,48 @@ def _resume_batch(batch_dir: Path) -> tuple[BatchPaths, BatchConfig, list[dict]]
     return batch, config, jobs
 
 
+def generation_failed(job: dict) -> bool:
+    """Whether a finished job's agent turn ended in an error rather than a result.
+
+    A provider outage, exhausted credits, or a rejected request all leave the turn
+    `failed`. A timeout, or a completed turn that wrote no tests, is a result.
+    """
+    if job["state"] != "completed_with_errors" or not job["run_dir"]:
+        return False
+    results = RunPaths(Path(job["run_dir"])).results
+    return results.is_file() and read_evaluation_result(results).agent.status == "failed"
+
+
+def supersede(batch: BatchPaths, job: dict) -> None:
+    """Move a job's run into the batch's `superseded/` and record where it went."""
+    run_dir = Path(job["run_dir"])
+    destination = batch.superseded / run_dir.name
+    batch.superseded.mkdir(exist_ok=True)
+    shutil.move(run_dir, destination)
+    job["superseded_runs"].append(str(destination))
+    job.update(run_dir=None, error=None)
+
+
 def run_batch(
     path: Path,
     *,
     resume: bool = False,
     run_one: Callable[[RunConfig], Path] = run,
 ) -> Path:
-    """Run pending jobs in order, persisting progress after every transition."""
+    """Run pending jobs in order, persisting progress after every transition.
+
+    A resume also reruns each job whose agent turn failed, after moving its old
+    run aside, so an outage or exhausted credits never leaves a job finished
+    without a result.
+    """
     batch, config, jobs = _resume_batch(path) if resume else _new_batch(path)
     write_json(batch.status, {"state": "running"})
     try:
         for job in jobs:
             if job["state"] in {"completed", "completed_with_errors"}:
-                continue
+                if not (resume and generation_failed(job)):
+                    continue
+                supersede(batch, job)
             job.update(state="running", error=None)
             _write_manifest(batch, config, jobs)
             try:

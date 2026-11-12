@@ -363,3 +363,54 @@ def test_a_failing_summary_does_not_hide_an_interrupted_job(tmp_path, monkeypatc
     assert error.value.__notes__ == ["The batch summary could not be updated."]
     (batch_dir,) = (tmp_path / "output/batches").iterdir()
     assert read_json(batch_dir / "status.json") == {"state": "interrupted"}
+
+
+def agent_ended(run_dir: Path, instance: str, agent_status: str) -> Path:
+    """A finished run whose agent turn ended with `agent_status` and wrote no tests."""
+    paths = RunPaths.create(run_dir)
+    result = evaluation_result(
+        instance_id=instance, buggy_status="no_tests", golden_status="no_tests"
+    )
+    result["agent"]["status"] = agent_status
+    write_json(paths.results, result)
+    write_json(paths.status, run_status(state="completed_with_errors"))
+    write_json(paths.cost, {"status": "measured", "cost_usd": 0.25})
+    return run_dir
+
+
+@pytest.mark.parametrize("agent_status,rerun", [("failed", True), ("timeout", False)])
+def test_resume_reruns_only_a_failed_agent_turn(tmp_path, agent_status, rerun):
+    (tmp_path / "prompt.md").write_text("Generate tests")
+    write_run_config(tmp_path / "one.yaml", "owner__one-1")
+    manifest = tmp_path / "batch.yaml"
+    write_batch_config(manifest, ["one.yaml"])
+    first = tmp_path / "output/runs/first"
+    batch_dir = run_batch(
+        manifest,
+        run_one=lambda config: agent_ended(first, config.source.instance, agent_status),
+    )
+    second = tmp_path / "output/runs/second"
+    resumed = []
+
+    def resumed_run(config):
+        resumed.append(config.source.instance)
+        fake_result(second, config.source.instance, detected=True)
+        return second
+
+    run_batch(batch_dir, resume=True, run_one=resumed_run)
+    job = read_json(batch_dir / "batch.resolved.json")["jobs"][0]
+    summary = read_json(batch_dir / "summary.json")
+
+    if rerun:
+        moved = batch_dir / "superseded/first"
+        assert resumed == ["owner__one-1"]
+        assert not first.exists() and (moved / "evaluation/results.json").is_file()
+        assert job["superseded_runs"] == [str(moved)]
+        assert job["run_dir"] == str(second) and job["state"] == "completed"
+        assert summary["superseded_runs"] == 1
+        assert summary["superseded_cost_usd"] == 0.25
+        assert read_json(batch_dir / "status.json")["state"] == "completed"
+    else:
+        assert resumed == []
+        assert first.is_dir() and job["superseded_runs"] == []
+        assert summary["superseded_runs"] == 0

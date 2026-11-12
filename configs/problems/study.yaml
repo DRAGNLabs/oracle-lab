@@ -1,0 +1,97 @@
+# The 50-problem study set: 25 SWE-bench Verified, 25 SWE-rebench V2.
+# Problems the classifier rejected are recorded in study-selection.json. Their
+# replacements were drawn at random (seed 2197373611748016610) from every problem the
+# pipeline can run, in the order the draw produced.
+# Set them up with:
+#   uv run oracle-lab setup configs/problems/study.yaml
+classifier:
+  harness: codex
+  provider: openrouter
+  model: google/gemini-4-argon
+  limit:
+    kind: wall_seconds
+    value: 900
+
+rubric: ../../prompts/judge/task-classification-rubric.md
+
+output: ../../output
+
+problems:
+  # SWE-bench Verified
+  - instance: sphinx-doc__sphinx-9698
+  - instance: sphinx-doc__sphinx-11510
+  - instance: matplotlib__matplotlib-20859
+  - instance: matplotlib__matplotlib-24026
+  - instance: matplotlib__matplotlib-13989
+  - instance: astropy__astropy-7166
+  - instance: astropy__astropy-7606
+  - instance: pydata__xarray-4075
+  - instance: pydata__xarray-7393
+  - instance: pydata__xarray-3993
+  - instance: pytest-dev__pytest-5262
+  - instance: pytest-dev__pytest-7236
+  - instance: pytest-dev__pytest-10356
+  - instance: pylint-dev__pylint-6528
+  - instance: pylint-dev__pylint-8898
+  - instance: psf__requests-2931
+  - instance: pallets__flask-5014
+  - instance: pytest-dev__pytest-5631
+  - instance: pytest-dev__pytest-7571
+  - instance: matplotlib__matplotlib-26466
+  - instance: matplotlib__matplotlib-24627
+  - instance: astropy__astropy-7336
+  - instance: matplotlib__matplotlib-24570
+  - instance: sphinx-doc__sphinx-8269
+  - instance: scikit-learn__scikit-learn-13135
+
+  # SWE-rebench V2
+  - instance: pallets__werkzeug-2206
+    kind: swerebench_v2
+  - instance: pallets__click-2800
+    kind: swerebench_v2
+  - instance: pallets__jinja-1702
+    kind: swerebench_v2
+  - instance: python-markdown__markdown-1426
+    kind: swerebench_v2
+  - instance: python-babel__babel-1196
+    kind: swerebench_v2
+  - instance: python-attrs__attrs-1165
+    kind: swerebench_v2
+  - instance: hypothesisworks__hypothesis-2723
+    kind: swerebench_v2
+  - instance: pycqa__pyflakes-698
+    kind: swerebench_v2
+  - instance: getmoto__moto-9005
+    kind: swerebench_v2
+  - instance: aws-cloudformation__cfn-lint-3900
+    kind: swerebench_v2
+  - instance: textualize__rich-3718
+    kind: swerebench_v2
+  - instance: cloudpipe__cloudpickle-325
+    kind: swerebench_v2
+  - instance: networkx__networkx-8055
+    kind: swerebench_v2
+  - instance: mpmath__mpmath-926
+    kind: swerebench_v2
+  - instance: stac-utils__pystac-1337
+    kind: swerebench_v2
+  - instance: py-pdf__pypdf2-1433
+    kind: swerebench_v2
+  - instance: kayak__pypika-54
+    kind: swerebench_v2
+  - instance: narwhals-dev__narwhals-1869
+    kind: swerebench_v2
+  - instance: jelmer__dulwich-1160
+    kind: swerebench_v2
+  - instance: neogeny__tatsu-237
+    kind: swerebench_v2
+  - instance: copier-org__copier-2145
+    kind: swerebench_v2
+  - instance: wtforms__wtforms-661
+    kind: swerebench_v2
+  - instance: pypa__packaging-712
+    kind: swerebench_v2
+  - instance: aio-libs__aiohttp-7713
+    kind: swerebench_v2
+  - instance: modin-project__modin-6769
+    kind: swerebench_v2

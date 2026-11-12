@@ -23,6 +23,7 @@ def summarize_job(job: dict) -> dict:
         "state": job["state"],
         "run_dir": job["run_dir"],
         "error": job["error"],
+        "superseded_runs": job["superseded_runs"],
     }
     if not job["run_dir"]:
         return summary
@@ -92,6 +93,12 @@ def write_summary(batch: BatchPaths, name: str, jobs: list[dict]) -> dict:
         key: sum(job.get("matrix", {}).get(key, 0) for job in job_summaries) for key in MATRIX_CELLS
     }
     costs = [job["cost_usd"] for job in job_summaries if job.get("cost_usd") is not None]
+    superseded = [Path(run) for job in jobs for run in job["superseded_runs"]]
+    superseded_costs = [
+        cost.cost_usd
+        for cost in (read_run_cost(RunPaths(run).cost) for run in superseded)
+        if cost and cost.cost_usd is not None
+    ]
     judge_aggregation = _aggregate_judgments(job_summaries)
     summary = {
         "name": name,
@@ -110,6 +117,8 @@ def write_summary(batch: BatchPaths, name: str, jobs: list[dict]) -> dict:
         ),
         "total_cost_usd": sum(costs) if costs else None,
         "costed_runs": len(costs),
+        "superseded_runs": len(superseded),
+        "superseded_cost_usd": sum(superseded_costs) if superseded_costs else None,
         "matrix": matrix,
         "judge": judge_aggregation,
         "jobs": job_summaries,
@@ -216,6 +225,10 @@ def _headline_lines(summary: dict) -> list[str]:
         "",
         f"Cost: **{_dollars(summary['total_cost_usd'])}** over **{summary['costed_runs']}** "
         "runs with a measured cost.",
+        "",
+        f"Runs replaced on resume after a failed agent turn: **{summary['superseded_runs']}**, "
+        f"kept in `superseded/`. Their cost, not included above: "
+        f"**{_dollars(summary['superseded_cost_usd'])}**.",
         "",
         "| Instance | Run ID | State | Matrix detection | Attempts issue? | Attempt detail | No-attempt reason "
         "| Cheating | Cost |",

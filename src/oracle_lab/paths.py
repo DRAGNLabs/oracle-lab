@@ -127,6 +127,11 @@ class BatchPaths:
     def report(self) -> Path:
         return self.root / "report.md"
 
+    @property
+    def superseded(self) -> Path:
+        """Runs a resumed batch replaced, moved out of `runs/` with their evidence intact."""
+        return self.root / "superseded"
+
 
 @dataclass(frozen=True)
 class AgreementPaths:

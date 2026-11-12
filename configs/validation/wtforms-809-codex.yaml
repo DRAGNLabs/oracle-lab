@@ -5,7 +5,7 @@ source:
 agent:
   harness: codex
   provider: openrouter
-  model: openai/gpt-6-sol@preset/oracle-openai-first
+  model: openai/gpt-6-sol
   multi_agent: false
   limit:
     kind: wall_seconds

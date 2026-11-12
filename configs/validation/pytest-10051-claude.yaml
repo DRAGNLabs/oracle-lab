@@ -4,7 +4,7 @@ source:
 agent:
   harness: claude
   provider: openrouter
-  model: anthropic/claude-opus-5.5@preset/oracle-anthropic-first
+  model: anthropic/claude-opus-5.5
   multi_agent: false
   limit:
     kind: wall_seconds

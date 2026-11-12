@@ -1,0 +1,46 @@
+name: effort-max
+
+# The effort experiment: 12 study problems at maximum reasoning effort, compared
+# with the study batch's default-effort runs. See experiments/effort/README.md.
+# Each config is the problem's configs/study config with only these changes:
+#   agent.effort: max, agent.limit 900 -> 1800 seconds, judge.limit 600 -> 900 seconds.
+jobs:
+  - config: aws-cloudformation__cfn-lint-3900-claude.yaml
+  - config: aws-cloudformation__cfn-lint-3900-codex.yaml
+  - config: aws-cloudformation__cfn-lint-3900-opencode.yaml
+  - config: psf__requests-2931-claude.yaml
+  - config: psf__requests-2931-codex.yaml
+  - config: psf__requests-2931-opencode.yaml
+  - config: stac-utils__pystac-1337-claude.yaml
+  - config: stac-utils__pystac-1337-codex.yaml
+  - config: stac-utils__pystac-1337-opencode.yaml
+  - config: modin-project__modin-6769-claude.yaml
+  - config: modin-project__modin-6769-codex.yaml
+  - config: modin-project__modin-6769-opencode.yaml
+  - config: python-babel__babel-1196-claude.yaml
+  - config: python-babel__babel-1196-codex.yaml
+  - config: python-babel__babel-1196-opencode.yaml
+  - config: sphinx-doc__sphinx-8269-claude.yaml
+  - config: sphinx-doc__sphinx-8269-codex.yaml
+  - config: sphinx-doc__sphinx-8269-opencode.yaml
+  - config: jelmer__dulwich-1160-claude.yaml
+  - config: jelmer__dulwich-1160-codex.yaml
+  - config: jelmer__dulwich-1160-opencode.yaml
+  - config: matplotlib__matplotlib-24627-claude.yaml
+  - config: matplotlib__matplotlib-24627-codex.yaml
+  - config: matplotlib__matplotlib-24627-opencode.yaml
+  - config: pytest-dev__pytest-7571-claude.yaml
+  - config: pytest-dev__pytest-7571-codex.yaml
+  - config: pytest-dev__pytest-7571-opencode.yaml
+  - config: mpmath__mpmath-926-claude.yaml
+  - config: mpmath__mpmath-926-codex.yaml
+  - config: mpmath__mpmath-926-opencode.yaml
+  - config: python-markdown__markdown-1426-claude.yaml
+  - config: python-markdown__markdown-1426-codex.yaml
+  - config: python-markdown__markdown-1426-opencode.yaml
+  - config: sphinx-doc__sphinx-11510-claude.yaml
+  - config: sphinx-doc__sphinx-11510-codex.yaml
+  - config: sphinx-doc__sphinx-11510-opencode.yaml
+
+execution:
+  continue_on_error: true

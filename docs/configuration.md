@@ -254,13 +254,37 @@ every request uses the configured model and hosts.
 `oauth` reads `CLAUDE_CODE_OAUTH_TOKEN`. `api_key` reads `ANTHROPIC_API_KEY`.
 Codex picks its credential from the provider alone.
 
-### Reasoning effort
+### `agent.effort`
 
-There is no setting for it. Every harness runs with its own default, so a run
-measures the harness as it works out of the box. That default belongs to the
-pinned CLI version, and it is not saved with the run. These are the reasoning
-settings each pinned CLI sends with its requests, read from the request bodies
-on 2026-11-09:
+- **Type:** string, or null
+- **Default:** null
+- **Applies to:** every harness; `judge` and `classifier` accept it too
+
+The model's reasoning effort. Null sends nothing, so the harness default applies
+(see below). The accepted levels depend on the harness:
+
+| Harness | Accepted levels | How it is sent |
+|---|---|---|
+| Claude Code | `low`, `medium`, `high`, `xhigh`, `max` | `--effort <level>`, sent as `output_config.effort` |
+| Codex | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` | `--config model_reasoning_effort="<level>"`, sent as `reasoning.effort` |
+| OpenCode | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` | In the model's options, sent as `reasoning.effort` on every request, side requests included |
+
+Any other level is a configuration error. Claude Code ignores an unknown
+`--effort` with only a warning, and OpenCode's `--variant` silently drops a
+level the model's preset list lacks, so neither would fail on its own.
+
+The Codex and OpenCode levels are the ones OpenRouter accepts. Whether a model
+treats two levels differently is up to its provider. On 2026-11-12, a short
+question used more reasoning tokens at `max` than at lower levels for Claude
+Opus 5.5 and GPT-6 Sol, but the same number at `high` and `max` for DeepSeek
+V4 Pro.
+
+### Default reasoning effort
+
+With `effort` unset, every harness runs with its own default, so a run measures
+the harness as it works out of the box. That default belongs to the pinned CLI
+version, and it is not saved with the run. These are the reasoning settings each
+pinned CLI sends with its requests, read from the request bodies on 2026-11-09:
 
 | Harness | Version | Sends | Effort used |
 |---|---|---|---|

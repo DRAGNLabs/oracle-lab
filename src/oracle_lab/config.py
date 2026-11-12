@@ -75,6 +75,17 @@ HARNESS_PROVIDERS = {
     "claude": ("openrouter", "anthropic"),
     "opencode": ("openrouter",),
 }
+# The reasoning effort levels each harness passes on. Claude Code ignores an
+# unknown `--effort` with only a warning, so unknown levels are rejected here.
+# Codex and OpenCode send the level as OpenRouter's `reasoning.effort`; these are
+# the values OpenRouter accepts. Whether a model treats two levels differently is
+# up to its provider.
+OPENROUTER_EFFORTS = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
+HARNESS_EFFORTS = {
+    "claude": ("low", "medium", "high", "xhigh", "max"),
+    "codex": OPENROUTER_EFFORTS,
+    "opencode": OPENROUTER_EFFORTS,
+}
 NODE_IMAGE = "node:22.14.0-bookworm-slim"
 PYTEST_VERSION = "7.4.4"
 
@@ -163,6 +174,8 @@ class HarnessConfig(ConfigModel):
     # The OpenRouter hosts allowed to serve the model, tried in this order, with
     # no fallback to any other host. None lets OpenRouter choose.
     openrouter_providers: Annotated[list[NonBlank], Field(min_length=1)] | None = None
+    # The model's reasoning effort. None sends none, leaving the harness default.
+    effort: NonBlank | None = None
 
     @property
     def timeout_seconds(self) -> float:
@@ -181,6 +194,9 @@ class HarnessConfig(ConfigModel):
         if self.openrouter_providers is not None and self.harness != "opencode":
             # Only OpenCode lets the request carry OpenRouter's routing settings.
             raise ValueError("openrouter_providers is supported only by the opencode harness")
+        efforts = HARNESS_EFFORTS[self.harness]
+        if self.effort is not None and self.effort not in efforts:
+            raise ValueError(f"{self.harness} effort must be one of: {', '.join(efforts)}")
         return self
 
     @property

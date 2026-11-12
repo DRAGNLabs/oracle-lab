@@ -83,3 +83,15 @@ def test_config_pins_openrouter_hosts_without_fallback():
         "provider": {"order": ["host-one", "host-two"], "allow_fallbacks": False}
     }
     assert config["permission"] == {"task": "deny"}
+
+
+def test_config_sets_effort_in_model_options_beside_routing():
+    harness = HarnessConfig(
+        harness="opencode", model="vendor/model-a", openrouter_providers=["host"], effort="max"
+    )
+
+    options = opencode_config(harness)["provider"]["openrouter"]["models"]["vendor/model-a"]
+    assert options["options"] == {
+        "provider": {"order": ["host"], "allow_fallbacks": False},
+        "reasoning": {"effort": "max"},
+    }

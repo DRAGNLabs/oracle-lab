@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import pytest
 from fixtures import RUN_CONFIG
 
-from oracle_lab.config import JudgeConfig, RuntimeConfig, WallTimeLimit, load_config
+from oracle_lab.config import HarnessConfig, JudgeConfig, RuntimeConfig, WallTimeLimit, load_config
 from oracle_lab.container.sandbox import CommandResult
 from oracle_lab.harnesses import claude, codex, generate, opencode, run_turn
 from oracle_lab.harnesses.launch import (
@@ -265,3 +265,39 @@ def test_every_harness_turn_ends_as_timeout_failed_or_completed(
     parsed = {"turn_completed": completed, "turn_failed": failed}
 
     assert turn_status(outcome, parsed) == expected
+
+
+@pytest.mark.parametrize(
+    "harness,expected",
+    [
+        ("claude", ["--effort", "max"]),
+        ("codex", ["--config", 'model_reasoning_effort="max"']),
+    ],
+)
+@pytest.mark.parametrize("effort", [None, "max"])
+def test_effort_reaches_the_command_only_when_set(tmp_path, monkeypatch, harness, expected, effort):
+    agent = HarnessConfig(harness=harness, model="model", provider="openrouter", effort=effort)
+    monkeypatch.setenv(agent.credential_env, "credential-fixture")
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text("prompt")
+    request = AgentTurnRequest(
+        harness=agent,
+        harness_version="1.2.3",
+        prompt=prompt,
+        working_directory="/work",
+        artifact_directory=tmp_path / "agent",
+    )
+    commands = []
+    sandbox = Mock()
+
+    def run(argv, **kwargs):
+        if "environment" in kwargs:
+            commands.append(argv)
+        return CommandResult(0, 1)
+
+    sandbox.run.side_effect = run
+    run_turn(sandbox, request)
+
+    pairs = {tuple(commands[0][i : i + 2]) for i in range(len(commands[0]) - 1)}
+    assert (tuple(expected) in pairs) == (effort is not None)
+    assert any("effort" in part for part in commands[0]) == (effort is not None)

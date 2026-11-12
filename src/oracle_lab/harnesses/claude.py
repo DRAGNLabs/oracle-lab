@@ -196,6 +196,8 @@ def run_turn(sandbox: Sandbox, request: AgentTurnRequest) -> dict:
     ]
     if not harness.multi_agent:
         argv += ["--tools", "Bash,Read,Write,Edit,Glob,Grep"]
+    if harness.effort is not None:
+        argv += ["--effort", harness.effort]
 
     environment = {"CLAUDE_CONFIG_DIR": ORACLE_HOME + "/.claude", "DISABLE_AUTOUPDATER": "1"}
     credential_name = harness.credential_env

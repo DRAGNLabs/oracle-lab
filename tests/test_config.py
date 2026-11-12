@@ -432,3 +432,24 @@ def test_an_explicit_dataset_revision_is_kept(tmp_path):
 def test_harness_versions_are_the_pins_the_image_installs():
     package = json.loads((DOCKERFILES / "package.json").read_text())["dependencies"]
     assert sorted(HARNESS_VERSIONS.values()) == sorted(package.values())
+
+
+@pytest.mark.parametrize(
+    "harness,effort",
+    [("claude", "max"), ("codex", "max"), ("codex", "none"), ("opencode", "max")],
+)
+def test_effort_accepts_each_harness_levels(harness, effort):
+    assert HarnessConfig(harness=harness, model="m", effort=effort).effort == effort
+
+
+@pytest.mark.parametrize(
+    "harness,effort",
+    [("claude", "none"), ("claude", "minimal"), ("codex", "highest"), ("opencode", "MAX")],
+)
+def test_effort_rejects_levels_the_harness_cannot_send(harness, effort):
+    with pytest.raises(ValueError, match=f"{harness} effort must be one of"):
+        HarnessConfig(harness=harness, model="m", effort=effort)
+
+
+def test_effort_defaults_to_none():
+    assert HarnessConfig(harness="claude", model="m").effort is None

@@ -136,6 +136,9 @@ def run_turn(sandbox: Sandbox, request: AgentTurnRequest) -> dict:
     settings = []
     if not harness.multi_agent:
         settings.append("features.multi_agent=false")
+    if harness.effort is not None:
+        # Codex passes the value through unchecked, as the request's reasoning effort.
+        settings.append(f'model_reasoning_effort="{harness.effort}"')
     if harness.provider == "openrouter":
         # CLI overrides still apply with --ignore-user-config. Credentials stay
         # in the process environment, never in the saved command or config.

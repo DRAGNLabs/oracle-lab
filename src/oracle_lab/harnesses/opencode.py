@@ -165,17 +165,21 @@ def opencode_config(harness: HarnessConfig) -> dict:
 
     OpenCode sends side requests, such as naming the session, to a separate small
     model unless told otherwise; `small_model` keeps them on the configured model.
-    Routing goes in the model's options, which OpenCode merges into each request.
+    Routing and effort go in the model's options, which OpenCode merges into every
+    request, side requests included. Effort is set there rather than with
+    `--variant`, which silently drops a level the model's preset list lacks.
     """
     model = f"openrouter/{harness.model}"
     config: dict = {"small_model": model}
     if not harness.multi_agent:
         config["permission"] = {"task": "deny"}
+    options: dict = {}
     if harness.openrouter_providers:
-        routing = {"order": harness.openrouter_providers, "allow_fallbacks": False}
-        config["provider"] = {
-            "openrouter": {"models": {harness.model: {"options": {"provider": routing}}}}
-        }
+        options["provider"] = {"order": harness.openrouter_providers, "allow_fallbacks": False}
+    if harness.effort is not None:
+        options["reasoning"] = {"effort": harness.effort}
+    if options:
+        config["provider"] = {"openrouter": {"models": {harness.model: {"options": options}}}}
     return config
 
 

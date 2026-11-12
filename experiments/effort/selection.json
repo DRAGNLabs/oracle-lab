@@ -1,0 +1,936 @@
+{
+  "baseline_batch": "20261109T181437Z-c6fd1a2e",
+  "seed": 1359832674075934700,
+  "per_group": 3,
+  "group_sizes": {
+    "A": 12,
+    "B": 4,
+    "C": 3,
+    "D": 19,
+    "excluded": 12
+  },
+  "drawn": {
+    "A": [
+      "aws-cloudformation__cfn-lint-3900",
+      "psf__requests-2931",
+      "stac-utils__pystac-1337"
+    ],
+    "B": [
+      "modin-project__modin-6769",
+      "python-babel__babel-1196",
+      "sphinx-doc__sphinx-8269"
+    ],
+    "C": [
+      "jelmer__dulwich-1160",
+      "matplotlib__matplotlib-24627",
+      "pytest-dev__pytest-7571"
+    ],
+    "D": [
+      "mpmath__mpmath-926",
+      "python-markdown__markdown-1426",
+      "sphinx-doc__sphinx-11510"
+    ]
+  },
+  "problems": {
+    "sphinx-doc__sphinx-9698": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "baseline": {
+        "claude": {
+          "run": "20261109T181437Z-7abd53cb",
+          "label": "wrong_assertion"
+        },
+        "codex": {
+          "run": "20261109T181946Z-f2520d28",
+          "label": "wrong_assertion"
+        },
+        "opencode": {
+          "run": "20261109T182519Z-05373821",
+          "label": "wrong_assertion"
+        }
+      },
+      "group": "A"
+    },
+    "sphinx-doc__sphinx-11510": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "baseline": {
+        "claude": {
+          "run": "20261109T183051Z-d0e186ad",
+          "label": "no:missed_trigger"
+        },
+        "codex": {
+          "run": "20261109T183600Z-c6c10f9a",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261109T183948Z-34e641a3",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "D"
+    },
+    "matplotlib__matplotlib-20859": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "baseline": {
+        "claude": {
+          "run": "20261109T184844Z-32997cc4",
+          "label": "no:missed_trigger"
+        },
+        "codex": {
+          "run": "20261109T185516Z-dbcb839b",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261109T190008Z-43aed8da",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "D"
+    },
+    "matplotlib__matplotlib-24026": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "baseline": {
+        "claude": {
+          "run": "20261109T191436Z-8478366e",
+          "label": "wrong_assertion"
+        },
+        "codex": {
+          "run": "20261109T192155Z-b51e39e0",
+          "label": "wrong_assertion"
+        },
+        "opencode": {
+          "run": "20261109T192726Z-09b4d49e",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "A"
+    },
+    "matplotlib__matplotlib-13989": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "baseline": {
+        "claude": {
+          "run": "20261109T193416Z-a4182d99",
+          "label": "correct_assertion"
+        },
+        "codex": {
+          "run": "20261109T194021Z-9fb65698",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261109T194532Z-6a648157",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "excluded"
+    },
+    "astropy__astropy-7166": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "baseline": {
+        "claude": {
+          "run": "20261109T195133Z-6e4afd71",
+          "label": "correct_assertion"
+        },
+        "codex": {
+          "run": "20261109T195606Z-bbce4d2d",
+          "label": "wrong_assertion"
+        },
+        "opencode": {
+          "run": "20261109T200032Z-a659f279",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "excluded"
+    },
+    "astropy__astropy-7606": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "baseline": {
+        "claude": {
+          "run": "20261109T200734Z-7b82e14a",
+          "label": "correct_assertion"
+        },
+        "codex": {
+          "run": "20261109T201144Z-76eca958",
+          "label": "wrong_assertion"
+        },
+        "opencode": {
+          "run": "20261109T201701Z-a49e2313",
+          "label": "wrong_assertion"
+        }
+      },
+      "group": "excluded"
+    },
+    "pydata__xarray-4075": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "baseline": {
+        "claude": {
+          "run": "20261109T202243Z-d679a77d",
+          "label": "correct_assertion"
+        },
+        "codex": {
+          "run": "20261109T202702Z-52a0fdcb",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261109T203111Z-69b23da9",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "excluded"
+    },
+    "pydata__xarray-7393": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "baseline": {
+        "claude": {
+          "run": "20261109T203702Z-e2633122",
+          "label": "correct_assertion"
+        },
+        "codex": {
+          "run": "20261109T204133Z-bbd98275",
+          "label": "wrong_assertion"
+        },
+        "opencode": {
+          "run": "20261109T204734Z-0b02cfd8",
+          "label": "wrong_assertion"
+        }
+      },
+      "group": "excluded"
+    },
+    "pydata__xarray-3993": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "baseline": {
+        "claude": {
+          "run": "20261109T205541Z-76807fe5",
+          "label": "no:missed_trigger"
+        },
+        "codex": {
+          "run": "20261109T210157Z-a3310447",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261109T210759Z-5363b152",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "D"
+    },
+    "pytest-dev__pytest-5262": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "baseline": {
+        "claude": {
+          "run": "20261109T211446Z-1ae393d7",
+          "label": "wrong_assertion"
+        },
+        "codex": {
+          "run": "20261109T212052Z-3111797b",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261109T212252Z-5c022cfd",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "A"
+    },
+    "pytest-dev__pytest-7236": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "baseline": {
+        "claude": {
+          "run": "20261109T212831Z-3f33338a",
+          "label": "correct_assertion"
+        },
+        "codex": {
+          "run": "20261109T213815Z-fdfae9ee",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261109T214245Z-5db2012d",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "excluded"
+    },
+    "pytest-dev__pytest-10356": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "baseline": {
+        "claude": {
+          "run": "20261109T215302Z-6420e613",
+          "label": "no:missed_trigger"
+        },
+        "codex": {
+          "run": "20261109T220039Z-b2d6fce9",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261109T220636Z-598345bf",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "D"
+    },
+    "pylint-dev__pylint-6528": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "baseline": {
+        "claude": {
+          "run": "20261109T221215Z-45bec1dd",
+          "label": "correct_assertion"
+        },
+        "codex": {
+          "run": "20261109T222050Z-5c56acc9",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261109T222814Z-9b2af4c3",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "excluded"
+    },
+    "pylint-dev__pylint-8898": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "baseline": {
+        "claude": {
+          "run": "20261109T223509Z-06cb7178",
+          "label": "no:missed_trigger"
+        },
+        "codex": {
+          "run": "20261109T224103Z-1125f0f2",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261109T224507Z-4e033f83",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "D"
+    },
+    "psf__requests-2931": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "baseline": {
+        "claude": {
+          "run": "20261109T225005Z-194372c3",
+          "label": "wrong_assertion"
+        },
+        "codex": {
+          "run": "20261109T225653Z-46b22247",
+          "label": "wrong_assertion"
+        },
+        "opencode": {
+          "run": "20261109T230303Z-58cd55de",
+          "label": "wrong_assertion"
+        }
+      },
+      "group": "A"
+    },
+    "pallets__flask-5014": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "baseline": {
+        "claude": {
+          "run": "20261109T231121Z-b5c4b760",
+          "label": "no:missed_trigger"
+        },
+        "codex": {
+          "run": "20261109T231527Z-ddf119d2",
+          "label": "wrong_assertion"
+        },
+        "opencode": {
+          "run": "20261109T231937Z-c749861b",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "A"
+    },
+    "pytest-dev__pytest-5631": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "baseline": {
+        "claude": {
+          "run": "20261109T232337Z-51ac2276",
+          "label": "no:missed_trigger"
+        },
+        "codex": {
+          "run": "20261109T232850Z-90f44094",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261109T233257Z-8bf86ade",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "D"
+    },
+    "pytest-dev__pytest-7571": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "baseline": {
+        "claude": {
+          "run": "20261109T234030Z-2d173087",
+          "label": "no:missed_outcome"
+        },
+        "codex": {
+          "run": "20261109T234724Z-df882b05",
+          "label": "no:missed_outcome"
+        },
+        "opencode": {
+          "run": "20261109T235303Z-dfaf55c4",
+          "label": "no:missed_outcome"
+        }
+      },
+      "group": "C"
+    },
+    "matplotlib__matplotlib-26466": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "baseline": {
+        "claude": {
+          "run": "20261109T235858Z-b3d0032e",
+          "label": "correct_assertion"
+        },
+        "codex": {
+          "run": "20261110T000518Z-ce6a60df",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261110T001048Z-e72533b4",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "excluded"
+    },
+    "matplotlib__matplotlib-24627": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "baseline": {
+        "claude": {
+          "run": "20261110T002041Z-de0975ab",
+          "label": "no:missed_outcome"
+        },
+        "codex": {
+          "run": "20261110T003317Z-9a4becf3",
+          "label": "no:missed_outcome"
+        },
+        "opencode": {
+          "run": "20261110T004011Z-464623b7",
+          "label": "no:missed_outcome"
+        }
+      },
+      "group": "C"
+    },
+    "astropy__astropy-7336": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "baseline": {
+        "claude": {
+          "run": "20261110T004850Z-41751189",
+          "label": "no:missed_trigger"
+        },
+        "codex": {
+          "run": "20261110T005714Z-ddf65923",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261110T010256Z-1850b1f6",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "D"
+    },
+    "matplotlib__matplotlib-24570": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "baseline": {
+        "claude": {
+          "run": "20261110T011450Z-a72ff3fe",
+          "label": "correct_assertion"
+        },
+        "codex": {
+          "run": "20261110T012721Z-3fa8ab5b",
+          "label": "wrong_assertion"
+        },
+        "opencode": {
+          "run": "20261110T013151Z-5e03a89e",
+          "label": "wrong_assertion"
+        }
+      },
+      "group": "excluded"
+    },
+    "sphinx-doc__sphinx-8269": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "baseline": {
+        "claude": {
+          "run": "20261110T013656Z-742f3ad9",
+          "label": "no_issue_assertion"
+        },
+        "codex": {
+          "run": "20261110T014559Z-53bac51f",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261110T162224Z-c0bdc972",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "B"
+    },
+    "scikit-learn__scikit-learn-13135": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "baseline": {
+        "claude": {
+          "run": "20261110T020157Z-aae9c68a",
+          "label": "correct_assertion"
+        },
+        "codex": {
+          "run": "20261110T020653Z-32edce3e",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261110T163158Z-fed81104",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "excluded"
+    },
+    "pallets__werkzeug-2206": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "baseline": {
+        "claude": {
+          "run": "20261110T021845Z-9114a5c2",
+          "label": "no:missed_trigger"
+        },
+        "codex": {
+          "run": "20261110T022453Z-f8ec11b3",
+          "label": "missing_required_condition"
+        },
+        "opencode": {
+          "run": "20261110T163841Z-365b7947",
+          "label": "wrong_assertion"
+        }
+      },
+      "group": "A"
+    },
+    "pallets__click-2800": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "baseline": {
+        "claude": {
+          "run": "20261110T023652Z-4cfdaaf6",
+          "label": "no:missed_trigger"
+        },
+        "codex": {
+          "run": "20261110T024415Z-9ef6b486",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261110T164642Z-3fa53c76",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "D"
+    },
+    "pallets__jinja-1702": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "baseline": {
+        "claude": {
+          "run": "20261110T025626Z-b05d3c8d",
+          "label": "no:missed_trigger"
+        },
+        "codex": {
+          "run": "20261110T030200Z-8be74a6f",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261110T165258Z-ca8a3328",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "D"
+    },
+    "python-markdown__markdown-1426": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "baseline": {
+        "claude": {
+          "run": "20261110T031316Z-2dc8e008",
+          "label": "no:missed_trigger"
+        },
+        "codex": {
+          "run": "20261110T032420Z-e4222f9c",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261110T165823Z-bad551c7",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "D"
+    },
+    "python-babel__babel-1196": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "baseline": {
+        "claude": {
+          "run": "20261110T034047Z-6df91164",
+          "label": "no:missed_trigger"
+        },
+        "codex": {
+          "run": "20261110T035504Z-2fdd7c1f",
+          "label": "missing_required_condition"
+        },
+        "opencode": {
+          "run": "20261110T040708Z-cdb4605b",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "B"
+    },
+    "python-attrs__attrs-1165": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "baseline": {
+        "claude": {
+          "run": "20261110T042019Z-bd468a47",
+          "label": "no:missed_trigger"
+        },
+        "codex": {
+          "run": "20261110T043135Z-311b7685",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261110T043638Z-bcdeacd9",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "D"
+    },
+    "hypothesisworks__hypothesis-2723": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "baseline": {
+        "claude": {
+          "run": "20261110T044929Z-3eee3792",
+          "label": "correct_assertion"
+        },
+        "codex": {
+          "run": "20261110T050821Z-ae2bd1eb",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261110T052109Z-df924db9",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "excluded"
+    },
+    "pycqa__pyflakes-698": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "baseline": {
+        "claude": {
+          "run": "20261110T053946Z-e1da0cd5",
+          "label": "no:missed_trigger"
+        },
+        "codex": {
+          "run": "20261110T055419Z-2da71470",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261110T060635Z-45516e2a",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "D"
+    },
+    "getmoto__moto-9005": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "baseline": {
+        "claude": {
+          "run": "20261110T062133Z-59b7e234",
+          "label": "wrong_assertion"
+        },
+        "codex": {
+          "run": "20261110T062923Z-5ae55343",
+          "label": "wrong_assertion"
+        },
+        "opencode": {
+          "run": "20261110T064110Z-84692f7d",
+          "label": "wrong_assertion"
+        }
+      },
+      "group": "A"
+    },
+    "aws-cloudformation__cfn-lint-3900": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "baseline": {
+        "claude": {
+          "run": "20261110T064903Z-6c4d865f",
+          "label": "wrong_assertion"
+        },
+        "codex": {
+          "run": "20261110T170929Z-df276fc6",
+          "label": "wrong_assertion"
+        },
+        "opencode": {
+          "run": "20261110T171520Z-ca9fabc2",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "A"
+    },
+    "textualize__rich-3718": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "baseline": {
+        "claude": {
+          "run": "20261110T172156Z-5e46d108",
+          "label": "no:missed_outcome"
+        },
+        "codex": {
+          "run": "20261110T173535Z-dd917f21",
+          "label": "wrong_assertion"
+        },
+        "opencode": {
+          "run": "20261110T174312Z-fcc122e0",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "A"
+    },
+    "cloudpipe__cloudpickle-325": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "baseline": {
+        "claude": {
+          "run": "20261110T175454Z-4dc1c195",
+          "label": "no:missed_trigger"
+        },
+        "codex": {
+          "run": "20261110T180108Z-0aded6d4",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261110T180550Z-59690293",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "D"
+    },
+    "networkx__networkx-8055": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "baseline": {
+        "claude": {
+          "run": "20261110T181204Z-7d3f7398",
+          "label": "wrong_assertion"
+        },
+        "codex": {
+          "run": "20261110T182007Z-1131547c",
+          "label": "wrong_assertion"
+        },
+        "opencode": {
+          "run": "20261110T182600Z-d113d75f",
+          "label": "wrong_assertion"
+        }
+      },
+      "group": "A"
+    },
+    "mpmath__mpmath-926": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "baseline": {
+        "claude": {
+          "run": "20261110T183829Z-2565cd86",
+          "label": "no:missed_trigger"
+        },
+        "codex": {
+          "run": "20261110T185203Z-9e43ef9f",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261110T185829Z-bf1e965e",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "D"
+    },
+    "stac-utils__pystac-1337": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "baseline": {
+        "claude": {
+          "run": "20261110T190734Z-ae6c9e5b",
+          "label": "wrong_assertion"
+        },
+        "codex": {
+          "run": "20261110T191954Z-10e227c6",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261110T192622Z-109b3503",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "A"
+    },
+    "py-pdf__pypdf2-1433": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "baseline": {
+        "claude": {
+          "run": "20261110T193135Z-5844fff7",
+          "label": "no:missed_trigger"
+        },
+        "codex": {
+          "run": "20261110T193658Z-ae0b7bcf",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261110T194115Z-b8c30a56",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "D"
+    },
+    "kayak__pypika-54": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "baseline": {
+        "claude": {
+          "run": "20261110T194601Z-e5194284",
+          "label": "correct_assertion"
+        },
+        "codex": {
+          "run": "20261110T195158Z-385225f9",
+          "label": "wrong_assertion"
+        },
+        "opencode": {
+          "run": "20261110T200024Z-adac7896",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "excluded"
+    },
+    "narwhals-dev__narwhals-1869": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "baseline": {
+        "claude": {
+          "run": "20261110T200835Z-936b925b",
+          "label": "no:missed_trigger"
+        },
+        "codex": {
+          "run": "20261110T201240Z-6d29614d",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261111T160336Z-4d67e1de",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "D"
+    },
+    "jelmer__dulwich-1160": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "baseline": {
+        "claude": {
+          "run": "20261111T161330Z-fd477911",
+          "label": "no:unrelated_behavior"
+        },
+        "codex": {
+          "run": "20261111T162044Z-b0a6639f",
+          "label": "no:unrelated_behavior"
+        },
+        "opencode": {
+          "run": "20261111T162541Z-3f609d65",
+          "label": "no:unrelated_behavior"
+        }
+      },
+      "group": "C"
+    },
+    "neogeny__tatsu-237": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "baseline": {
+        "claude": {
+          "run": "20261111T163424Z-9678ddde",
+          "label": "wrong_assertion"
+        },
+        "codex": {
+          "run": "20261111T164456Z-0c7dd48f",
+          "label": "wrong_assertion"
+        },
+        "opencode": {
+          "run": "20261111T165312Z-c338bd85",
+          "label": "wrong_assertion"
+        }
+      },
+      "group": "A"
+    },
+    "copier-org__copier-2145": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "baseline": {
+        "claude": {
+          "run": "20261111T182009Z-48d2aef8",
+          "label": "no:missed_trigger"
+        },
+        "codex": {
+          "run": "20261111T183629Z-3eb0c64d",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261111T184925Z-50d9ead9",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "D"
+    },
+    "wtforms__wtforms-661": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "baseline": {
+        "claude": {
+          "run": "20261111T185954Z-8c0330dd",
+          "label": "missing_required_condition"
+        },
+        "codex": {
+          "run": "20261111T190956Z-e1ec6d05",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261111T191855Z-23895bb8",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "B"
+    },
+    "pypa__packaging-712": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "baseline": {
+        "claude": {
+          "run": "20261111T192611Z-66190a2e",
+          "label": "no:missed_trigger"
+        },
+        "codex": {
+          "run": "20261111T193624Z-ad009131",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261111T194203Z-b612cb61",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "D"
+    },
+    "aio-libs__aiohttp-7713": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "baseline": {
+        "claude": {
+          "run": "20261111T194903Z-761a37d8",
+          "label": "no:missed_trigger"
+        },
+        "codex": {
+          "run": "20261111T201823Z-65054296",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261111T202519Z-ae9848c4",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "D"
+    },
+    "modin-project__modin-6769": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "baseline": {
+        "claude": {
+          "run": "20261111T203427Z-5f6d5edd",
+          "label": "missing_required_condition"
+        },
+        "codex": {
+          "run": "20261111T205521Z-ba2ff7d9",
+          "label": "no:missed_trigger"
+        },
+        "opencode": {
+          "run": "20261111T210512Z-fc0b8d54",
+          "label": "no:missed_trigger"
+        }
+      },
+      "group": "B"
+    }
+  }
+}

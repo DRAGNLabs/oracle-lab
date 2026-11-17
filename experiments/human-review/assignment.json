@@ -1,0 +1,46 @@
+{
+  "selection_seed": 9116718583324175798,
+  "seed": 7512524547059133186,
+  "shared": [
+    "aws-cloudformation__cfn-lint-3900",
+    "getmoto__moto-9005",
+    "pallets__werkzeug-2206",
+    "pydata__xarray-3993",
+    "pylint-dev__pylint-6528",
+    "sphinx-doc__sphinx-11510"
+  ],
+  "own": {
+    "jay": [
+      "hypothesisworks__hypothesis-2723",
+      "matplotlib__matplotlib-20859",
+      "pallets__jinja-1702",
+      "pydata__xarray-4075",
+      "sphinx-doc__sphinx-8269",
+      "wtforms__wtforms-661"
+    ],
+    "jack": [
+      "aio-libs__aiohttp-7713",
+      "jelmer__dulwich-1160",
+      "matplotlib__matplotlib-13989",
+      "psf__requests-2931",
+      "pytest-dev__pytest-7236",
+      "python-babel__babel-1196"
+    ],
+    "tessa": [
+      "astropy__astropy-7606",
+      "kayak__pypika-54",
+      "narwhals-dev__narwhals-1869",
+      "networkx__networkx-8055",
+      "pydata__xarray-7393",
+      "sphinx-doc__sphinx-9698"
+    ],
+    "mo": [
+      "mpmath__mpmath-926",
+      "pallets__click-2800",
+      "pallets__flask-5014",
+      "pytest-dev__pytest-10356",
+      "pytest-dev__pytest-7571",
+      "stac-utils__pystac-1337"
+    ]
+  }
+}

@@ -20,7 +20,7 @@ from oracle_lab.io import read_json, write_json
 from oracle_lab.paths import RunPaths
 from oracle_lab.preflight import check_environment
 
-RUNNER = "/pytest_runner.py"
+RUNNER = "pytest_runner.py"
 
 
 class RecordingSandbox:
@@ -118,6 +118,7 @@ def test_the_reference_run_keeps_existing_tests_and_runs_the_reference_ids(setup
     assert read_json(directory / "workspace.json")["hide"] is False
     assert applied_patches(sandbox) == ["reference.patch"]
     assert read_json(directory / "runner.json")["targets"] == instance.reference_test_ids
+    assert read_json(directory / "runner.json")["ignore_xfail_markers"] is False
 
 
 def test_evaluation_hides_existing_tests_and_runs_only_the_generated_directory(setup):
@@ -132,6 +133,9 @@ def test_evaluation_hides_existing_tests_and_runs_only_the_generated_directory(s
     assert read_json(directory / "workspace.json")["hide"] is True
     assert ("upload", "files", "/testbed") in sandbox.events
     assert read_json(directory / "runner.json")["targets"] == ["oracle_tests"]
+    assert read_json(directory / "runner.json")["ignore_xfail_markers"] is True
+    # The current runner goes in, not the copy baked into the image.
+    assert ("upload", "pytest_runner.py", evaluation.RUNNER_PATH) in sandbox.events
 
 
 def test_an_empty_submission_is_no_tests_and_never_opens_a_container(setup):

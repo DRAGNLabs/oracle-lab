@@ -345,6 +345,10 @@ this file. It may use these variables:
 - `${workdir}`: repository root inside the container.
 - `${test_target}`: a localized run's target, one line per file, as saved in
   `inputs/target.json`. See [`task.scope`](#taskscope).
+- `${issue}`: the task's issue text from the dataset. Only for experiments that
+  deliberately show the agent the issue, such as
+  `prompts/agent/localized-tests-issue.md`; no other prompt uses it. A prompt
+  that names it refuses a task with no issue text.
 
 Oracle Lab fills them in and saves the exact text sent as `prompt.txt`. Write
 `$$` for a literal dollar sign.

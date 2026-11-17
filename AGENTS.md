@@ -36,6 +36,10 @@ Preserve these boundaries:
   private evaluation results to the generation agent. The judge deliberately
   receives all of it; keep that bundle in the judge modules rather than relaxing
   `Repository.prepare()` or the generation upload policy.
+- The issue text reaches the agent only through a prompt that names `${issue}`,
+  for the priming experiment's issue condition. Never add it to any other
+  prompt or upload, and never pass the golden repair or reference tests the same
+  way.
 - The localized target (`inputs/target.json`) is the one thing derived from the
   golden repair that the agent sees. It names existing files, functions, and
   classes only; never add patch text, changed lines, or expected behavior to it.
@@ -222,8 +226,10 @@ to detect the hidden bug.
 ## Result semantics
 
 Only completed binary test executions on both versions enter the four matrix
-cells. Preserve skips, xfails, xpasses, setup or collection errors, timeouts,
-crashes, missing IDs, and other incomplete outcomes separately. A failing test is
+cells. Preserve skips, setup or collection errors, timeouts, crashes, missing
+IDs, and other incomplete outcomes separately. Generated tests run with
+`--runxfail`, so an xfail marker never hides what an assertion did; the
+reference tests keep their markers. A failing test is
 a benchmark result, not an infrastructure failure. Empty submissions are
 `no_tests`, not successful executions.
 

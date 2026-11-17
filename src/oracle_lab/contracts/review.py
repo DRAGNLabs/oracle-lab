@@ -89,23 +89,53 @@ def parse_review(raw: str, items: Collection[str]) -> Review:
     return review
 
 
+class MajorityVote(StrictModel):
+    """How often the judge was right, deciding each item by its raters' majority.
+
+    An item is correct when more of the raters who rated it agreed with the judge
+    than disagreed, wrong in the reverse case, and disputed on an even split.
+    """
+
+    correct: int
+    wrong: int
+    disputed: int
+    accuracy: Share | None  # correct / (correct + wrong); None when no item was decided
+    # The exact (Clopper-Pearson) 95% interval for accuracy; None with accuracy.
+    interval_low: Share | None
+    interval_high: Share | None
+
+
 class QuestionAgreement(StrictModel):
     """How raters rated one question of one stage, across every target."""
 
     label: str
     targets: int  # targets with at least one rating of this question
     ratings: dict[Rating, int]
-    agree_share: Share  # how often raters agreed with the judge
+    agree_share: Share  # how often raters agreed with the judge, pooling every rating
+    majority: MajorityVote  # one verdict per rated item
     rater_pairs: int  # pairs of raters who rated the same target
     pairwise_agreement: Share | None  # None without a pair
     # Krippendorff's alpha for ordinal data; None without pairs or without variation.
     alpha: Annotated[float, Field(le=1)] | None
 
 
+class HarnessAccuracy(StrictModel):
+    """Majority-vote accuracy over the runs of one agent harness."""
+
+    items: MajorityVote
+    questions: dict[str, MajorityVote]
+
+
 class StageAgreement(StrictModel):
     targets: int
     reviews: int
     questions: dict[str, QuestionAgreement]
+    # Whole targets: correct when every question's majority agreed with the judge,
+    # wrong when any question's majority disagreed, and otherwise disputed.
+    items: MajorityVote
+    # Generation judgments by the harness of the run they judged; empty for
+    # classifications, which have no harness.
+    by_harness: dict[str, HarnessAccuracy]
 
 
 class AddedLabelRatings(StrictModel):

@@ -132,8 +132,18 @@ print(json.dumps(origins))
         # Run generated targets only; don't inherit a repository's default targets/addopts.
         # One file that fails to collect must not stop the other files from running.
         arguments = ["-o", "addopts=", "-q", "--tb=short", "--continue-on-collection-errors"]
+        if settings.get("ignore_xfail_markers"):
+            # Run xfail-marked tests as ordinary tests: pass or fail on their own.
+            arguments.append("--runxfail")
         for plugin in settings.get("pytest_plugins", []):
             arguments.extend(["-p", plugin])
+            # A generated conftest may load the same built-in plugin by its other name
+            # ("pytester" or "_pytest.pytester"), which pytest refuses as a second
+            # registration. Blocking that name makes the conftest's load a no-op.
+            if plugin.startswith("_pytest."):
+                arguments.extend(["-p", "no:" + plugin[len("_pytest.") :]])
+            elif "." not in plugin:
+                arguments.extend(["-p", "no:_pytest." + plugin])
         arguments.extend(settings["targets"])
         write(output / "command.json", [sys.executable, "-m", "pytest", *arguments])
         exit_code = int(pytest.main(arguments, plugins=[recorder]))

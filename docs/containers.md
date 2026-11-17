@@ -84,7 +84,10 @@ File transfer:
 Container-side logic lives in `container/helpers/`, so it is linted, packaged,
 and unit-tested on local fixtures. The helpers are baked into the prepared image,
 the judge's included. The judge runs in the run's own saved image, so it uses the
-helper built with the image that produced the evidence.
+helper built with the image that produced the evidence. The one exception is the
+pytest runner: evaluation uploads the current `pytest_runner.py` into each
+container, so `oracle-lab evaluate` re-runs a saved run with today's evaluation
+code rather than the copy baked into its image.
 
 Where each piece belongs:
 

@@ -319,8 +319,16 @@ outcome is not a plain pass or fail.
 | `fail_on_both` | fail | fail | Test rejects both implementations |
 
 The cells describe behavior. They do not prove whether a test's oracle is
-correct. Skips, expected failures, setup or teardown errors, collection
-failures, missing test IDs, and incomplete runs go in `other_outcomes`.
+correct. Skips, setup or teardown errors, collection failures, missing test IDs,
+and incomplete runs go in `other_outcomes`.
+
+Generated tests run with pytest's `--runxfail`, so an `xfail` marker does not
+change a test's outcome: the test passes or fails on its assertions. An agent
+that finds the bug may mark its test as an expected failure; that test then
+fails on buggy and passes on golden, like any other detection. Reference tests
+run as the dataset wrote them. Runs evaluated before 2026-11-16 reported such
+tests as `xfail` or `xpass` in `other_outcomes`; the study and effort batches'
+seven such runs were re-evaluated.
 
 ### `status.json`
 
@@ -726,7 +734,7 @@ collect.
 | File | Contents |
 |---|---|
 | `imports.json` | Each configured module and the file it imported from; catches an import from another installed copy |
-| `runner.json` | The in-container runner's inputs: workdir, output, targets, import probes, and pytest plugins |
+| `runner.json` | The in-container runner's inputs: workdir, output, targets, import probes, pytest plugins, and `ignore_xfail_markers` (true for generated tests) |
 | `command.json` | The pytest command (not the agent command) |
 | `execution.json` | The runner's exit code, duration, and timeout flag |
 | `tests.raw.json` | The runner's own `tests.json`, kept when it could not be read; `tests.json` then holds the normalized `runner_error` |
@@ -790,14 +798,19 @@ the nearest stage log.
 - `agreement.json`: `created_at`, the `inputs` it read, every `raters` ID, and
   per stage (`judge`, `classification`) the number of targets and reviews and,
   for each question with at least one rating, its `label`, `targets`,
-  `ratings` counts, `agree_share`, `rater_pairs`, `pairwise_agreement`, and
-  `alpha`. Questions include `failure_modes.<key>` for each start-list label and
-  one pooled `added_failure_modes`. A share or alpha that cannot be computed is
-  `null`. `added_labels` lists every judge-added failure mode with its `target`,
+  `ratings` counts, `agree_share`, `majority`, `rater_pairs`,
+  `pairwise_agreement`, and `alpha`. Questions include `failure_modes.<key>` for
+  each start-list label and one pooled `added_failure_modes`. Each stage also has
+  `items`, the majority vote over whole runs or classifications, and
+  `by_harness`, which for generation judgments holds each harness's `items` and
+  per-question majority votes (empty for classifications). A majority vote holds
+  `correct`, `wrong`, and `disputed` item counts, `accuracy`, and the 95%
+  interval as `interval_low` and `interval_high`. A share, interval, or alpha
+  that cannot be computed is `null`. `added_labels` lists every judge-added failure mode with its `target`,
   `name`, and `ratings`. `missing` maps each target that some
   rater did not review to those raters; `unreviewable` maps each target that
   could not be reviewed to the reason.
-- `agreement.md`: the same results as tables, with a note on reading alpha.
+- `agreement.md`: the same results as tables, with notes on reading them.
 
 See [agreement](judging.md#agreement) for what each figure means.
 

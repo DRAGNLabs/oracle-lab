@@ -1,8 +1,9 @@
-"""Inter-rater agreement and judge quality over saved human reviews.
+"""Judge accuracy and inter-rater agreement over saved human reviews.
 
-Raters agree or disagree with each LLM answer and failure-mode decision. Agreement
-between raters says how far those ratings can be trusted; the ratings themselves
-say how often the judge is right. The two stages are reported separately.
+Raters agree or disagree with each LLM answer and failure-mode decision. The
+ratings say how often the judge is right: each rated item is decided by its
+raters' majority. Agreement between raters says how far those ratings can be
+trusted. The two stages are reported separately.
 """
 
 from __future__ import annotations
@@ -11,12 +12,16 @@ from collections import Counter
 from collections.abc import Hashable, Iterable, Sequence
 from datetime import datetime, timezone
 from itertools import combinations
+from math import comb
 from pathlib import Path
+from typing import Literal
 
 from oracle_lab.contracts.review import (
     RATINGS,
     AddedLabelRatings,
     AgreementReport,
+    HarnessAccuracy,
+    MajorityVote,
     QuestionAgreement,
     Rating,
     Review,
@@ -26,7 +31,7 @@ from oracle_lab.contracts.review import (
 from oracle_lab.io import write_json
 from oracle_lab.paths import AgreementPaths, OutputPaths
 from oracle_lab.review.store import read_all_reviews
-from oracle_lab.review.targets import TARGET_KINDS, ReviewTarget, find_targets
+from oracle_lab.review.targets import TARGET_KINDS, JudgmentTarget, ReviewTarget, find_targets
 
 TITLES: dict[Stage, str] = {
     "judge": "Generation judgments",
@@ -35,6 +40,9 @@ TITLES: dict[Stage, str] = {
 # Rating items for failure modes a judge added, which are pooled into one question.
 ADDED = "added_failure_modes"
 ADDED_TITLE = "Failure modes the judge added"
+
+# An item's verdict: what most of its raters said about the judge's answer.
+Verdict = Literal["correct", "wrong", "disputed"]
 
 
 def agreement(paths: Sequence[Path], output: Path | None = None) -> Path:
@@ -168,27 +176,67 @@ def render_agreement(report: AgreementReport) -> str:
             continue
         lines += [
             "",
-            "| Question | Targets | Agree | Disagree | Judge agreed with "
-            "| Rater pairs | Raw agreement | Alpha |",
+            "### Judge accuracy",
+            "",
+            "| Question | Items | Correct | Wrong | Disputed | Accuracy | 95% interval "
+            "| Agree ratings |",
             "|---|---:|---:|---:|---:|---:|---:|---:|",
         ]
         for question in summary.questions.values():
-            counts = question.ratings
             lines.append(
-                f"| {question.label} | {question.targets} | {counts['agree']} "
-                f"| {counts['disagree']} | {_percent(question.agree_share)} "
-                f"| {question.rater_pairs} | {_percent(question.pairwise_agreement)} "
+                f"| {question.label} | {question.targets} "
+                f"| {_vote_cells(question.majority)} | {_percent(question.agree_share)} |"
+            )
+        lines.append(
+            f"| **Whole item** | {_decided(summary.items) + summary.items.disputed} "
+            f"| {_vote_cells(summary.items)} | |"
+        )
+        if summary.by_harness:
+            harnesses = list(summary.by_harness)
+            lines += [
+                "",
+                "### Judge accuracy by harness",
+                "",
+                "| Question | " + " | ".join(harnesses) + " |",
+                "|---|" + "---:|" * len(harnesses),
+            ]
+            for key, question in summary.questions.items():
+                cells = [
+                    _fraction(accuracy.questions[key]) if key in accuracy.questions else "—"
+                    for accuracy in summary.by_harness.values()
+                ]
+                lines.append(f"| {question.label} | " + " | ".join(cells) + " |")
+            cells = [_fraction(accuracy.items) for accuracy in summary.by_harness.values()]
+            lines.append("| **Whole item** | " + " | ".join(cells) + " |")
+        lines += [
+            "",
+            "### Agreement between raters",
+            "",
+            "| Question | Rater pairs | Raw agreement | Alpha |",
+            "|---|---:|---:|---:|",
+        ]
+        for question in summary.questions.values():
+            lines.append(
+                f"| {question.label} | {question.rater_pairs} "
+                f"| {_percent(question.pairwise_agreement)} "
                 f"| {'—' if question.alpha is None else f'{question.alpha:.3f}'} |"
             )
     lines += [
         "",
-        "Judge agreed with is the share of ratings that agree with the judge. Raw "
-        "agreement is the share of rater pairs on the same target that gave the same "
+        "Each rated item is decided by a strict majority of the raters who rated it: "
+        "correct when more agreed with the judge than disagreed, wrong in the reverse "
+        "case, and disputed on an even split. Accuracy is correct items over correct and "
+        "wrong ones; disputed items are left out of it. The interval is the exact "
+        "(Clopper-Pearson) 95% interval. Agree ratings pools every rating instead. A whole "
+        "item is a run or classification: wrong when any of its questions is, else "
+        "disputed when any is, else correct. By harness, each cell is correct over "
+        "decided items, with disputed ones after a plus sign.",
+        "",
+        "Raw agreement is the share of rater pairs on the same item that gave the same "
         "rating. Alpha is Krippendorff's alpha over the two ratings. It is low when "
         "nearly every rating is the same, even if raters agree; raw agreement shows that "
-        "case. A dash means there was no pair of raters, or no variation, to compute it "
-        "from. Failure modes a judge added differ by run, so they are pooled into one "
-        "question and listed below.",
+        "case. A dash means there was nothing to compute it from. Failure modes a judge "
+        "added differ by run, so they are pooled into one question and listed below.",
     ]
     if report.added_labels:
         lines += [
@@ -222,7 +270,7 @@ def render_agreement(report: AgreementReport) -> str:
 
 
 def _stage(reviewed: list[tuple[ReviewTarget, dict[str, Review]]]) -> StageAgreement:
-    """Agreement for one stage, from each of its targets and their reviews by rater.
+    """Accuracy and agreement for one stage, from each target and its reviews by rater.
 
     Each question and each start-list failure mode is one question. The failure modes
     a judge added differ by run, so they are pooled into one question.
@@ -230,18 +278,40 @@ def _stage(reviewed: list[tuple[ReviewTarget, dict[str, Review]]]) -> StageAgree
     # One unit per target and rating item: the ratings its raters gave that item.
     units: dict[str, list[list[Rating]]] = {}
     labels: dict[str, str] = {}
+    # Each rated target's harness (None for a classification) and its items' verdicts.
+    decided: list[tuple[str | None, dict[str, list[Verdict]]]] = []
     for target, by_rater in reviewed:
+        verdicts: dict[str, list[Verdict]] = {}
         for key in target.rating_keys():
             question = ADDED if key.startswith(ADDED + ".") else key
             labels[question] = ADDED_TITLE if question == ADDED else target.rating_label(key)
             unit = [review.ratings[key] for review in by_rater.values() if key in review.ratings]
             if unit:
                 units.setdefault(question, []).append(unit)
+                verdicts.setdefault(question, []).append(verdict(unit))
+        if verdicts:
+            harness = target.config().agent.harness if isinstance(target, JudgmentTarget) else None
+            decided.append((harness, verdicts))
     order = {key: index for index, key in enumerate(labels)}
+    questions = sorted(units, key=order.get)
+
+    by_harness = {}
+    for harness in sorted({harness for harness, _ in decided if harness is not None}):
+        runs = [verdicts for name, verdicts in decided if name == harness]
+        by_harness[harness] = HarnessAccuracy(
+            items=majority(_item_verdict(verdicts) for verdicts in runs),
+            questions={
+                key: majority(v for verdicts in runs for v in verdicts.get(key, []))
+                for key in questions
+                if any(key in verdicts for verdicts in runs)
+            },
+        )
     return StageAgreement(
         targets=len(reviewed),
         reviews=sum(len(by_rater) for _, by_rater in reviewed),
-        questions={key: _question(labels[key], units[key]) for key in sorted(units, key=order.get)},
+        questions={key: _question(labels[key], units[key]) for key in questions},
+        items=majority(_item_verdict(verdicts) for _, verdicts in decided),
+        by_harness=by_harness,
     )
 
 
@@ -254,10 +324,92 @@ def _question(label: str, units: list[list[Rating]]) -> QuestionAgreement:
         targets=len(units),
         ratings={rating: counts[rating] for rating in RATINGS},
         agree_share=counts["agree"] / total,
+        majority=majority(verdict(unit) for unit in units),
         rater_pairs=len(pairs),
         pairwise_agreement=sum(pairs) / len(pairs) if pairs else None,
         alpha=krippendorff_alpha(units, RATINGS),
     )
+
+
+def verdict(unit: Sequence[Rating]) -> Verdict:
+    """What a strict majority of the raters who rated an item said; an even split is disputed."""
+    agree = sum(rating == "agree" for rating in unit)
+    disagree = len(unit) - agree
+    if agree == disagree:
+        return "disputed"
+    return "correct" if agree > disagree else "wrong"
+
+
+def _item_verdict(verdicts: dict[str, list[Verdict]]) -> Verdict:
+    """A whole target: wrong if any item is, else disputed if any item is, else correct."""
+    every = {v for item in verdicts.values() for v in item}
+    return "wrong" if "wrong" in every else "disputed" if "disputed" in every else "correct"
+
+
+def majority(verdicts: Iterable[Verdict]) -> MajorityVote:
+    counts = Counter(verdicts)
+    correct, wrong = counts["correct"], counts["wrong"]
+    decided = correct + wrong
+    low, high = clopper_pearson(correct, decided) if decided else (None, None)
+    return MajorityVote(
+        correct=correct,
+        wrong=wrong,
+        disputed=counts["disputed"],
+        accuracy=correct / decided if decided else None,
+        interval_low=low,
+        interval_high=high,
+    )
+
+
+def clopper_pearson(successes: int, trials: int, confidence: float = 0.95) -> tuple[float, float]:
+    """The exact binomial confidence interval for `successes` out of `trials`.
+
+    Each bound is the proportion at which seeing this result, or one further from
+    it, has probability (1 - confidence) / 2. With no failures the upper bound is 1
+    and the lower bound is still informative, which is the case a reliable judge gives.
+    """
+    tail = (1 - confidence) / 2
+
+    def probability(p: float, outcomes: range) -> float:
+        return sum(comb(trials, k) * p**k * (1 - p) ** (trials - k) for k in outcomes)
+
+    def solve(increasing) -> float:
+        # Bisect for the root of a function that increases in p.
+        low, high = 0.0, 1.0
+        for _ in range(60):
+            middle = (low + high) / 2
+            low, high = (middle, high) if increasing(middle) < 0 else (low, middle)
+        return (low + high) / 2
+
+    at_least = range(successes, trials + 1)
+    at_most = range(successes + 1)
+    lower = 0.0 if successes == 0 else solve(lambda p: probability(p, at_least) - tail)
+    upper = 1.0 if successes == trials else solve(lambda p: tail - probability(p, at_most))
+    return lower, upper
+
+
+def _decided(vote: MajorityVote) -> int:
+    return vote.correct + vote.wrong
+
+
+def _vote_cells(vote: MajorityVote) -> str:
+    """The correct, wrong, disputed, accuracy, and interval cells of a table row."""
+    interval = (
+        "—"
+        if vote.interval_low is None
+        else f"{_percent(vote.interval_low)}–{_percent(vote.interval_high)}"
+    )
+    return (
+        f"{vote.correct} | {vote.wrong} | {vote.disputed} | {_percent(vote.accuracy)} | {interval}"
+    )
+
+
+def _fraction(vote: MajorityVote) -> str:
+    """Correct over decided items, with any disputed ones after a plus sign."""
+    if not _decided(vote) and not vote.disputed:
+        return "—"
+    text = f"{vote.correct}/{_decided(vote)}"
+    return text + (f" +{vote.disputed}" if vote.disputed else "")
 
 
 def _count(number: int, noun: str) -> str:
@@ -265,4 +417,4 @@ def _count(number: int, noun: str) -> str:
 
 
 def _percent(value: float | None) -> str:
-    return "—" if value is None else f"{value:.0%}"
+    return "—" if value is None else f"{value:.1%}"

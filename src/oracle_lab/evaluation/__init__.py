@@ -34,14 +34,24 @@ from oracle_lab.evaluation.outcomes import (
 from oracle_lab.io import archive_files, read_json, write_json
 from oracle_lab.paths import RunPaths
 
+# The runner as in this checkout, and where it goes in the container.
+RUNNER_SOURCE = Path(__file__).resolve().parents[1] / "container/helpers/pytest_runner.py"
+RUNNER_PATH = "/tmp/oracle_pytest_runner.py"
+
 
 def run_tests(
-    sandbox: Sandbox, config: ProblemConfig, targets: list[str], directory: Path
+    sandbox: Sandbox,
+    config: ProblemConfig,
+    targets: list[str],
+    directory: Path,
+    *,
+    ignore_xfail_markers: bool = False,
 ) -> VersionResult:
     """Run the tests in a container, then turn what came back into a result.
 
     Anything short of a clean run becomes an explicit incomplete result, never a
-    silent pass.
+    silent pass. `ignore_xfail_markers` runs xfail-marked tests as ordinary
+    tests, so their assertions decide the outcome.
     """
     runtime = config.require_runtime()
     settings = {
@@ -50,12 +60,16 @@ def run_tests(
         "targets": targets,
         "import_modules": runtime.import_modules,
         "pytest_plugins": runtime.pytest_plugins,
+        "ignore_xfail_markers": ignore_xfail_markers,
     }
     write_json(directory / "runner.json", settings)
     sandbox.upload(directory / "runner.json", "/tmp/oracle-runner.json")
+    # The current runner, not the copy baked into the image when it was built, so
+    # re-evaluating a saved run uses today's evaluation code.
+    sandbox.upload(RUNNER_SOURCE, RUNNER_PATH)
     try:
         execution = sandbox.run(
-            [runtime.python, sandbox.helpers + "/pytest_runner.py", "/tmp/oracle-runner.json"],
+            [runtime.python, RUNNER_PATH, "/tmp/oracle-runner.json"],
             timeout=config.limits.evaluation_seconds,
             check=False,
         )
@@ -151,7 +165,16 @@ def run_version(
                 # The image's editable install picks up the patched sources directly.
                 workspace.apply_patch(instance.golden_patch, directory / "repair.patch")
             targets = setup(sandbox, workspace, directory)
-            return run_tests(sandbox, config, targets, directory)
+            # An agent may mark a test of a bug it found as an expected failure. Its
+            # assertion, not the marker, says whether it tells the versions apart.
+            # The reference tests run as the dataset wrote them.
+            return run_tests(
+                sandbox,
+                config,
+                targets,
+                directory,
+                ignore_xfail_markers=profile is Profile.EVALUATION,
+            )
     except (RuntimeError, OSError, ValueError, DockerException) as exc:
         return incomplete_result(directory, "infrastructure_error", str(exc))
 

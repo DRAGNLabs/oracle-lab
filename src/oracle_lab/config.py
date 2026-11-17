@@ -367,14 +367,22 @@ def validate_prompt_scope(template: str, scope: str) -> None:
         )
 
 
-def render_prompt(template: str, config: RunConfig, test_target: str | None) -> str:
-    """Fill in the prompt variables. A run without a target says "this repository"."""
+def render_prompt(template: str, config: RunConfig, test_target: str | None, issue: str) -> str:
+    """Fill in the prompt variables. A run without a target says "this repository".
+
+    `issue` is the task's issue text. Only a template that names `${issue}` shows it
+    to the agent; a template that does refuses a task with no issue text.
+    """
     runtime = config.require_runtime()
-    return Template(template).substitute(
+    template = Template(template)
+    if "issue" in template.get_identifiers() and not issue.strip():
+        raise ValueError("The prompt shows ${issue}, but this task has no issue text")
+    return template.substitute(
         generated_dir=config.task.generated_dir,
         project_python=runtime.python,
         workdir=runtime.workdir,
         test_target=test_target or "this repository",
+        issue=issue.strip(),
     )
 
 

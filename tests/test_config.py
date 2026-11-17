@@ -13,6 +13,7 @@ from oracle_lab.config import (
     RuntimeConfig,
     load_config,
     load_setup_config,
+    render_prompt,
     validate_prompt_scope,
     validate_resolved_config,
 )
@@ -43,12 +44,37 @@ PROMPTS = Path(__file__).parents[1] / "prompts" / "agent"
     "prompt,scope",
     [
         ("localized-tests.md", "localized"),
+        ("localized-tests-bug-prior.md", "localized"),
+        ("localized-tests-issue.md", "localized"),
         ("unit-tests.md", "repository"),
         ("smoke-tests.md", "repository"),
     ],
 )
 def test_each_prompt_matches_its_scope(prompt, scope):
     validate_prompt_scope((PROMPTS / prompt).read_text(), scope)
+
+
+ISSUE = "Parsing drops the last row."
+
+
+@pytest.mark.parametrize(
+    "prompt,shows_issue",
+    [
+        ("localized-tests.md", False),
+        ("localized-tests-bug-prior.md", False),
+        ("localized-tests-issue.md", True),
+    ],
+)
+def test_the_issue_reaches_the_agent_only_through_its_variable(prompt, shows_issue):
+    text = render_prompt((PROMPTS / prompt).read_text(), run_config(), "package/a.py", ISSUE)
+
+    assert (ISSUE in text) == shows_issue
+    assert "${" not in text
+
+
+def test_a_prompt_showing_the_issue_refuses_a_task_without_one():
+    with pytest.raises(ValueError, match="no issue text"):
+        render_prompt((PROMPTS / "localized-tests-issue.md").read_text(), run_config(), "a", " ")
 
 
 @pytest.mark.parametrize(

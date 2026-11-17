@@ -124,22 +124,54 @@ network, or credentials.
 The two stages are reported separately. Each submission question, each
 classification question, and each start-list failure mode is a question. The
 failure modes judges added are named freely and differ by run, so they are
-pooled into one question, and also listed one by one with their ratings. The
-report counts the raters' own failure-mode labels by name. For each question it
-reports:
+pooled into one question, and also listed one by one with their ratings.
 
-- **Rating counts:** how many `agree` and `disagree` ratings the question
-  received across every target and rater.
-- **Judge agreed with:** the share of ratings that are `agree`.
-- **Raw agreement:** of every pair of raters who rated the same target, the share
+The report answers two questions. The main one is how often the judge is right.
+The second is whether the raters agree with each other, which says how far their
+ratings can be trusted.
+
+### Judge accuracy
+
+Each rated item, one question of one run or classification, is decided by a
+strict majority of the raters who rated it:
+
+- **Correct:** more raters agreed with the judge than disagreed.
+- **Wrong:** more raters disagreed than agreed.
+- **Disputed:** an even split, such as two against two.
+
+For each question the report gives:
+
+- **Correct, wrong, and disputed:** item counts.
+- **Accuracy:** correct items over correct and wrong ones. Disputed items are
+  left out and reported on their own.
+- **95% interval:** the exact (Clopper-Pearson) binomial interval for accuracy.
+  It stays informative when the judge made no errors: 30 correct items of 30
+  give 88.4% to 100%.
+- **Agree ratings:** the share of every rating that is `agree`, pooling raters
+  instead of deciding items.
+
+A **whole item** row decides each run or classification as a unit: wrong when
+any of its questions is wrong, else disputed when any is disputed, else correct.
+For generation judgments, the same counts are also broken down by the harness of
+the judged run.
+
+The three runs of one problem share the bug, the code, and the fix, so their
+judgments are not fully independent. Read the generation interval as somewhat
+narrower than the evidence supports, and the per-harness figures, which hold one
+run per problem, as independent.
+
+### Agreement between raters
+
+- **Raw agreement:** of every pair of raters who rated the same item, the share
   that gave the same rating.
 - **Krippendorff's alpha:** agreement beyond what chance would produce. 1 is
   perfect agreement and 0 is chance level.
 
-Read alpha beside raw agreement. When nearly every rating is the same, alpha is
-low or undefined even if raters agree, because there is little variation to
-agree on; raw agreement shows that case. Alpha needs at least two raters on some
-target and some variation in the ratings; otherwise it is reported as missing.
+Read alpha beside raw agreement. When nearly every rating is the same, as with a
+judge that is almost always right, alpha is low or undefined even if raters
+agree, because it counts most of their agreement as chance. Alpha needs at least
+two raters on some item and some variation in the ratings; otherwise it is
+reported as missing.
 
 Every rater is expected to review every target, so the report also lists each
 target that lacks a review from any rater who reviewed something, and each

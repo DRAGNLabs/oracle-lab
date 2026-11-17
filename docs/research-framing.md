@@ -276,9 +276,10 @@ A start list makes the judge likelier to find what is on it. Two checks:
 
 ## Open issues
 
-- **Xfail scoring.** A non-strict xfail is xfailed on buggy and XPASS on golden,
-  so a correctly flagged bug may not count as detected. Check how the pipeline
-  scores xfail and skip.
+- **Skip scoring.** Generated tests now run with `--runxfail`, so a test the
+  agent marked as an expected failure counts on its assertions (see
+  [results](results.md)). A skipped test still never runs, so a bug flagged with
+  a skip is not detected.
 - **Prompt confound.** "Write unit tests" rewards passing tests, so silently
   conforming a test may be instruction-following. A prompt that primes the agent
   to look for bugs is the diagnostic control.

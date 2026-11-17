@@ -8,11 +8,18 @@ from fixtures import (
     judged_run,
     judgment_ratings,
     review_of,
+    run_config,
 )
 
 from oracle_lab.contracts.review import AgreementReport
 from oracle_lab.io import read_json, write_json
-from oracle_lab.review.agreement import agreement, compute_agreement, krippendorff_alpha
+from oracle_lab.review.agreement import (
+    agreement,
+    clopper_pearson,
+    compute_agreement,
+    krippendorff_alpha,
+    verdict,
+)
 
 RATINGS = ("agree", "disagree")
 
@@ -37,6 +44,22 @@ def test_perfect_agreement_gives_one():
 def test_alpha_is_undefined_without_variation_or_pairs():
     assert krippendorff_alpha([["agree", "agree"], ["agree", "agree"]], RATINGS) is None
     assert krippendorff_alpha([["agree"], ["disagree"]], RATINGS) is None
+
+
+def test_a_strict_majority_of_raters_decides_an_item():
+    assert verdict(["agree", "agree", "agree", "disagree"]) == "correct"
+    assert verdict(["agree", "disagree", "disagree", "disagree"]) == "wrong"
+    assert verdict(["agree", "agree", "disagree", "disagree"]) == "disputed"
+    assert verdict(["agree", "agree", "disagree"]) == "correct"
+    assert verdict(["disagree"]) == "wrong"
+
+
+def test_interval_matches_the_exact_binomial_bounds():
+    # 30 of 30: the lower bound solves p**30 = 0.025.
+    assert clopper_pearson(30, 30) == pytest.approx((0.025 ** (1 / 30), 1.0))
+    # Published Clopper-Pearson values for 5 of 10 and 0 of 10.
+    assert clopper_pearson(5, 10) == pytest.approx((0.1871, 0.8129), abs=1e-4)
+    assert clopper_pearson(0, 10) == pytest.approx((0.0, 0.3085), abs=1e-4)
 
 
 def review(root, rater, ratings):
@@ -82,6 +105,62 @@ def test_each_question_reports_judge_quality_and_rater_agreement(data):
     assert "no_attempt_reason" not in judge.questions
 
 
+def test_majority_vote_decides_each_item_and_leaves_disputes_out_of_accuracy(data):
+    tests_issue = compute_agreement([data]).stages["judge"].questions["tests_issue"]
+
+    # Run A split one to one, run B agreed.
+    vote = tests_issue.majority
+    assert (vote.correct, vote.wrong, vote.disputed, vote.accuracy) == (1, 0, 1, 1.0)
+    assert (vote.interval_low, vote.interval_high) == (pytest.approx(0.025), 1.0)
+
+
+@pytest.fixture
+def harnesses(tmp_path):
+    """Three runs, two Claude and one Codex, each rated by three raters."""
+    codex = run_config()
+    codex.agent = codex.agent.model_copy(update={"harness": "codex"})
+    runs = {
+        "claude-1": judged_run(tmp_path / "runs/claude-1").judge.reviews,
+        "claude-2": judged_run(tmp_path / "runs/claude-2").judge.reviews,
+        "codex-1": judged_run(tmp_path / "runs/codex-1", config=codex).judge.reviews,
+    }
+    for rater in ("alice", "bob", "carol"):
+        review(runs["claude-1"], rater, judgment_ratings())
+        # Most raters think the judge missed this failure mode on claude-2.
+        wrong = "disagree" if rater != "carol" else "agree"
+        review(runs["claude-2"], rater, judgment_ratings(failure_modes__never_saw_bug=wrong))
+        review(runs["codex-1"], rater, judgment_ratings())
+    return tmp_path
+
+
+def test_whole_items_are_wrong_when_any_question_is(harnesses):
+    judge = compute_agreement([harnesses]).stages["judge"]
+
+    assert (judge.items.correct, judge.items.wrong, judge.items.disputed) == (2, 1, 0)
+    assert judge.questions["tests_issue"].majority.accuracy == 1.0
+    never = judge.questions["failure_modes.never_saw_bug"].majority
+    assert (never.correct, never.wrong) == (2, 1)
+
+
+def test_accuracy_is_broken_down_by_harness(harnesses):
+    by_harness = compute_agreement([harnesses]).stages["judge"].by_harness
+
+    assert list(by_harness) == ["claude", "codex"]
+    claude = by_harness["claude"]
+    assert (claude.items.correct, claude.items.wrong) == (1, 1)
+    never = claude.questions["failure_modes.never_saw_bug"]
+    assert (never.correct, never.wrong, never.accuracy) == (1, 1, 0.5)
+    assert by_harness["codex"].items.accuracy == 1.0
+    text = (agreement([harnesses], harnesses / "out") / "agreement.md").read_text()
+    assert "| Question | claude | codex |" in text
+    assert "| Never saw the bug | 1/2 | 1/1 |" in text
+    assert "| **Whole item** | 1/2 | 1/1 |" in text
+
+
+def test_classifications_have_no_harness_breakdown(data):
+    assert compute_agreement([data]).stages["classification"].by_harness == {}
+
+
 def test_each_start_label_is_a_question_and_added_labels_are_pooled(data):
     report = compute_agreement([data])
 
@@ -124,7 +203,12 @@ def test_agreement_is_saved_as_json_and_markdown(data, tmp_path):
     assert report.stages["judge"].questions["tests_issue"].rater_pairs == 2
     text = (directory / "agreement.md").read_text()
     assert "## Generation judgments" in text
-    assert "| Do the generated tests attempt to test the issue? | 2 | 3 | 1 | 75% |" in text
+    assert (
+        "| Do the generated tests attempt to test the issue? | 2 | 1 | 0 | 1 | 100.0% "
+        "| 2.5%–100.0% | 75.0% |"
+    ) in text
+    assert "| Do the generated tests attempt to test the issue? | 2 | 50.0% |" in text
+    assert "| **Whole item** | 2 | 0 | 0 | 2 | — | — | |" in text
     assert "| Tested only defaults | 1 | 1 |" in text
     assert "## Missing reviews" in text and "| bob |" in text
 

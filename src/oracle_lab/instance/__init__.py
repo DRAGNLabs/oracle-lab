@@ -18,6 +18,11 @@ def resolve_source(config: SourceConfig) -> tuple[InstanceRecord, RuntimeConfig]
     raise ValueError(f"Unsupported source adapter {config.kind!r}")
 
 
+def issue_text(instance: InstanceRecord) -> str:
+    """The dataset's issue text for this task, or an empty string without one."""
+    return instance.original_record.get("problem_statement", "").rstrip()
+
+
 def write_private_instance_artifacts(paths: RunPaths, instance: InstanceRecord) -> None:
     """Materialize the private evidence consumed by reports and judge workspaces.
 
@@ -25,8 +30,7 @@ def write_private_instance_artifacts(paths: RunPaths, instance: InstanceRecord) 
     byte-for-byte as text so it remains the exact repair supplied by the dataset.
     Generation never receives either file.
     """
-    issue = instance.original_record.get("problem_statement", "").rstrip()
-    issue_document = f"# {instance.instance_id}\n\n{issue}\n"
+    issue_document = f"# {instance.instance_id}\n\n{issue_text(instance)}\n"
     (paths.ground_truth / "issue.md").write_text(issue_document)
 
     (paths.ground_truth / "fix.patch").write_text(instance.golden_patch)

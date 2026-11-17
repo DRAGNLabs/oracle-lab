@@ -40,7 +40,7 @@ from oracle_lab.evaluation import check_reference, evaluate
 from oracle_lab.generation import generate_submission
 from oracle_lab.harnesses import require_credentials
 from oracle_lab.harnesses.spend import measure_spend
-from oracle_lab.instance import resolve_source, write_private_instance_artifacts
+from oracle_lab.instance import issue_text, resolve_source, write_private_instance_artifacts
 from oracle_lab.io import read_json, write_json
 from oracle_lab.judge.generation.run import judge_stage
 from oracle_lab.localization import load_target
@@ -150,7 +150,9 @@ def prepare(
     stages.start("build")
     image = prepare_image(client, config, paths.build)
     write_json(paths.runtime, {"image": image})
-    paths.prompt.write_text(render_prompt(prompt_template, config, target and target.text))
+    # The issue reaches the agent only through a prompt that names ${issue}.
+    prompt = render_prompt(prompt_template, config, target and target.text, issue_text(instance))
+    paths.prompt.write_text(prompt)
 
     # A pair that cannot distinguish its own revisions cannot score an
     # agent, so prove it before spending a generation call.

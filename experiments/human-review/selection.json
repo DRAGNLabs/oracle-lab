@@ -1,0 +1,317 @@
+{
+  "study_batch": "20261109T181437Z-c6fd1a2e",
+  "seed": 9116718583324175798,
+  "per_dataset": 15,
+  "dataset_sizes": {
+    "nebius/SWE-rebench-V2": 25,
+    "princeton-nlp/SWE-bench_Verified": 25
+  },
+  "drawn": {
+    "nebius/SWE-rebench-V2": [
+      "aio-libs__aiohttp-7713",
+      "aws-cloudformation__cfn-lint-3900",
+      "getmoto__moto-9005",
+      "hypothesisworks__hypothesis-2723",
+      "jelmer__dulwich-1160",
+      "kayak__pypika-54",
+      "mpmath__mpmath-926",
+      "narwhals-dev__narwhals-1869",
+      "networkx__networkx-8055",
+      "pallets__click-2800",
+      "pallets__jinja-1702",
+      "pallets__werkzeug-2206",
+      "python-babel__babel-1196",
+      "stac-utils__pystac-1337",
+      "wtforms__wtforms-661"
+    ],
+    "princeton-nlp/SWE-bench_Verified": [
+      "astropy__astropy-7606",
+      "matplotlib__matplotlib-13989",
+      "matplotlib__matplotlib-20859",
+      "pallets__flask-5014",
+      "psf__requests-2931",
+      "pydata__xarray-3993",
+      "pydata__xarray-4075",
+      "pydata__xarray-7393",
+      "pylint-dev__pylint-6528",
+      "pytest-dev__pytest-10356",
+      "pytest-dev__pytest-7236",
+      "pytest-dev__pytest-7571",
+      "sphinx-doc__sphinx-11510",
+      "sphinx-doc__sphinx-8269",
+      "sphinx-doc__sphinx-9698"
+    ]
+  },
+  "problems": {
+    "aio-libs__aiohttp-7713": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "runs": {
+        "claude": "20261111T194903Z-761a37d8",
+        "codex": "20261111T201823Z-65054296",
+        "opencode": "20261111T202519Z-ae9848c4"
+      },
+      "classification": "20261109T172647Z-b728526b"
+    },
+    "aws-cloudformation__cfn-lint-3900": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "runs": {
+        "claude": "20261110T064903Z-6c4d865f",
+        "codex": "20261110T170929Z-df276fc6",
+        "opencode": "20261110T171520Z-ca9fabc2"
+      },
+      "classification": "20261107T064628Z-909b37fc"
+    },
+    "getmoto__moto-9005": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "runs": {
+        "claude": "20261110T062133Z-59b7e234",
+        "codex": "20261110T062923Z-5ae55343",
+        "opencode": "20261110T064110Z-84692f7d"
+      },
+      "classification": "20261107T064414Z-3be538d0"
+    },
+    "hypothesisworks__hypothesis-2723": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "runs": {
+        "claude": "20261110T044929Z-3eee3792",
+        "codex": "20261110T050821Z-ae2bd1eb",
+        "opencode": "20261110T052109Z-df924db9"
+      },
+      "classification": "20261107T063528Z-a576f9be"
+    },
+    "jelmer__dulwich-1160": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "runs": {
+        "claude": "20261111T161330Z-fd477911",
+        "codex": "20261111T162044Z-b0a6639f",
+        "opencode": "20261111T162541Z-3f609d65"
+      },
+      "classification": "20261107T200436Z-ffe20c25"
+    },
+    "kayak__pypika-54": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "runs": {
+        "claude": "20261110T194601Z-e5194284",
+        "codex": "20261110T195158Z-385225f9",
+        "opencode": "20261110T200024Z-adac7896"
+      },
+      "classification": "20261107T071350Z-6f73fdda"
+    },
+    "mpmath__mpmath-926": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "runs": {
+        "claude": "20261110T183829Z-2565cd86",
+        "codex": "20261110T185203Z-9e43ef9f",
+        "opencode": "20261110T185829Z-bf1e965e"
+      },
+      "classification": "20261107T065942Z-c5125799"
+    },
+    "narwhals-dev__narwhals-1869": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "runs": {
+        "claude": "20261110T200835Z-936b925b",
+        "codex": "20261110T201240Z-6d29614d",
+        "opencode": "20261111T160336Z-4d67e1de"
+      },
+      "classification": "20261109T153837Z-0db6e173"
+    },
+    "networkx__networkx-8055": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "runs": {
+        "claude": "20261110T181204Z-7d3f7398",
+        "codex": "20261110T182007Z-1131547c",
+        "opencode": "20261110T182600Z-d113d75f"
+      },
+      "classification": "20261107T065744Z-3bda47f1"
+    },
+    "pallets__click-2800": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "runs": {
+        "claude": "20261110T023652Z-4cfdaaf6",
+        "codex": "20261110T024415Z-9ef6b486",
+        "opencode": "20261110T164642Z-3fa53c76"
+      },
+      "classification": "20261107T061612Z-e686371c"
+    },
+    "pallets__jinja-1702": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "runs": {
+        "claude": "20261110T025626Z-b05d3c8d",
+        "codex": "20261110T030200Z-8be74a6f",
+        "opencode": "20261110T165258Z-ca8a3328"
+      },
+      "classification": "20261107T062112Z-6910ac15"
+    },
+    "pallets__werkzeug-2206": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "runs": {
+        "claude": "20261110T021845Z-9114a5c2",
+        "codex": "20261110T022453Z-f8ec11b3",
+        "opencode": "20261110T163841Z-365b7947"
+      },
+      "classification": "20261107T060919Z-66940d18"
+    },
+    "python-babel__babel-1196": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "runs": {
+        "claude": "20261110T034047Z-6df91164",
+        "codex": "20261110T035504Z-2fdd7c1f",
+        "opencode": "20261110T040708Z-cdb4605b"
+      },
+      "classification": "20261107T062835Z-98c3ba8a"
+    },
+    "stac-utils__pystac-1337": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "runs": {
+        "claude": "20261110T190734Z-ae6c9e5b",
+        "codex": "20261110T191954Z-10e227c6",
+        "opencode": "20261110T192622Z-109b3503"
+      },
+      "classification": "20261107T070225Z-df523515"
+    },
+    "wtforms__wtforms-661": {
+      "dataset": "nebius/SWE-rebench-V2",
+      "runs": {
+        "claude": "20261111T185954Z-8c0330dd",
+        "codex": "20261111T190956Z-e1ec6d05",
+        "opencode": "20261111T191855Z-23895bb8"
+      },
+      "classification": "20261107T202728Z-ff819b94"
+    },
+    "astropy__astropy-7606": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "runs": {
+        "claude": "20261109T200734Z-7b82e14a",
+        "codex": "20261109T201144Z-76eca958",
+        "opencode": "20261109T201701Z-a49e2313"
+      },
+      "classification": "20261106T231125Z-744e7f6e"
+    },
+    "matplotlib__matplotlib-13989": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "runs": {
+        "claude": "20261109T193416Z-a4182d99",
+        "codex": "20261109T194021Z-9fb65698",
+        "opencode": "20261109T194532Z-6a648157"
+      },
+      "classification": "20261106T223517Z-6eec85aa"
+    },
+    "matplotlib__matplotlib-20859": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "runs": {
+        "claude": "20261109T184844Z-32997cc4",
+        "codex": "20261109T185516Z-dbcb839b",
+        "opencode": "20261109T190008Z-43aed8da"
+      },
+      "classification": "20261106T222806Z-76d26e87"
+    },
+    "pallets__flask-5014": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "runs": {
+        "claude": "20261109T231121Z-b5c4b760",
+        "codex": "20261109T231527Z-ddf119d2",
+        "opencode": "20261109T231937Z-c749861b"
+      },
+      "classification": "20261107T060526Z-d5666ddf"
+    },
+    "psf__requests-2931": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "runs": {
+        "claude": "20261109T225005Z-194372c3",
+        "codex": "20261109T225653Z-46b22247",
+        "opencode": "20261109T230303Z-58cd55de"
+      },
+      "classification": "20261107T055950Z-8250f7f2"
+    },
+    "pydata__xarray-3993": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "runs": {
+        "claude": "20261109T205541Z-76807fe5",
+        "codex": "20261109T210157Z-a3310447",
+        "opencode": "20261109T210759Z-5363b152"
+      },
+      "classification": "20261106T233255Z-dde03239"
+    },
+    "pydata__xarray-4075": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "runs": {
+        "claude": "20261109T202243Z-d679a77d",
+        "codex": "20261109T202702Z-52a0fdcb",
+        "opencode": "20261109T203111Z-69b23da9"
+      },
+      "classification": "20261106T231727Z-09f96793"
+    },
+    "pydata__xarray-7393": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "runs": {
+        "claude": "20261109T203702Z-e2633122",
+        "codex": "20261109T204133Z-bbd98275",
+        "opencode": "20261109T204734Z-0b02cfd8"
+      },
+      "classification": "20261106T232326Z-50155863"
+    },
+    "pylint-dev__pylint-6528": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "runs": {
+        "claude": "20261109T221215Z-45bec1dd",
+        "codex": "20261109T222050Z-5c56acc9",
+        "opencode": "20261109T222814Z-9b2af4c3"
+      },
+      "classification": "20261107T054807Z-f4bfc795"
+    },
+    "pytest-dev__pytest-10356": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "runs": {
+        "claude": "20261109T215302Z-6420e613",
+        "codex": "20261109T220039Z-b2d6fce9",
+        "opencode": "20261109T220636Z-598345bf"
+      },
+      "classification": "20261107T053726Z-51f89dae"
+    },
+    "pytest-dev__pytest-7236": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "runs": {
+        "claude": "20261109T212831Z-3f33338a",
+        "codex": "20261109T213815Z-fdfae9ee",
+        "opencode": "20261109T214245Z-5db2012d"
+      },
+      "classification": "20261106T234048Z-82c7b1f4"
+    },
+    "pytest-dev__pytest-7571": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "runs": {
+        "claude": "20261109T234030Z-2d173087",
+        "codex": "20261109T234724Z-df882b05",
+        "opencode": "20261109T235303Z-dfaf55c4"
+      },
+      "classification": "20261109T160226Z-dc74d7e9"
+    },
+    "sphinx-doc__sphinx-11510": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "runs": {
+        "claude": "20261109T183051Z-d0e186ad",
+        "codex": "20261109T183600Z-c6c10f9a",
+        "opencode": "20261109T183948Z-34e641a3"
+      },
+      "classification": "20261106T220430Z-e5626ccb"
+    },
+    "sphinx-doc__sphinx-8269": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "runs": {
+        "claude": "20261110T013656Z-742f3ad9",
+        "codex": "20261110T014559Z-53bac51f",
+        "opencode": "20261110T162224Z-c0bdc972"
+      },
+      "classification": "20261109T164152Z-8d6f5b30"
+    },
+    "sphinx-doc__sphinx-9698": {
+      "dataset": "princeton-nlp/SWE-bench_Verified",
+      "runs": {
+        "claude": "20261109T181437Z-7abd53cb",
+        "codex": "20261109T181946Z-f2520d28",
+        "opencode": "20261109T182519Z-05373821"
+      },
+      "classification": "20261106T215452Z-9440f0d5"
+    }
+  }
+}
